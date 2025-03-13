@@ -1,0 +1,4 @@
+- uvicorn
+- click
+- pytest
+- requests
