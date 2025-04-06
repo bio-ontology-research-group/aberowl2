@@ -93,4 +93,4 @@ def slurper = new JsonSlurper()
 // println data
 // def ontology = "data/pizza.owl"
 def ontology = args[0]
-startServer(ontology, 8080)
+startServer(ontology, 8000)

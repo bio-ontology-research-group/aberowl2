@@ -16,7 +16,7 @@ class TestHealth(TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.BASE_URL = "http://localhost:8080"
+        cls.BASE_URL = "http://localhost:8000"
         cls.manager = OntologyServerManager(os.path.abspath("data/pizza.owl"))
         # Run the server in a background thread
         # cls.server_thread = threading.Thread(target=cls.manager.run, daemon=True)
@@ -36,7 +36,7 @@ class TestHealth(TestCase):
         cls.server_greenlet.kill(block=True, timeout=2)  # Kill the greenlet
 
         # cls.server_thread.join()
-        release_port(8080)
+        release_port(8000)
 
         
     def test_health_check(cls):
