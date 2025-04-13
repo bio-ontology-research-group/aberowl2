@@ -1,6 +1,7 @@
 from aberowlapi.server_manager import OntologyServerManager
 from aberowlapi.util import release_port
 import gevent
+import gevent.monkey
 gevent.monkey.patch_all()
 ## KEEP THE 'import requests' after the 'import gevent' and 'gevent.monkey.patch_all()'
 from unittest import TestCase
@@ -11,7 +12,7 @@ import time
 import os
 # gevent.config.loop = "default"
 
-class TestHealth(TestCase):
+class TestObjectProperties(TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -22,8 +23,11 @@ class TestHealth(TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls.server_greenlet.kill(block=True, timeout=2)  # Kill the greenlet
-
+        cls.server_greenlet.kill(block=True, timeout=10)  # Increase timeout for cleanup
+        
+        # Make sure the server has time to shut down properly
+        time.sleep(2)
+        
         release_port(8080)
 
         
