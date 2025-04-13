@@ -120,6 +120,16 @@ checkpoint;
             
         config_path = self.prepare_virtuoso_config()
         
+        # Check if virtuoso-t is installed
+        try:
+            subprocess.run(["which", "virtuoso-t"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except subprocess.CalledProcessError:
+            logger.error("Virtuoso is not installed or not in PATH. Please install Virtuoso server.")
+            logger.error("On Ubuntu/Debian: sudo apt-get install virtuoso-opensource")
+            logger.error("On CentOS/RHEL: sudo yum install virtuoso-opensource")
+            logger.error("On macOS: brew install virtuoso")
+            return False
+            
         try:
             # Start Virtuoso server
             cmd = ["virtuoso-t", "+foreground", "-f", "-c", config_path]
