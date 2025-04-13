@@ -99,7 +99,7 @@ checkpoint;
             
             # Execute the load script
             cmd = [
-                "isql", 
+                "isql-vt", 
                 f"{self.port}", 
                 "-U", "dba", 
                 "-P", "dba", 
