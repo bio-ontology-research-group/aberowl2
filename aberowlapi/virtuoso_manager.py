@@ -84,6 +84,9 @@ Charset = UTF-8
         # Convert ontology to RDF if needed
         graph = Graph()
         try:
+            # Wait for Virtuoso to be fully started
+            self._wait_for_virtuoso()
+            
             graph.parse(self.ontology_path)
             rdf_path = os.path.join(self.db_path, "ontology.rdf")
             graph.serialize(destination=rdf_path, format="xml")
@@ -91,10 +94,13 @@ Charset = UTF-8
             # Create SQL script to load RDF
             load_script = os.path.join(self.db_path, "load_data.sql")
             with open(load_script, "w") as f:
+                # Use proper path escaping for SQL
+                escaped_path = self.db_path.replace("\\", "\\\\")
                 f.write(f"""
-ld_dir('{self.db_path}', 'ontology.rdf', 'http://example.org/ontology');
+ld_dir('{escaped_path}', 'ontology.rdf', 'http://example.org/ontology');
 rdf_loader_run();
 checkpoint;
+select * from DB.DBA.LOAD_LIST where ll_error is not NULL;
 """)
             
             # Execute the load script
@@ -103,14 +109,61 @@ checkpoint;
                 f"{self.port}", 
                 "-U", "dba", 
                 "-P", "dba", 
-                f"{load_script}"
+                "-i", f"{load_script}"
             ]
-            subprocess.run(cmd, check=True)
+            
+            logger.info(f"Running command: {' '.join(cmd)}")
+            result = subprocess.run(
+                cmd, 
+                check=False,
+                capture_output=True,
+                text=True
+            )
+            
+            if result.returncode != 0:
+                logger.error(f"isql-vt command failed with code {result.returncode}")
+                logger.error(f"STDOUT: {result.stdout}")
+                logger.error(f"STDERR: {result.stderr}")
+                return False
+                
             logger.info(f"Ontology loaded into Virtuoso: {self.ontology_path}")
             return True
         except Exception as e:
             logger.error(f"Failed to load ontology: {e}")
             return False
+            
+    def _wait_for_virtuoso(self, max_attempts=30):
+        """Wait for Virtuoso server to be ready to accept connections."""
+        logger.info("Waiting for Virtuoso server to start...")
+        
+        for attempt in range(max_attempts):
+            try:
+                # Try to connect to the SPARQL endpoint
+                cmd = [
+                    "isql-vt", 
+                    f"{self.port}", 
+                    "-U", "dba", 
+                    "-P", "dba", 
+                    "-c", "SELECT 1;"
+                ]
+                result = subprocess.run(
+                    cmd, 
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    timeout=2
+                )
+                
+                if result.returncode == 0:
+                    logger.info(f"Virtuoso server is ready after {attempt+1} attempts")
+                    return True
+            except (subprocess.SubprocessError, subprocess.TimeoutExpired):
+                pass
+                
+            logger.info(f"Waiting for Virtuoso to start (attempt {attempt+1}/{max_attempts})...")
+            time.sleep(2)
+            
+        logger.warning("Timed out waiting for Virtuoso to start")
+        return False
     
     def start_server(self):
         """Start the Virtuoso server."""
@@ -124,25 +177,33 @@ checkpoint;
         try:
             subprocess.run(["which", "virtuoso-t"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         except subprocess.CalledProcessError:
-            logger.error("Virtuoso is not installed or not in PATH. Please install Virtuoso server.")
-            logger.error("On Ubuntu/Debian: sudo apt-get install virtuoso-opensource")
-            logger.error("On CentOS/RHEL: sudo yum install virtuoso-opensource")
-            logger.error("On macOS: brew install virtuoso")
-            return False
+            # Try checking with 'command -v' as a fallback for other shells
+            try:
+                subprocess.run(["command", "-v", "virtuoso-t"], check=True, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            except subprocess.CalledProcessError:
+                logger.error("Virtuoso is not installed or not in PATH. Please install Virtuoso server.")
+                logger.error("On Ubuntu/Debian: sudo apt-get install virtuoso-opensource")
+                logger.error("On CentOS/RHEL: sudo yum install virtuoso-opensource")
+                logger.error("On macOS: brew install virtuoso")
+                return False
             
         try:
             # Start Virtuoso server
             cmd = ["virtuoso-t", "+foreground", "-f", "-c", config_path]
+            logger.info(f"Starting Virtuoso with command: {' '.join(cmd)}")
+            
             self.process = subprocess.Popen(
                 cmd, 
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1
             )
             
-            # Wait for server to start
+            # Wait for server to start (minimum time)
             time.sleep(5)
             if self.process.poll() is not None:
-                stderr = self.process.stderr.read().decode('utf-8')
+                stderr = self.process.stderr.read()
                 logger.error(f"Failed to start Virtuoso: {stderr}")
                 return False
                 
