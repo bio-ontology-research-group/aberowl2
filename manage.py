@@ -15,7 +15,7 @@ def runontapi(ontology):
     abs_path = os.path.abspath(ontology)
     assert os.path.exists(abs_path), f"Ontology file not found: {abs_path}"
     manager = OntologyServerManager(abs_path)
-    release_port(8000)
+    release_port(8080)
     manager.run()
                     
             
