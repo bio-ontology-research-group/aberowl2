@@ -21,8 +21,8 @@ fi
 if [ ! -f "$ONTOLOGY_FILE" ]; then
     echo "Error: Ontology file $ONTOLOGY_FILE not found!" >&2
     echo "Current directory: $(pwd)" >&2
-    echo "Listing /data directory:" >&2
-    ls -la /data >&2
+    echo "Available directories:" >&2
+    ls -la / >&2
     exit 1
 fi
 

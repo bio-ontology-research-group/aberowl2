@@ -9,10 +9,9 @@ services:
     environment:
       - ONTOLOGY_FILE=${ONTOLOGY_FILE:-/data/pizza.owl}
     volumes:
-      - ./data:/data:ro
+      - ./data:/opt/virtuoso-opensource/share/ontologies:ro
       - virtuoso_data:/opt/virtuoso-opensource/database/data
       - virtuoso_logs:/opt/virtuoso-opensource/database/logs
-      - virtuoso_ontologies:/opt/virtuoso-opensource/share/ontologies
     restart: unless-stopped
 
 volumes:
