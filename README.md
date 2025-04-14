@@ -21,21 +21,15 @@ The project includes a Dockerized Virtuoso SPARQL server that automatically load
 
 ### Configuration
 
-You must configure the ontology file in one of these two ways:
+You must configure the ontology file using the `ONTOLOGY_FILE` environment variable:
 
-1. Set the `ONTOLOGY_NAME` environment variable to specify just the filename (located in the data directory):
-   ```bash
-   ONTOLOGY_NAME=my-ontology.owl docker-compose up -d
-   ```
+```bash
+ONTOLOGY_FILE=/data/pizza.owl docker-compose up -d
+```
 
-2. Set the `ONTOLOGY_FILE` environment variable to specify a complete path:
-   ```bash
-   ONTOLOGY_FILE=data/custom/my-ontology.owl docker-compose up -d
-   ```
+By default, it uses `/data/pizza.owl` if not specified.
 
-By default, it uses `ONTOLOGY_NAME=ontology.owl` if neither variable is set.
-
-**Note:** At least one of these environment variables must be set, or the container will exit with an error.
+**Note:** The ONTOLOGY_FILE environment variable must be set, or the container will exit with an error.
 
 ### Starting the Server
 
@@ -46,13 +40,13 @@ docker-compose up -d
 Or with a custom ontology:
 
 ```bash
-ONTOLOGY_NAME=my-ontology.owl docker-compose up -d
+ONTOLOGY_FILE=/data/my-ontology.owl docker-compose up -d
 ```
 
 For example, to use the included pizza.owl ontology:
 
 ```bash
-ONTOLOGY_NAME=pizza.owl docker-compose up -d
+ONTOLOGY_FILE=/data/pizza.owl docker-compose up -d
 ```
 
 This will start the Virtuoso server with the following endpoints:

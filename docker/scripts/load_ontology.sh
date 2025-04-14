@@ -1,42 +1,25 @@
 #!/bin/bash
 set -e
 
-# Check if ONTOLOGY_NAME is set
-if [ -z "$ONTOLOGY_NAME" ] && [ -z "$ONTOLOGY_FILE" ]; then
-    echo "Error: Neither ONTOLOGY_NAME nor ONTOLOGY_FILE environment variables are set!"
-    echo "Please set one of these variables to specify the ontology file to load."
-    echo "Example: ONTOLOGY_NAME=pizza.owl or ONTOLOGY_FILE=/data/pizza.owl"
+# Check if ONTOLOGY_FILE is set
+if [ -z "$ONTOLOGY_FILE" ]; then
+    echo "Error: ONTOLOGY_FILE environment variable is not set!"
+    echo "Please set this variable to specify the ontology file to load."
+    echo "Example: ONTOLOGY_FILE=/data/pizza.owl"
     exit 1
 fi
-
-# Default ontology file path - no hardcoded ontology name
-ONTOLOGY_FILE=${ONTOLOGY_FILE:-/data/ontology.owl}
 
 # Set up directories
 VIRTUOSO_ONTOLOGIES_DIR="/opt/virtuoso-opensource/share/ontologies"
 mkdir -p $VIRTUOSO_ONTOLOGIES_DIR
 
-# Determine the ontology file path
-if [ ! -z "$ONTOLOGY_NAME" ]; then
-    # If ONTOLOGY_NAME is set, look for it in /data
-    DATA_ONTOLOGY_PATH="/data/$ONTOLOGY_NAME"
-    if [ -f "$DATA_ONTOLOGY_PATH" ]; then
-        ONTOLOGY_FILE="$DATA_ONTOLOGY_PATH"
-    else
-        echo "Error: Ontology file $DATA_ONTOLOGY_PATH not found!"
-        echo "Listing /data directory:"
-        ls -la /data
-        exit 1
-    fi
-else
-    # ONTOLOGY_FILE is set, use it directly
-    if [ ! -f "$ONTOLOGY_FILE" ]; then
-        echo "Error: Ontology file $ONTOLOGY_FILE not found!"
-        echo "Current directory: $(pwd)"
-        echo "Listing /data directory:"
-        ls -la /data
-        exit 1
-    fi
+# Check if the ontology file exists
+if [ ! -f "$ONTOLOGY_FILE" ]; then
+    echo "Error: Ontology file $ONTOLOGY_FILE not found!"
+    echo "Current directory: $(pwd)"
+    echo "Listing /data directory:"
+    ls -la /data
+    exit 1
 fi
 
 # Wait for Virtuoso to start up

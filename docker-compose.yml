@@ -9,8 +9,7 @@ services:
       - "8890:8890"  # SPARQL and HTTP
       - "1111:1111"  # SQL port
     environment:
-      - ONTOLOGY_NAME=${ONTOLOGY_NAME:-ontology.owl}
-      - ONTOLOGY_FILE=${ONTOLOGY_FILE}
+      - ONTOLOGY_FILE=${ONTOLOGY_FILE:-/data/pizza.owl}
     volumes:
       - ./data:/data:ro
       - virtuoso_data:/opt/virtuoso-opensource/database/data
