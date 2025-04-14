@@ -85,7 +85,7 @@ DavRoot = DAV
 ResultSetMaxRows = 10000
 MaxQueryCostEstimationTime = 400
 MaxQueryExecutionTime = 60
-DefaultGraph = http://example.org/ontology
+DefaultGraph = http://www.co-ode.org/ontologies/pizza/pizza.owl
 """)
         return config_path
         
@@ -117,7 +117,7 @@ DefaultGraph = http://example.org/ontology
                 # Use proper path escaping for SQL
                 escaped_path = self.db_path.replace("\\", "\\\\")
                 f.write(f"""
-ld_dir('{escaped_path}', 'ontology.rdf', 'http://example.org/ontology');
+ld_dir('{escaped_path}', 'ontology.rdf', 'http://www.co-ode.org/ontologies/pizza/pizza.owl');
 rdf_loader_run();
 checkpoint;
 select * from DB.DBA.LOAD_LIST where ll_error is not NULL;
@@ -132,7 +132,7 @@ select * from DB.DBA.LOAD_LIST where ll_error is not NULL;
                     response = requests.post(
                         f"http://localhost:{self.http_port}/sparql-graph-crud-auth",
                         files=files,
-                        params={'graph-uri': 'http://example.org/ontology'},
+                        params={'graph-uri': 'http://www.co-ode.org/ontologies/pizza/pizza.owl'},
                         auth=('dba', 'dba'),
                         timeout=30
                     )

@@ -1,6 +1,6 @@
 import os
 import click
-import uvicorn
+# Import uvicorn only when needed to avoid dependency issues
 from aberowlapi.server_manager import OntologyServerManager
 from aberowlapi.virtuoso_manager import VirtuosoManager
 from aberowlapi.util import release_port
@@ -41,7 +41,11 @@ def runvirtuoso(ontology, port, http_port, db_path):
 # @cli.command()
 # def runapi():
     # """Starts the FastAPI web server."""
-    # uvicorn.run("ont_api.api:app", host="0.0.0.0", port=8080, reload=True)
+    # try:
+    #     import uvicorn
+    #     uvicorn.run("ont_api.api:app", host="0.0.0.0", port=8080, reload=True)
+    # except ImportError:
+    #     print("uvicorn not installed. Install with: pip install uvicorn")
 
 if __name__ == "__main__":
     cli()

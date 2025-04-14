@@ -68,13 +68,16 @@ Once the server is running, you can execute SPARQL queries against the endpoint:
 ```sparql
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX owl: <http://www.w3.org/2002/07/owl#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
 SELECT DISTINCT ?class ?label
 WHERE {
     { ?class rdf:type owl:Class }
+    FILTER(STRSTARTS(STR(?class), "http://www.co-ode.org/ontologies/pizza/"))
     OPTIONAL { ?class rdfs:label ?label }
 }
 ORDER BY ?class
+LIMIT 100
 ```
 
 2. Get class hierarchy:
@@ -88,8 +91,27 @@ WHERE {
     ?class rdfs:subClassOf ?superClass .
     ?class rdf:type owl:Class .
     ?superClass rdf:type owl:Class .
+    FILTER(STRSTARTS(STR(?class), "http://www.co-ode.org/ontologies/pizza/"))
+    FILTER(STRSTARTS(STR(?superClass), "http://www.co-ode.org/ontologies/pizza/"))
 }
 ORDER BY ?class
+LIMIT 100
+```
+
+3. Get pizza toppings:
+```sparql
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX owl: <http://www.w3.org/2002/07/owl#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX pizza: <http://www.co-ode.org/ontologies/pizza/pizza.owl#>
+
+SELECT DISTINCT ?topping ?label
+WHERE {
+    ?topping rdf:type pizza:PizzaTopping .
+    OPTIONAL { ?topping rdfs:label ?label }
+}
+ORDER BY ?topping
+LIMIT 100
 ```
 
 ## Development (temporary)
