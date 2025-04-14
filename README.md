@@ -72,7 +72,8 @@ PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
 SELECT DISTINCT ?class ?label
 WHERE {
-    { ?class rdf:type owl:Class }
+    ?class rdf:type owl:Class .
+    FILTER(isIRI(?class))
     FILTER(STRSTARTS(STR(?class), "http://www.co-ode.org/ontologies/pizza/"))
     OPTIONAL { ?class rdfs:label ?label }
 }
@@ -91,6 +92,7 @@ WHERE {
     ?class rdfs:subClassOf ?superClass .
     ?class rdf:type owl:Class .
     ?superClass rdf:type owl:Class .
+    FILTER(isIRI(?class) && isIRI(?superClass))
     FILTER(STRSTARTS(STR(?class), "http://www.co-ode.org/ontologies/pizza/"))
     FILTER(STRSTARTS(STR(?superClass), "http://www.co-ode.org/ontologies/pizza/"))
 }

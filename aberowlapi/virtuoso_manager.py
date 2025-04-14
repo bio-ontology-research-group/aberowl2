@@ -117,9 +117,21 @@ DefaultGraph = http://www.co-ode.org/ontologies/pizza/pizza.owl
                 # Use proper path escaping for SQL
                 escaped_path = self.db_path.replace("\\", "\\\\")
                 f.write(f"""
+-- Clear existing data
+SPARQL CLEAR GRAPH <http://www.co-ode.org/ontologies/pizza/pizza.owl>;
+
+-- Load new data
 ld_dir('{escaped_path}', 'ontology.rdf', 'http://www.co-ode.org/ontologies/pizza/pizza.owl');
 rdf_loader_run();
 checkpoint;
+
+-- Register prefixes for easier querying
+DB.DBA.XML_SET_NS_DECL ('pizza', 'http://www.co-ode.org/ontologies/pizza/pizza.owl#', 2);
+DB.DBA.XML_SET_NS_DECL ('owl', 'http://www.w3.org/2002/07/owl#', 2);
+DB.DBA.XML_SET_NS_DECL ('rdf', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#', 2);
+DB.DBA.XML_SET_NS_DECL ('rdfs', 'http://www.w3.org/2000/01/rdf-schema#', 2);
+
+-- Check for errors
 select * from DB.DBA.LOAD_LIST where ll_error is not NULL;
 """)
             logger.info(f"Created SQL load script: {load_script}")
