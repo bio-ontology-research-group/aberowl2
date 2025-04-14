@@ -1,4 +1,5 @@
-- uvicorn
-- click
-- pytest
-- requests
+uvicorn
+click
+pytest
+requests
+SPARQLWrapper>=2.0.0
