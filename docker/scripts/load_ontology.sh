@@ -3,6 +3,10 @@ set -e
 
 # Default ontology file path
 ONTOLOGY_FILE=${ONTOLOGY_FILE:-/data/pizza.owl}
+VIRTUOSO_ONTOLOGIES_DIR="/opt/virtuoso-opensource/share/ontologies"
+
+# Create ontologies directory if it doesn't exist
+mkdir -p $VIRTUOSO_ONTOLOGIES_DIR
 
 # Wait for Virtuoso to start up
 echo "Starting Virtuoso..."
@@ -19,13 +23,19 @@ if [ ! -f "$ONTOLOGY_FILE" ]; then
     exit 1
 fi
 
-echo "Loading ontology from $ONTOLOGY_FILE..."
+# Copy the ontology file to the Virtuoso ontologies directory
+ONTOLOGY_FILENAME=$(basename "$ONTOLOGY_FILE")
+VIRTUOSO_ONTOLOGY_PATH="$VIRTUOSO_ONTOLOGIES_DIR/$ONTOLOGY_FILENAME"
+echo "Copying ontology from $ONTOLOGY_FILE to $VIRTUOSO_ONTOLOGY_PATH"
+cp "$ONTOLOGY_FILE" "$VIRTUOSO_ONTOLOGY_PATH"
+
+echo "Loading ontology from $VIRTUOSO_ONTOLOGY_PATH..."
 
 # Create the graph if it doesn't exist
 isql 1111 dba dba exec="SPARQL CREATE GRAPH <http://localhost:8890/ontology>;"
 
 # Load the ontology file with better error handling
-isql 1111 dba dba exec="DB.DBA.RDF_LOAD_RDFXML_MT(file_to_string_output('$ONTOLOGY_FILE'), '', 'http://localhost:8890/ontology');" || {
+isql 1111 dba dba exec="DB.DBA.RDF_LOAD_RDFXML_MT(file_to_string_output('$VIRTUOSO_ONTOLOGY_PATH'), '', 'http://localhost:8890/ontology');" || {
     echo "Error loading ontology file. Check Virtuoso logs for details."
     cat /opt/virtuoso-opensource/database/logs/virtuoso.log | tail -n 50
     exit 1
