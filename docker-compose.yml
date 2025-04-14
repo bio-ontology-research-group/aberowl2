@@ -12,10 +12,8 @@ services:
       - ./data:/data:ro
       - virtuoso_data:/opt/virtuoso-opensource/database/data
       - virtuoso_logs:/opt/virtuoso-opensource/database/logs
-      - virtuoso_ontologies:/opt/virtuoso-opensource/share/ontologies
     restart: unless-stopped
 
 volumes:
   virtuoso_data:
   virtuoso_logs:
-  virtuoso_ontologies:

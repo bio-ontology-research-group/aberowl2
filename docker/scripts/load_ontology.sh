@@ -1,11 +1,6 @@
 #!/bin/bash
 set -e
 
-# Debug information
-echo "Current directory: $(pwd)" >&2
-echo "Listing /data directory:" >&2
-ls -la /data >&2
-
 # Set up directories
 VIRTUOSO_ONTOLOGIES_DIR="/opt/virtuoso-opensource/share/ontologies"
 mkdir -p $VIRTUOSO_ONTOLOGIES_DIR
@@ -28,13 +23,15 @@ if [[ "$ONTOLOGY_FILE" != /* ]]; then
     echo "Using absolute path for ontology file: $ONTOLOGY_FILE" >&2
 fi
 
+echo "Looking for ontology file at: $ONTOLOGY_FILE" >&2
+ls -la $(dirname "$ONTOLOGY_FILE") >&2
+
 # Check if the ontology file exists
 if [ ! -f "$ONTOLOGY_FILE" ]; then
     echo "Error: Ontology file $ONTOLOGY_FILE not found!" >&2
-    echo "Searching for pizza.owl in common locations:" >&2
-    find /data -name "*.owl" -type f >&2
     
     # Try to find the file in /data directory as a fallback
+    echo "Searching for .owl files in /data:" >&2
     FALLBACK_FILE=$(find /data -name "*.owl" -type f | head -1)
     if [ ! -z "$FALLBACK_FILE" ]; then
         echo "Found fallback ontology file: $FALLBACK_FILE" >&2
@@ -46,41 +43,49 @@ fi
 
 # Copy the ontology file to the Virtuoso ontologies directory with the standard name
 echo "Copying ontology from $ONTOLOGY_FILE to $VIRTUOSO_ONTOLOGY_PATH" >&2
-cp -v "$ONTOLOGY_FILE" "$VIRTUOSO_ONTOLOGY_PATH"
+cp "$ONTOLOGY_FILE" "$VIRTUOSO_ONTOLOGY_PATH"
+chmod 644 "$VIRTUOSO_ONTOLOGY_PATH"
 
 # Verify the file was copied
 if [ ! -f "$VIRTUOSO_ONTOLOGY_PATH" ]; then
     echo "Error: Failed to copy ontology file to $VIRTUOSO_ONTOLOGY_PATH" >&2
-    echo "Available files in $VIRTUOSO_ONTOLOGIES_DIR:" >&2
-    ls -la $VIRTUOSO_ONTOLOGIES_DIR >&2
     exit 1
 fi
+
+echo "Ontology file copied successfully. File size: $(stat -c%s $VIRTUOSO_ONTOLOGY_PATH) bytes" >&2
 
 # Start Virtuoso
 echo "Starting Virtuoso..." >&2
 cd /opt/virtuoso-opensource/bin
 ./virtuoso-t +wait +configfile /opt/virtuoso-opensource/database/virtuoso.ini &
-echo "Virtuoso started, waiting for it to be ready..." >&2
-sleep 15  # Increased sleep time to ensure Virtuoso is fully started
+VIRTUOSO_PID=$!
+echo "Virtuoso started with PID: $VIRTUOSO_PID, waiting for it to be ready..." >&2
 
-echo "Running ontology loader..." >&2
-echo "Using SQL command: isql" >&2
+# Wait for Virtuoso to be ready
+for i in {1..30}; do
+    if isql 1111 dba dba -K EXEC="status();" > /dev/null 2>&1; then
+        echo "Virtuoso is ready!" >&2
+        break
+    fi
+    echo "Waiting for Virtuoso to start (attempt $i/30)..." >&2
+    sleep 2
+done
+
 echo "Loading ontology from $VIRTUOSO_ONTOLOGY_PATH..." >&2
 
 # Create the graph if it doesn't exist
-isql 1111 dba dba exec="SPARQL CREATE GRAPH <http://localhost:8890/ontology>;"
+isql 1111 dba dba EXEC="SPARQL CREATE GRAPH <http://localhost:8890/ontology>;"
 
 # Load the ontology file with better error handling
-isql 1111 dba dba exec="DB.DBA.RDF_LOAD_RDFXML_MT(file_to_string_output('$VIRTUOSO_ONTOLOGY_PATH'), '', 'http://localhost:8890/ontology');" || {
-    echo "Error loading ontology file. Check Virtuoso logs for details." >&2
-    cat /opt/virtuoso-opensource/database/logs/virtuoso.log | tail -n 50 >&2
-    exit 1
-}
+echo "Loading RDF data into Virtuoso..." >&2
+isql 1111 dba dba EXEC="DB.DBA.RDF_LOAD_RDFXML_MT(file_to_string_output('$VIRTUOSO_ONTOLOGY_PATH'), '', 'http://localhost:8890/ontology');"
 
-echo "Ontology loaded successfully!" >&2
+# Verify the data was loaded
 echo "Verifying loaded classes..." >&2
-isql 1111 dba dba exec="SPARQL SELECT COUNT(*) WHERE { ?class a <http://www.w3.org/2002/07/owl#Class> };"
+isql 1111 dba dba EXEC="SPARQL SELECT COUNT(*) WHERE { ?class a <http://www.w3.org/2002/07/owl#Class> };"
+
 echo "Ontology loading completed. Server is ready." >&2
+echo "SPARQL endpoint available at: http://localhost:8890/sparql" >&2
 
 # Keep the container running
 tail -f /opt/virtuoso-opensource/database/logs/virtuoso.log
