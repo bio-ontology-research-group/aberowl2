@@ -9,6 +9,9 @@ if [ -z "$ONTOLOGY_NAME" ] && [ -z "$ONTOLOGY_FILE" ]; then
     exit 1
 fi
 
+# Default ontology file path - no hardcoded ontology name
+ONTOLOGY_FILE=${ONTOLOGY_FILE:-/data/ontology.owl}
+
 # Set up directories
 VIRTUOSO_ONTOLOGIES_DIR="/opt/virtuoso-opensource/share/ontologies"
 mkdir -p $VIRTUOSO_ONTOLOGIES_DIR
