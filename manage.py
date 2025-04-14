@@ -31,6 +31,8 @@ def runvirtuoso(ontology, port, http_port, db_path):
     
     if http_port == 8080:
         release_port(8080)
+
+    release_port(port)
         
     manager = VirtuosoManager(abs_path, port=port, http_port=http_port, db_path=db_path)
     manager.run()
