@@ -36,12 +36,16 @@ The system will automatically copy your ontology file and rename it to `ontology
 To start the server with the included pizza.owl ontology:
 
 ```bash
-ONTOLOGY_FILE=./data/pizza.owl docker-compose up -d
+ONTOLOGY_FILE=pizza.owl docker-compose up -d
 ```
 
 To use your own ontology file:
 
 ```bash
+# For files in the data directory:
+ONTOLOGY_FILE=my-ontology.owl docker-compose up -d
+
+# For files outside the data directory (use absolute path):
 ONTOLOGY_FILE=/absolute/path/to/your/ontology.owl docker-compose up -d
 ```
 

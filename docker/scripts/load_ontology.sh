@@ -1,6 +1,11 @@
 #!/bin/bash
 set -e
 
+# Debug information
+echo "Current directory: $(pwd)" >&2
+echo "Listing /data directory:" >&2
+ls -la /data >&2
+
 # Set up directories
 VIRTUOSO_ONTOLOGIES_DIR="/opt/virtuoso-opensource/share/ontologies"
 mkdir -p $VIRTUOSO_ONTOLOGIES_DIR
@@ -17,10 +22,26 @@ if [ -z "$ONTOLOGY_FILE" ]; then
     exit 1
 fi
 
+# If ONTOLOGY_FILE is a relative path, make it absolute
+if [[ "$ONTOLOGY_FILE" != /* ]]; then
+    ONTOLOGY_FILE="/data/$ONTOLOGY_FILE"
+    echo "Using absolute path for ontology file: $ONTOLOGY_FILE" >&2
+fi
+
 # Check if the ontology file exists
 if [ ! -f "$ONTOLOGY_FILE" ]; then
     echo "Error: Ontology file $ONTOLOGY_FILE not found!" >&2
-    exit 1
+    echo "Searching for pizza.owl in common locations:" >&2
+    find /data -name "*.owl" -type f >&2
+    
+    # Try to find the file in /data directory as a fallback
+    FALLBACK_FILE=$(find /data -name "*.owl" -type f | head -1)
+    if [ ! -z "$FALLBACK_FILE" ]; then
+        echo "Found fallback ontology file: $FALLBACK_FILE" >&2
+        ONTOLOGY_FILE=$FALLBACK_FILE
+    else
+        exit 1
+    fi
 fi
 
 # Copy the ontology file to the Virtuoso ontologies directory with the standard name
