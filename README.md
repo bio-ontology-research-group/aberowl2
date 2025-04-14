@@ -24,7 +24,7 @@ The project includes a Dockerized Virtuoso SPARQL server that automatically load
 You must configure the ontology file using the `ONTOLOGY_FILE` environment variable:
 
 ```bash
-ONTOLOGY_FILE=/data/pizza.owl docker-compose up -d
+ONTOLOGY_FILE=./data/pizza.owl docker-compose up -d
 ```
 
 The system will automatically copy your ontology file and rename it to `ontology.owl` inside the container for consistency.
@@ -36,13 +36,13 @@ The system will automatically copy your ontology file and rename it to `ontology
 To start the server with the included pizza.owl ontology:
 
 ```bash
-ONTOLOGY_FILE=data/pizza.owl docker-compose up -d
+ONTOLOGY_FILE=./data/pizza.owl docker-compose up -d
 ```
 
 To use your own ontology file:
 
 ```bash
-ONTOLOGY_FILE=/path/to/your/ontology.owl docker-compose up -d
+ONTOLOGY_FILE=/absolute/path/to/your/ontology.owl docker-compose up -d
 ```
 
 To see the logs and verify the ontology was loaded correctly:
