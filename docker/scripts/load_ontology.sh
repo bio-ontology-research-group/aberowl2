@@ -3,9 +3,9 @@ set -e
 
 # Check if ONTOLOGY_FILE is set
 if [ -z "$ONTOLOGY_FILE" ]; then
-    echo "Error: ONTOLOGY_FILE environment variable is not set!"
-    echo "Please set this variable to specify the ontology file to load."
-    echo "Example: ONTOLOGY_FILE=/data/pizza.owl"
+    echo "Error: ONTOLOGY_FILE environment variable is not set!" >&2
+    echo "Please set this variable to specify the ontology file to load." >&2
+    echo "Example: ONTOLOGY_FILE=/data/pizza.owl" >&2
     exit 1
 fi
 
@@ -15,12 +15,15 @@ mkdir -p $VIRTUOSO_ONTOLOGIES_DIR
 
 # Check if the ontology file exists
 if [ ! -f "$ONTOLOGY_FILE" ]; then
-    echo "Error: Ontology file $ONTOLOGY_FILE not found!"
+    echo "Error: Ontology file $ONTOLOGY_FILE not found!" >&2
+    echo "Current directory: $(pwd)" >&2
+    echo "Listing /data directory:" >&2
+    ls -la /data >&2
     exit 1
 fi
 
 # Wait for Virtuoso to start up
-echo "Starting Virtuoso..."
+echo "Starting Virtuoso..." >&2
 cd /opt/virtuoso-opensource/bin
 ./virtuoso-t +wait +configfile /opt/virtuoso-opensource/database/virtuoso.ini &
 sleep 15  # Increased sleep time to ensure Virtuoso is fully started
@@ -28,23 +31,23 @@ sleep 15  # Increased sleep time to ensure Virtuoso is fully started
 # Copy the ontology file to the Virtuoso ontologies directory
 ONTOLOGY_FILENAME=$(basename "$ONTOLOGY_FILE")
 VIRTUOSO_ONTOLOGY_PATH="$VIRTUOSO_ONTOLOGIES_DIR/$ONTOLOGY_FILENAME"
-echo "Copying ontology from $ONTOLOGY_FILE to $VIRTUOSO_ONTOLOGY_PATH"
+echo "Copying ontology from $ONTOLOGY_FILE to $VIRTUOSO_ONTOLOGY_PATH" >&2
 cp "$ONTOLOGY_FILE" "$VIRTUOSO_ONTOLOGY_PATH"
 
-echo "Loading ontology from $VIRTUOSO_ONTOLOGY_PATH..."
+echo "Loading ontology from $VIRTUOSO_ONTOLOGY_PATH..." >&2
 
 # Create the graph if it doesn't exist
 isql 1111 dba dba exec="SPARQL CREATE GRAPH <http://localhost:8890/ontology>;"
 
 # Load the ontology file with better error handling
 isql 1111 dba dba exec="DB.DBA.RDF_LOAD_RDFXML_MT(file_to_string_output('$VIRTUOSO_ONTOLOGY_PATH'), '', 'http://localhost:8890/ontology');" || {
-    echo "Error loading ontology file. Check Virtuoso logs for details."
-    cat /opt/virtuoso-opensource/database/logs/virtuoso.log | tail -n 50
+    echo "Error loading ontology file. Check Virtuoso logs for details." >&2
+    cat /opt/virtuoso-opensource/database/logs/virtuoso.log | tail -n 50 >&2
     exit 1
 }
 
-echo "Ontology loaded successfully!"
-echo "Verifying loaded classes..."
+echo "Ontology loaded successfully!" >&2
+echo "Verifying loaded classes..." >&2
 isql 1111 dba dba exec="SPARQL SELECT COUNT(*) WHERE { ?class a <http://www.w3.org/2002/07/owl#Class> };"
 
 # Keep the container running
