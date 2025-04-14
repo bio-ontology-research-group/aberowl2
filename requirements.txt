@@ -3,3 +3,5 @@ click
 pytest
 requests
 SPARQLWrapper>=2.0.0
+rdflib>=6.0.0
+gevent

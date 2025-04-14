@@ -6,7 +6,7 @@
   - Groovy
   - Anaconda/Miniconda
   - Docker and Docker Compose
-  
+ - Virtuoso (for SPARQL queries)
 ## Installation
 
 ```
@@ -63,8 +63,27 @@ python query_classes.py
 
 ## Running unittests
 
-The following unittests check that the url `localhost:8080/health.groovy` runs correctly. It uses `pizza.owl` located in `data/` as input.
+The following unittests check that the url `localhost:8000/health.groovy` runs correctly. It uses `pizza.owl` located in `data/` as input.
 
 ```
 pytest tests/
 ```
+
+To run the Virtuoso tests specifically:
+
+```
+pytest tests/aberowlapi/test_virtuoso.py
+```
+
+ 
+
+## Development (temporary)
+
+The webserver is available at `10.72.186.4:8000`. For example, in your browser go to:
+
+```
+http://10.72.186.4:8000/health.groovy
+```
+You should see "OK".
+
+Currently, the server is providing API for pizza.owl.
