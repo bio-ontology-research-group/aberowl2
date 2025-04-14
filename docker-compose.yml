@@ -9,11 +9,12 @@ services:
       - "8890:8890"  # SPARQL and HTTP
       - "1111:1111"  # SQL port
     environment:
-      - ONTOLOGY_FILE=${ONTOLOGY_FILE:-data/${ONTOLOGY_NAME:-pizza.owl}}
+      - ONTOLOGY_FILE=${ONTOLOGY_FILE:-/data/${ONTOLOGY_NAME:-pizza.owl}}
     volumes:
-      - ./data:/data
+      - ./data:/data:ro
       - virtuoso_data:/opt/virtuoso-opensource/database/data
       - virtuoso_logs:/opt/virtuoso-opensource/database/logs
+    restart: unless-stopped
 
 volumes:
   virtuoso_data:
