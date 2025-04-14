@@ -10,3 +10,23 @@ services:
       - SPARQL_UPDATE=true
     volumes:
       - ./data:/opt/virtuoso-opensource/var/lib/virtuoso/db/data
+version: '3'
+
+services:
+  virtuoso:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8890:8890"  # SPARQL and HTTP
+      - "1111:1111"  # SQL port
+    environment:
+      - ONTOLOGY_FILE=${ONTOLOGY_FILE:-data/pizza.owl}
+    volumes:
+      - ./data:/data
+      - virtuoso_data:/opt/virtuoso-opensource/database/data
+      - virtuoso_logs:/opt/virtuoso-opensource/database/logs
+
+volumes:
+  virtuoso_data:
+  virtuoso_logs:
