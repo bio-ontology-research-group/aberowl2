@@ -9,27 +9,38 @@ if [ -z "$ONTOLOGY_NAME" ] && [ -z "$ONTOLOGY_FILE" ]; then
     exit 1
 fi
 
-# Default ontology file path
-ONTOLOGY_FILE=${ONTOLOGY_FILE:-/data/${ONTOLOGY_NAME}}
+# Set up directories
 VIRTUOSO_ONTOLOGIES_DIR="/opt/virtuoso-opensource/share/ontologies"
-
-# Create ontologies directory if it doesn't exist
 mkdir -p $VIRTUOSO_ONTOLOGIES_DIR
+
+# Determine the ontology file path
+if [ ! -z "$ONTOLOGY_NAME" ]; then
+    # If ONTOLOGY_NAME is set, look for it in /data
+    DATA_ONTOLOGY_PATH="/data/$ONTOLOGY_NAME"
+    if [ -f "$DATA_ONTOLOGY_PATH" ]; then
+        ONTOLOGY_FILE="$DATA_ONTOLOGY_PATH"
+    else
+        echo "Error: Ontology file $DATA_ONTOLOGY_PATH not found!"
+        echo "Listing /data directory:"
+        ls -la /data
+        exit 1
+    fi
+else
+    # ONTOLOGY_FILE is set, use it directly
+    if [ ! -f "$ONTOLOGY_FILE" ]; then
+        echo "Error: Ontology file $ONTOLOGY_FILE not found!"
+        echo "Current directory: $(pwd)"
+        echo "Listing /data directory:"
+        ls -la /data
+        exit 1
+    fi
+fi
 
 # Wait for Virtuoso to start up
 echo "Starting Virtuoso..."
 cd /opt/virtuoso-opensource/bin
 ./virtuoso-t +wait +configfile /opt/virtuoso-opensource/database/virtuoso.ini &
 sleep 15  # Increased sleep time to ensure Virtuoso is fully started
-
-# Check if the ontology file exists
-if [ ! -f "$ONTOLOGY_FILE" ]; then
-    echo "Error: Ontology file $ONTOLOGY_FILE not found!"
-    echo "Current directory: $(pwd)"
-    echo "Listing /data directory:"
-    ls -la /data
-    exit 1
-fi
 
 # Copy the ontology file to the Virtuoso ontologies directory
 ONTOLOGY_FILENAME=$(basename "$ONTOLOGY_FILE")
