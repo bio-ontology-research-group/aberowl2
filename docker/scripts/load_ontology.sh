@@ -13,6 +13,17 @@ fi
 VIRTUOSO_ONTOLOGIES_DIR="/opt/virtuoso-opensource/share/ontologies"
 mkdir -p $VIRTUOSO_ONTOLOGIES_DIR
 
+# Start Virtuoso first
+echo "Starting Virtuoso..." >&2
+cd /opt/virtuoso-opensource/bin
+./virtuoso-t +wait +configfile /opt/virtuoso-opensource/database/virtuoso.ini &
+echo "Virtuoso started, waiting for it to be ready..." >&2
+sleep 15  # Increased sleep time to ensure Virtuoso is fully started
+
+echo "Running ontology loader..." >&2
+echo "Using SQL command: isql" >&2
+echo "Waiting for Virtuoso to be ready..." >&2
+
 # Check if the ontology file exists
 if [ ! -f "$ONTOLOGY_FILE" ]; then
     echo "Error: Ontology file $ONTOLOGY_FILE not found!" >&2
@@ -22,17 +33,19 @@ if [ ! -f "$ONTOLOGY_FILE" ]; then
     exit 1
 fi
 
-# Wait for Virtuoso to start up
-echo "Starting Virtuoso..." >&2
-cd /opt/virtuoso-opensource/bin
-./virtuoso-t +wait +configfile /opt/virtuoso-opensource/database/virtuoso.ini &
-sleep 15  # Increased sleep time to ensure Virtuoso is fully started
-
 # Copy the ontology file to the Virtuoso ontologies directory
 ONTOLOGY_FILENAME=$(basename "$ONTOLOGY_FILE")
 VIRTUOSO_ONTOLOGY_PATH="$VIRTUOSO_ONTOLOGIES_DIR/$ONTOLOGY_FILENAME"
 echo "Copying ontology from $ONTOLOGY_FILE to $VIRTUOSO_ONTOLOGY_PATH" >&2
-cp "$ONTOLOGY_FILE" "$VIRTUOSO_ONTOLOGY_PATH"
+cp -v "$ONTOLOGY_FILE" "$VIRTUOSO_ONTOLOGY_PATH"
+
+# Verify the file was copied
+if [ ! -f "$VIRTUOSO_ONTOLOGY_PATH" ]; then
+    echo "Error: Failed to copy ontology file to $VIRTUOSO_ONTOLOGY_PATH" >&2
+    echo "Available files in $VIRTUOSO_ONTOLOGIES_DIR:" >&2
+    ls -la $VIRTUOSO_ONTOLOGIES_DIR >&2
+    exit 1
+fi
 
 echo "Loading ontology from $VIRTUOSO_ONTOLOGY_PATH..." >&2
 
