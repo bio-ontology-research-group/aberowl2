@@ -33,7 +33,7 @@ You must configure the ontology file in one of these two ways:
    ONTOLOGY_FILE=data/custom/my-ontology.owl docker-compose up -d
    ```
 
-By default, it uses `ONTOLOGY_NAME=pizza.owl` if neither variable is set.
+By default, it uses `ONTOLOGY_NAME=ontology.owl` if neither variable is set.
 
 **Note:** At least one of these environment variables must be set, or the container will exit with an error.
 
@@ -47,6 +47,12 @@ Or with a custom ontology:
 
 ```bash
 ONTOLOGY_NAME=my-ontology.owl docker-compose up -d
+```
+
+For example, to use the included pizza.owl ontology:
+
+```bash
+ONTOLOGY_NAME=pizza.owl docker-compose up -d
 ```
 
 This will start the Virtuoso server with the following endpoints:
