@@ -84,12 +84,22 @@ Charset = UTF-8
         # Convert ontology to RDF if needed
         graph = Graph()
         try:
-            # Wait for Virtuoso to be fully started
-            self._wait_for_virtuoso()
+            logger.info(f"Loading ontology from {self.ontology_path}")
             
-            graph.parse(self.ontology_path)
+            # Parse the ontology file
+            try:
+                graph.parse(self.ontology_path)
+            except Exception as e:
+                logger.error(f"Failed to parse ontology file: {e}")
+                return False
+                
             rdf_path = os.path.join(self.db_path, "ontology.rdf")
-            graph.serialize(destination=rdf_path, format="xml")
+            try:
+                graph.serialize(destination=rdf_path, format="xml")
+                logger.info(f"Serialized ontology to RDF: {rdf_path}")
+            except Exception as e:
+                logger.error(f"Failed to serialize ontology to RDF: {e}")
+                return False
             
             # Create SQL script to load RDF
             load_script = os.path.join(self.db_path, "load_data.sql")
@@ -102,6 +112,7 @@ rdf_loader_run();
 checkpoint;
 select * from DB.DBA.LOAD_LIST where ll_error is not NULL;
 """)
+            logger.info(f"Created SQL load script: {load_script}")
             
             # Execute the load script
             cmd = [
@@ -132,44 +143,41 @@ select * from DB.DBA.LOAD_LIST where ll_error is not NULL;
             logger.error(f"Failed to load ontology: {e}")
             return False
             
-    def _wait_for_virtuoso(self, max_attempts=30):
+    def _wait_for_virtuoso(self, max_attempts=1):
         """Wait for Virtuoso server to be ready to accept connections."""
-        logger.info("Waiting for Virtuoso server to start...")
+        logger.info("Checking if Virtuoso server is ready...")
         
-        for attempt in range(max_attempts):
-            try:
-                # Try to connect to the SPARQL endpoint
-                cmd = [
-                    "isql-vt", 
-                    f"{self.port}", 
-                    "-U", "dba", 
-                    "-P", "dba", 
-                    "-c", "SELECT 1;"
-                ]
-                result = subprocess.run(
-                    cmd, 
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    timeout=2
-                )
-                
-                if result.returncode == 0:
-                    logger.info(f"Virtuoso server is ready after {attempt+1} attempts")
-                    return True
-            except (subprocess.SubprocessError, subprocess.TimeoutExpired):
-                pass
-                
-            logger.info(f"Waiting for Virtuoso to start (attempt {attempt+1}/{max_attempts})...")
-            time.sleep(2)
+        try:
+            # Try to connect to the SPARQL endpoint
+            cmd = [
+                "isql-vt", 
+                f"{self.port}", 
+                "-U", "dba", 
+                "-P", "dba", 
+                "-c", "SELECT 1;"
+            ]
+            result = subprocess.run(
+                cmd, 
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=5
+            )
             
-        logger.warning("Timed out waiting for Virtuoso to start")
-        return False
+            if result.returncode == 0:
+                logger.info("Virtuoso server is ready")
+                return True
+            else:
+                logger.warning(f"Virtuoso server check failed: {result.stderr.decode('utf-8', errors='replace')}")
+                return False
+        except (subprocess.SubprocessError, subprocess.TimeoutExpired) as e:
+            logger.warning(f"Failed to connect to Virtuoso: {str(e)}")
+            return False
     
     def start_server(self):
         """Start the Virtuoso server."""
         if self.process and self.process.poll() is None:
             logger.info("Virtuoso server is already running")
-            return
+            return True
             
         config_path = self.prepare_virtuoso_config()
         
@@ -201,7 +209,9 @@ select * from DB.DBA.LOAD_LIST where ll_error is not NULL;
             )
             
             # Wait for server to start (minimum time)
-            time.sleep(5)
+            time.sleep(10)  # Increased wait time for better initialization
+            
+            # Check if process is still running
             if self.process.poll() is not None:
                 stderr = self.process.stderr.read()
                 logger.error(f"Failed to start Virtuoso: {stderr}")
@@ -209,6 +219,12 @@ select * from DB.DBA.LOAD_LIST where ll_error is not NULL;
                 
             logger.info(f"Virtuoso server started on port {self.port}, HTTP port {self.http_port}")
             
+            # Check if server is ready
+            if not self._wait_for_virtuoso():
+                logger.error("Virtuoso server started but is not responding to commands")
+                self.stop_server()
+                return False
+                
             # Load the ontology
             return self.load_ontology()
             
@@ -259,11 +275,14 @@ select * from DB.DBA.LOAD_LIST where ll_error is not NULL;
             
             # Keep the server running
             try:
-                while self.process.poll() is None:
+                while self.process and self.process.poll() is None:
                     time.sleep(1)
             except KeyboardInterrupt:
-                pass
+                logger.info("Received keyboard interrupt, shutting down...")
             finally:
                 self.stop_server()
+                
+            return True
         else:
             logger.error("Failed to start Virtuoso server")
+            return False
