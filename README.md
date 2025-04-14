@@ -27,26 +27,28 @@ You must configure the ontology file using the `ONTOLOGY_FILE` environment varia
 ONTOLOGY_FILE=/data/pizza.owl docker-compose up -d
 ```
 
-By default, it uses `/data/pizza.owl` if not specified.
+The system will automatically copy your ontology file and rename it to `ontology.owl` inside the container for consistency.
 
 **Note:** The ONTOLOGY_FILE environment variable must be set, or the container will exit with an error.
 
 ### Starting the Server
 
+To start the server with the included pizza.owl ontology:
+
 ```bash
-docker-compose up -d
+ONTOLOGY_FILE=data/pizza.owl docker-compose up -d
 ```
 
-Or with a custom ontology:
+To use your own ontology file:
 
 ```bash
-ONTOLOGY_FILE=/data/my-ontology.owl docker-compose up -d
+ONTOLOGY_FILE=/path/to/your/ontology.owl docker-compose up -d
 ```
 
-For example, to use the included pizza.owl ontology:
+To see the logs and verify the ontology was loaded correctly:
 
 ```bash
-ONTOLOGY_FILE=/data/pizza.owl docker-compose up -d
+docker-compose logs -f virtuoso
 ```
 
 This will start the Virtuoso server with the following endpoints:
