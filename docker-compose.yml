@@ -1,0 +1,12 @@
+version: '3'
+services:
+  virtuoso:
+    image: openlink/virtuoso-opensource-7
+    ports:
+      - "8890:8890"
+      - "1111:1111"
+    environment:
+      - DBA_PASSWORD=dba
+      - SPARQL_UPDATE=true
+    volumes:
+      - ./data:/opt/virtuoso-opensource/var/lib/virtuoso/db/data
