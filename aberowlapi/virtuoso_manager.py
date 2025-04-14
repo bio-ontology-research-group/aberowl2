@@ -98,10 +98,16 @@ DefaultGraph = http://www.co-ode.org/ontologies/pizza/pizza.owl
             
             # Parse the ontology file
             try:
-                graph.parse(self.ontology_path)
+                graph.parse(self.ontology_path, format="xml")
             except Exception as e:
-                logger.error(f"Failed to parse ontology file: {e}")
-                return False
+                logger.warning(f"Failed to parse ontology file as XML: {e}")
+                try:
+                    # Try alternative formats
+                    graph.parse(self.ontology_path)
+                    logger.info("Successfully parsed ontology with auto-detected format")
+                except Exception as e2:
+                    logger.error(f"Failed to parse ontology file with any format: {e2}")
+                    return False
                 
             rdf_path = os.path.join(self.db_path, "ontology.rdf")
             try:
@@ -141,17 +147,61 @@ select * from DB.DBA.LOAD_LIST where ll_error is not NULL;
                 import requests
                 with open(rdf_path, 'rb') as f:
                     files = {'file': ('ontology.rdf', f, 'application/rdf+xml')}
+                    
+                    # First try to clear the graph
+                    clear_query = "CLEAR GRAPH <http://www.co-ode.org/ontologies/pizza/pizza.owl>"
+                    clear_response = requests.post(
+                        f"http://localhost:{self.http_port}/sparql",
+                        data={'query': clear_query},
+                        auth=('dba', 'dba'),
+                        headers={'Accept': 'application/json'},
+                        timeout=30
+                    )
+                    logger.info(f"Clear graph response: {clear_response.status_code}")
+                    
+                    # Then upload the new data
                     response = requests.post(
                         f"http://localhost:{self.http_port}/sparql-graph-crud-auth",
                         files=files,
                         params={'graph-uri': 'http://www.co-ode.org/ontologies/pizza/pizza.owl'},
                         auth=('dba', 'dba'),
+                        headers={'Accept': 'application/json'},
                         timeout=30
                     )
                     
                     if response.status_code == 200 or response.status_code == 201:
                         logger.info("Ontology loaded via HTTP SPARQL endpoint")
-                        return True
+                        
+                        # Verify data was loaded by running a test query
+                        test_query = """
+                        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+                        SELECT (COUNT(?s) as ?count) WHERE { 
+                            ?s rdf:type owl:Class 
+                        }
+                        """
+                        
+                        test_response = requests.get(
+                            f"http://localhost:{self.http_port}/sparql",
+                            params={'query': test_query, 'format': 'application/sparql-results+json'},
+                            auth=('dba', 'dba'),
+                            headers={'Accept': 'application/json'},
+                            timeout=30
+                        )
+                        
+                        if test_response.status_code == 200:
+                            try:
+                                result = test_response.json()
+                                count = int(result['results']['bindings'][0]['count']['value'])
+                                logger.info(f"Verified data load: found {count} classes")
+                                if count > 0:
+                                    return True
+                                else:
+                                    logger.warning("No classes found after upload, falling back to isql-vt method")
+                            except Exception as e:
+                                logger.warning(f"Failed to verify data load: {e}")
+                        else:
+                            logger.warning(f"Failed to verify data load, status: {test_response.status_code}")
                     else:
                         logger.warning(f"HTTP upload failed with status {response.status_code}: {response.text}")
                         # Fall back to isql-vt method
@@ -210,8 +260,13 @@ select * from DB.DBA.LOAD_LIST where ll_error is not NULL;
             # Try to connect to the SPARQL endpoint using HTTP
             import requests
             try:
-                response = requests.get(f"http://localhost:{self.http_port}/sparql?query=SELECT+1", 
-                                       timeout=5)
+                response = requests.get(
+                    f"http://localhost:{self.http_port}/sparql",
+                    params={'query': 'SELECT 1', 'format': 'application/sparql-results+json'},
+                    auth=('dba', 'dba'),
+                    headers={'Accept': 'application/json'},
+                    timeout=5
+                )
                 if response.status_code == 200:
                     logger.info("Virtuoso SPARQL endpoint is accessible")
                     return True
@@ -286,7 +341,7 @@ select * from DB.DBA.LOAD_LIST where ll_error is not NULL;
             )
             
             # Wait for server to start (minimum time)
-            time.sleep(15)  # Increased wait time for better initialization
+            time.sleep(30)  # Further increased wait time for better initialization
             
             # Check if process is still running
             if self.process.poll() is not None:
@@ -342,6 +397,8 @@ select * from DB.DBA.LOAD_LIST where ll_error is not NULL;
         sparql = SPARQLWrapper(self.sparql_endpoint)
         sparql.setQuery(query)
         sparql.setReturnFormat(JSON)
+        sparql.setCredentials("dba", "dba")
+        sparql.addCustomHttpHeader("Accept", "application/sparql-results+json")
         
         try:
             results = sparql.query().convert()

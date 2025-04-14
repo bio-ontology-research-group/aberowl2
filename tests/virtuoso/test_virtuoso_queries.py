@@ -55,7 +55,9 @@ class TestVirtuosoQueries(TestCase):
             params={
                 'query': query,
                 'format': 'application/sparql-results+json'
-            }
+            },
+            auth=('dba', 'dba'),
+            headers={'Accept': 'application/sparql-results+json'}
         )
         
         self.assertEqual(response.status_code, 200, f"SPARQL query failed: {response.text}")
@@ -99,7 +101,9 @@ class TestVirtuosoQueries(TestCase):
             params={
                 'query': query,
                 'format': 'application/sparql-results+json'
-            }
+            },
+            auth=('dba', 'dba'),
+            headers={'Accept': 'application/sparql-results+json'}
         )
         
         self.assertEqual(response.status_code, 200, f"SPARQL query failed: {response.text}")
