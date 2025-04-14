@@ -1,8 +1,16 @@
 #!/bin/bash
 set -e
 
+# Check if ONTOLOGY_NAME is set
+if [ -z "$ONTOLOGY_NAME" ] && [ -z "$ONTOLOGY_FILE" ]; then
+    echo "Error: Neither ONTOLOGY_NAME nor ONTOLOGY_FILE environment variables are set!"
+    echo "Please set one of these variables to specify the ontology file to load."
+    echo "Example: ONTOLOGY_NAME=pizza.owl or ONTOLOGY_FILE=/data/pizza.owl"
+    exit 1
+fi
+
 # Default ontology file path
-ONTOLOGY_FILE=${ONTOLOGY_FILE:-/data/pizza.owl}
+ONTOLOGY_FILE=${ONTOLOGY_FILE:-/data/${ONTOLOGY_NAME}}
 VIRTUOSO_ONTOLOGIES_DIR="/opt/virtuoso-opensource/share/ontologies"
 
 # Create ontologies directory if it doesn't exist
