@@ -16,9 +16,6 @@ mkdir -p $VIRTUOSO_ONTOLOGIES_DIR
 # Check if the ontology file exists
 if [ ! -f "$ONTOLOGY_FILE" ]; then
     echo "Error: Ontology file $ONTOLOGY_FILE not found!"
-    echo "Current directory: $(pwd)"
-    echo "Listing /data directory:"
-    ls -la /data
     exit 1
 fi
 
