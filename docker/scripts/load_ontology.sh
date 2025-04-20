@@ -29,7 +29,7 @@ ls -la $(dirname "$ONTOLOGY_FILE") >&2
 # Check if the ontology file exists
 if [ ! -f "$ONTOLOGY_FILE" ]; then
     echo "Error: Ontology file $ONTOLOGY_FILE not found!" >&2
-    
+
     # Try to find the file in /data directory as a fallback
     echo "Searching for .owl files in /data:" >&2
     FALLBACK_FILE=$(find /data -name "*.owl" -type f | head -1)
@@ -63,7 +63,8 @@ echo "Virtuoso started with PID: $VIRTUOSO_PID, waiting for it to be ready..." >
 
 # Wait for Virtuoso to be ready
 for i in {1..30}; do
-    if isql 1111 dba dba -K EXEC="status();" > /dev/null 2>&1; then
+    # Use explicit -U and -P flags
+    if isql 1111 -U dba -P dba -K EXEC="status();" > /dev/null 2>&1; then
         echo "Virtuoso is ready!" >&2
         break
     fi
@@ -71,22 +72,31 @@ for i in {1..30}; do
     sleep 2
 done
 
+# Check if the loop completed without Virtuoso becoming ready
+if ! isql 1111 -U dba -P dba -K EXEC="status();" > /dev/null 2>&1; then
+    echo "Error: Virtuoso did not become ready after 60 seconds." >&2
+    exit 1
+fi
+
 echo "Loading ontology from $VIRTUOSO_ONTOLOGY_PATH..." >&2
 
 # Drop the existing graph if it exists and create a new one
 # Use a transaction to ensure atomicity and prevent errors
-isql 1111 dba dba << EOF
+# Use explicit -U and -P flags
+isql 1111 -U dba -P dba << EOF
 SPARQL CLEAR GRAPH <http://localhost:8890/ontology>;
 SPARQL CREATE SILENT GRAPH <http://localhost:8890/ontology>;
 EOF
 
 # Load the ontology file with better error handling
 echo "Loading RDF data into Virtuoso..." >&2
-isql 1111 dba dba EXEC="DB.DBA.RDF_LOAD_RDFXML_MT(file_to_string_output('$VIRTUOSO_ONTOLOGY_PATH'), '', 'http://localhost:8890/ontology');"
+# Use explicit -U and -P flags
+isql 1111 -U dba -P dba EXEC="DB.DBA.RDF_LOAD_RDFXML_MT(file_to_string_output('$VIRTUOSO_ONTOLOGY_PATH'), '', 'http://localhost:8890/ontology');"
 
 # Verify the data was loaded
 echo "Verifying loaded classes..." >&2
-isql 1111 dba dba EXEC="SPARQL SELECT COUNT(*) WHERE { ?class a <http://www.w3.org/2002/07/owl#Class> };"
+# Use explicit -U and -P flags
+isql 1111 -U dba -P dba EXEC="SPARQL SELECT COUNT(*) WHERE { ?class a <http://www.w3.org/2002/07/owl#Class> };"
 
 echo "Ontology loading completed. Server is ready." >&2
 echo "SPARQL endpoint available at: http://localhost:8890/sparql" >&2
