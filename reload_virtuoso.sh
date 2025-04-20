@@ -12,8 +12,8 @@ fi
 
 HOST_ONTOLOGY_PATH=$1
 ONTOLOGY_FILENAME=$(basename "$HOST_ONTOLOGY_PATH")
-# The path expected by the script inside the container via ENV var (not used in this test run)
-# CONTAINER_ONTOLOGY_PATH="/data/$ONTOLOGY_FILENAME"
+# The path expected by the script inside the container via ENV var
+CONTAINER_ONTOLOGY_PATH="/data/$ONTOLOGY_FILENAME"
 
 # Check if the ontology file exists on the host
 if [ ! -f "$HOST_ONTOLOGY_PATH" ]; then
@@ -34,24 +34,18 @@ echo "Stopping and removing existing Virtuoso container and networks (including 
 # -v removes anonymous volumes attached to containers
 docker compose down -v
 
-# Use --build to ensure the image incorporates the latest changes (like commented CMD)
-echo "Building and starting Virtuoso container ONLY (no load script execution)..."
-# echo "Passing ONTOLOGY_FILE=$CONTAINER_ONTOLOGY_PATH to the container environment." # Not needed for this test
+# Use --build to ensure the image incorporates the latest changes (like uncommented CMD)
+echo "Building and starting Virtuoso with the ontology: $HOST_ONTOLOGY_PATH"
+echo "Passing ONTOLOGY_FILE=$CONTAINER_ONTOLOGY_PATH to the container environment."
 
-# Set the environment variable for docker compose up (DBA_PASSWORD is still used by base entrypoint)
-# export ONTOLOGY_FILE="$CONTAINER_ONTOLOGY_PATH" # Not needed for this test
+# Set the environment variable for docker compose up
+export ONTOLOGY_FILE="$CONTAINER_ONTOLOGY_PATH"
 docker compose up --build -d
 
-echo "Virtuoso container started. Waiting a few seconds..."
-sleep 5
+echo "Virtuoso is restarting. Container will run load_ontology.sh."
+echo "You can check logs with: docker compose logs -f virtuoso"
+echo "When loading completes, SPARQL endpoint will be available at: http://localhost:8890/sparql"
 
-echo "Displaying container logs to check Virtuoso startup:"
-docker compose logs virtuoso
-
-echo "If Virtuoso started correctly, the logs above should show database initialization."
-echo "You can try connecting manually: docker compose exec virtuoso isql 1111 dba dba"
-echo "SPARQL endpoint *might* be available at: http://localhost:8890/sparql if startup succeeded."
-
-# Unset the variable so it doesn't leak into the user's shell environment (though not used in this test)
-# unset ONTOLOGY_FILE
+# Unset the variable so it doesn't leak into the user's shell environment
+unset ONTOLOGY_FILE
 
