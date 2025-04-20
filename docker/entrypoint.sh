@@ -1,0 +1,43 @@
+#!/bin/bash
+set -e
+
+# Default Virtuoso INI file path
+VIRTUOSO_INI="/opt/virtuoso-opensource/database/virtuoso.ini"
+# Directories needing correct permissions
+DB_DIR="/opt/virtuoso-opensource/database/data"
+LOG_DIR="/opt/virtuoso-opensource/database/logs"
+
+echo "Entrypoint: Running as user $(whoami)"
+
+# Ensure target directories exist (might not if volumes are fresh)
+mkdir -p "$DB_DIR" "$LOG_DIR"
+
+# Change ownership of volume mount points to 'virtuoso' user and group
+echo "Entrypoint: Ensuring correct ownership for $DB_DIR and $LOG_DIR..."
+chown -R virtuoso:virtuoso "$DB_DIR" "$LOG_DIR"
+echo "Entrypoint: Permissions set."
+ls -ld "$DB_DIR" "$LOG_DIR"
+
+# Start Virtuoso server in the background as the 'virtuoso' user
+echo "Entrypoint: Starting Virtuoso server in background..."
+# Use gosu to switch user. Pass +wait and +configfile arguments.
+gosu virtuoso virtuoso-t +configfile "$VIRTUOSO_INI" +wait &
+VIRTUOSO_PID=$!
+echo "Entrypoint: Virtuoso started with PID $VIRTUOSO_PID"
+
+# Execute the ontology loading script as the 'virtuoso' user
+echo "Entrypoint: Executing ontology loading script..."
+gosu virtuoso /opt/virtuoso-opensource/bin/load_ontology.sh
+
+# Check if Virtuoso process is still running after load script finishes
+if kill -0 $VIRTUOSO_PID > /dev/null 2>&1; then
+    echo "Entrypoint: Ontology loading script finished. Waiting for Virtuoso process (PID $VIRTUOSO_PID) to exit..."
+    wait $VIRTUOSO_PID
+else
+    echo "Entrypoint: Virtuoso process (PID $VIRTUOSO_PID) seems to have exited prematurely."
+    # Exit with an error code if Virtuoso died
+    exit 1
+fi
+
+echo "Entrypoint: Virtuoso process exited."
+exit 0

@@ -1,5 +1,8 @@
 FROM openlink/virtuoso-opensource-7:latest
 
+# Install gosu for user switching in entrypoint
+RUN apt-get update && apt-get install -y --no-install-recommends gosu && rm -rf /var/lib/apt/lists/*
+
 ENV DBA_PASSWORD=dba \
     SPARQL_UPDATE=true \
     DEFAULT_GRAPH=http://localhost:8890/DAV
@@ -7,13 +10,14 @@ ENV DBA_PASSWORD=dba \
 # Copy configuration files
 COPY docker/virtuoso.ini /opt/virtuoso-opensource/database/virtuoso.ini
 
-# Copy startup script
+# Copy startup script and the new entrypoint wrapper
 COPY docker/scripts/load_ontology.sh /opt/virtuoso-opensource/bin/load_ontology.sh
-RUN chmod +x /opt/virtuoso-opensource/bin/load_ontology.sh
+COPY docker/entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /opt/virtuoso-opensource/bin/load_ontology.sh /docker-entrypoint.sh
 
-# Explicitly set the user for the CMD to match Virtuoso's likely user
-# This might prevent permission conflicts with files/dirs created by the entrypoint
-USER virtuoso
+# No need for chown here anymore, entrypoint handles it on mounted volumes
+# No need for USER virtuoso, entrypoint runs as root initially then uses gosu
+# No need for CMD, entrypoint handles execution flow
 
-# Let the base image entrypoint run first, then execute our script via CMD as the 'virtuoso' user.
-CMD ["/opt/virtuoso-opensource/bin/load_ontology.sh"]
+# Set the entrypoint to our wrapper script
+ENTRYPOINT ["/docker-entrypoint.sh"]

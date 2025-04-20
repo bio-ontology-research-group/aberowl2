@@ -3,23 +3,17 @@ set -e
 
 echo "--- load_ontology.sh starting ---"
 
-# --- Debug: Check script user and directory permissions ---
+# --- Debug: Check script user ---
 echo "Running as user: $(whoami)"
-DB_DIR="/opt/virtuoso-opensource/database/data"
-LOG_DIR="/opt/virtuoso-opensource/database/logs"
-echo "Checking permissions for $DB_DIR:"
-ls -ld "$DB_DIR" || echo "Directory $DB_DIR not found."
-echo "Checking permissions for $LOG_DIR:"
-ls -ld "$LOG_DIR" || echo "Directory $LOG_DIR not found."
 # --- End Debug ---
 
-
-# Give the base entrypoint and Virtuoso more time to fully initialize
-# Reducing this slightly as the main issue seems to be startup failure, not just delay
-echo "Waiting 20 seconds for Virtuoso initial startup and stabilization..." >&2
-sleep 20
+# Give Virtuoso (started in background by entrypoint) time to initialize.
+# Can potentially be shorter now, but keep some buffer.
+echo "Waiting 15 seconds for Virtuoso startup..." >&2
+sleep 15
 
 # --- Debug: Display Virtuoso log before attempting connection ---
+LOG_DIR="/opt/virtuoso-opensource/database/logs"
 LOG_FILE="$LOG_DIR/virtuoso.log"
 echo "--- Checking Virtuoso log ($LOG_FILE) ---" >&2
 if [ -f "$LOG_FILE" ]; then
@@ -81,7 +75,7 @@ fi
 
 echo "Ontology file copied successfully. File size: $(stat -c%s $VIRTUOSO_ONTOLOGY_PATH) bytes" >&2
 
-# Virtuoso should have been started by the base image's entrypoint.
+# Virtuoso should have been started by the entrypoint script.
 # Wait for Virtuoso to be ready - Password should already be set to 'dba'
 echo "Waiting for Virtuoso SQL endpoint (1111) to become ready..." >&2
 READY=false
@@ -101,8 +95,9 @@ for i in {1..40}; do
     else
         echo "Virtuoso log file still not found." >&2
         # Maybe the process died? Check if virtuoso-t is running
-        if ! pgrep -f virtuoso-t > /dev/null; then
-            echo "Debug: virtuoso-t process not found!" >&2
+        # Note: pgrep might not be installed by default, let's check PID directly
+        if ! kill -0 $VIRTUOSO_PID > /dev/null 2>&1; then
+             echo "Debug: Virtuoso process (PID $VIRTUOSO_PID specified by entrypoint) not found!" >&2
         fi
     fi
     echo "--- End log tail check ---" >&2
@@ -181,6 +176,5 @@ echo "Verification query executed successfully." >&2
 echo "Ontology loading completed. Server is ready." >&2
 echo "SPARQL endpoint available at: http://localhost:8890/sparql" >&2
 
-# Keep the container running since this script is the main CMD process
-echo "Setup complete. Keeping container alive (tail -f /dev/null)..." >&2
-tail -f /dev/null
+# Remove the tail -f /dev/null as the entrypoint script handles waiting
+echo "Setup complete in load_ontology.sh. Exiting script."
