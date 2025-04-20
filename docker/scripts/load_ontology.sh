@@ -1,14 +1,19 @@
 #!/bin/bash
 set -e
 
-# Give the base entrypoint and Virtuoso *some* time to start or fail
-echo "Waiting 10 seconds for Virtuoso initial startup attempt..." >&2
-sleep 10
+# Give the base entrypoint and Virtuoso more time to fully initialize
+echo "Waiting 30 seconds for Virtuoso initial startup and stabilization..." >&2
+sleep 30
 
 # --- Debug: Display Virtuoso log before attempting connection ---
-echo "--- Displaying Virtuoso log (virtuoso.log) ---" >&2
-cat /opt/virtuoso-opensource/database/logs/virtuoso.log || echo "Virtuoso log file not found or empty." >&2
-echo "--- End of Virtuoso log ---" >&2
+LOG_FILE="/opt/virtuoso-opensource/database/logs/virtuoso.log"
+echo "--- Checking Virtuoso log ($LOG_FILE) ---" >&2
+if [ -f "$LOG_FILE" ]; then
+    cat "$LOG_FILE"
+else
+    echo "Virtuoso log file not found or not yet created." >&2
+fi
+echo "--- End of Virtuoso log check ---" >&2
 # --- End Debug ---
 
 # Set up directories (still useful for organizing copied ontology)
@@ -61,31 +66,39 @@ echo "Ontology file copied successfully. File size: $(stat -c%s $VIRTUOSO_ONTOLO
 
 # Virtuoso should have been started by the base image's entrypoint.
 # Wait for Virtuoso to be ready - Password should already be set to 'dba'
-echo "Waiting for Virtuoso to become ready..." >&2
+echo "Waiting for Virtuoso SQL endpoint (1111) to become ready..." >&2
 READY=false
 # Keep attempts relatively high, but log check should reveal issues sooner
 for i in {1..40}; do
-    # Use explicit -U and -P flags, assuming base entrypoint set password correctly
-    if isql 1111 -U dba -P dba -K EXEC="status();" > /dev/null 2>&1; then
-        echo "Virtuoso is ready!" >&2
+    # Try a simpler isql check: connect, run trivial command, exit.
+    if echo "SELECT 1;" | isql 1111 -U dba -P dba > /dev/null 2>&1; then
+        echo "Virtuoso SQL endpoint is ready!" >&2
         READY=true
         break
     fi
-    echo "Waiting for Virtuoso connection (attempt $i/40)..." >&2
-    # Check log again inside loop if it keeps failing? Maybe too verbose.
-    sleep 3 # Slightly longer sleep between checks
+    echo "Waiting for Virtuoso SQL connection (attempt $i/40)..." >&2
+    # --- Add log tail check inside loop ---
+    echo "--- Checking tail of Virtuoso log ($LOG_FILE) ---" >&2
+    if [ -f "$LOG_FILE" ]; then
+        tail -n 20 "$LOG_FILE"
+    else
+        echo "Virtuoso log file still not found." >&2
+    fi
+    echo "--- End log tail check ---" >&2
+    # --- End log tail check ---
+    sleep 3 # Keep sleep between checks
 done
 
 # Check if the loop completed without Virtuoso becoming ready
 if [ "$READY" = false ]; then
-    echo "Error: Virtuoso did not become ready after substantial waiting time." >&2
-    echo "Review the Virtuoso log output above for specific startup errors." >&2
-    # Attempt connection without password just for diagnostics
+    echo "Error: Virtuoso SQL endpoint did not become ready after substantial waiting time." >&2
+    echo "Review the Virtuoso log output above for specific startup or connection errors." >&2
+    # Attempt connection without password just for final diagnostics
     echo "Attempting final diagnostic connection without password..." >&2
-    if isql 1111 -U dba -K EXEC="status();" > /dev/null 2>&1; then
-        echo "Diagnostic: Connection WITHOUT password succeeded. DBA_PASSWORD handling failed?" >&2
+    if echo "SELECT 1;" | isql 1111 -U dba > /dev/null 2>&1; then
+        echo "Diagnostic: Connection WITHOUT password succeeded. DBA_PASSWORD handling potentially failed?" >&2
     else
-        echo "Diagnostic: Connection WITHOUT password also failed. Virtuoso likely crashed or failed to start." >&2
+        echo "Diagnostic: Connection WITHOUT password also failed. Virtuoso likely crashed or failed to start cleanly." >&2
     fi
     # Exit script if Virtuoso isn't ready
     exit 1
@@ -106,6 +119,10 @@ EOF
 # Check exit code of isql
 if [ $? -ne 0 ]; then
     echo "Error: isql command for clearing/creating graph failed." >&2
+    # Print logs again on failure
+    echo "--- Displaying Virtuoso log on failure ---" >&2
+    if [ -f "$LOG_FILE" ]; then cat "$LOG_FILE"; fi
+    echo "--- End of Log ---";
     exit 1
 fi
 echo "Graph commands executed successfully." >&2
@@ -117,6 +134,10 @@ isql 1111 -U dba -P dba EXEC="DB.DBA.RDF_LOAD_RDFXML_MT(file_to_string_output('$
 # Check exit code of isql
 if [ $? -ne 0 ]; then
     echo "Error: isql command for loading RDF data failed." >&2
+    # Print logs again on failure
+    echo "--- Displaying Virtuoso log on failure ---" >&2
+    if [ -f "$LOG_FILE" ]; then cat "$LOG_FILE"; fi
+    echo "--- End of Log ---";
     exit 1
 fi
 echo "RDF load command executed successfully." >&2
@@ -128,6 +149,10 @@ isql 1111 -U dba -P dba EXEC="SPARQL SELECT COUNT(*) WHERE { GRAPH <http://local
 # Check exit code of isql
 if [ $? -ne 0 ]; then
     echo "Error: isql command for verifying classes failed." >&2
+    # Print logs again on failure
+    echo "--- Displaying Virtuoso log on failure ---" >&2
+    if [ -f "$LOG_FILE" ]; then cat "$LOG_FILE"; fi
+    echo "--- End of Log ---";
     exit 1
 fi
 echo "Verification query executed successfully." >&2
@@ -138,4 +163,3 @@ echo "SPARQL endpoint available at: http://localhost:8890/sparql" >&2
 # Keep the container running since this script is the main CMD process
 echo "Setup complete. Keeping container alive (tail -f /dev/null)..." >&2
 tail -f /dev/null
-
