@@ -62,10 +62,12 @@ VIRTUOSO_PID=$!
 echo "Virtuoso started with PID: $VIRTUOSO_PID, waiting for it to be ready..." >&2
 
 # Wait for Virtuoso to be ready
+READY=false
 for i in {1..30}; do
     # Use explicit -U and -P flags
     if isql 1111 -U dba -P dba -K EXEC="status();" > /dev/null 2>&1; then
         echo "Virtuoso is ready!" >&2
+        READY=true
         break
     fi
     echo "Waiting for Virtuoso to start (attempt $i/30)..." >&2
@@ -73,33 +75,72 @@ for i in {1..30}; do
 done
 
 # Check if the loop completed without Virtuoso becoming ready
-if ! isql 1111 -U dba -P dba -K EXEC="status();" > /dev/null 2>&1; then
+if [ "$READY" = false ]; then
     echo "Error: Virtuoso did not become ready after 60 seconds." >&2
+    # Try connecting without password in case it's the very first run with no password set
+    echo "Attempting connection without password..." >&2
+    if isql 1111 -U dba -K EXEC="status();" > /dev/null 2>&1; then
+         echo "Virtuoso responded without password. Proceeding to set password." >&2
+         # Set the password now
+         isql 1111 -U dba EXEC="set password dba dba;"
+         echo "DBA password set." >&2
+         # Verify connection with new password
+         if ! isql 1111 -U dba -P dba -K EXEC="status();" > /dev/null 2>&1; then
+            echo "Error: Failed to connect even after setting password." >&2
+            exit 1
+         fi
+         echo "Connection with new password successful." >&2
+    else
+        echo "Error: Still unable to connect to Virtuoso." >&2
+        exit 1
+    fi
+fi
+
+# Explicitly set the password to ensure it's correctly applied
+echo "Ensuring DBA password is set..." >&2
+# Try setting the password. Use || true to avoid exiting if it fails (e.g., already set)
+isql 1111 -U dba -P dba EXEC="set password dba dba;" || echo "Set password command returned non-zero (maybe already set?)" >&2
+# Add a small delay just in case password change needs a moment
+sleep 1
+
+# Verify connection again after ensuring password
+if ! isql 1111 -U dba -P dba -K EXEC="status();" > /dev/null 2>&1; then
+    echo "Error: Could not connect with dba/dba after explicitly setting password." >&2
     exit 1
 fi
+echo "Confirmed connection with dba/dba password." >&2
+
 
 echo "Loading ontology from $VIRTUOSO_ONTOLOGY_PATH..." >&2
 
 # Drop the existing graph if it exists and create a new one
 # Use a transaction to ensure atomicity and prevent errors
 # Use explicit -U and -P flags
+echo "Clearing and creating graph <http://localhost:8890/ontology>..." >&2
 isql 1111 -U dba -P dba << EOF
 SPARQL CLEAR GRAPH <http://localhost:8890/ontology>;
 SPARQL CREATE SILENT GRAPH <http://localhost:8890/ontology>;
+exit;
 EOF
+echo "Graph commands executed." >&2
 
 # Load the ontology file with better error handling
 echo "Loading RDF data into Virtuoso..." >&2
 # Use explicit -U and -P flags
 isql 1111 -U dba -P dba EXEC="DB.DBA.RDF_LOAD_RDFXML_MT(file_to_string_output('$VIRTUOSO_ONTOLOGY_PATH'), '', 'http://localhost:8890/ontology');"
+echo "RDF load command executed." >&2
 
 # Verify the data was loaded
 echo "Verifying loaded classes..." >&2
 # Use explicit -U and -P flags
-isql 1111 -U dba -P dba EXEC="SPARQL SELECT COUNT(*) WHERE { ?class a <http://www.w3.org/2002/07/owl#Class> };"
+isql 1111 -U dba -P dba EXEC="SPARQL SELECT COUNT(*) WHERE { GRAPH <http://localhost:8890/ontology> { ?class a <http://www.w3.org/2002/07/owl#Class> } };"
+echo "Verification query executed." >&2
 
 echo "Ontology loading completed. Server is ready." >&2
 echo "SPARQL endpoint available at: http://localhost:8890/sparql" >&2
 
-# Keep the container running
-tail -f /opt/virtuoso-opensource/database/logs/virtuoso.log
+# Keep the container running by waiting on the Virtuoso process
+echo "Tailing Virtuoso logs..." >&2
+# Instead of tailing the log file (which might not exist or rotate),
+# wait for the Virtuoso process itself.
+wait $VIRTUOSO_PID
