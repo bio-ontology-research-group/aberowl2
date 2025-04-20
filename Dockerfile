@@ -11,6 +11,9 @@ COPY docker/virtuoso.ini /opt/virtuoso-opensource/database/virtuoso.ini
 COPY docker/scripts/load_ontology.sh /opt/virtuoso-opensource/bin/load_ontology.sh
 RUN chmod +x /opt/virtuoso-opensource/bin/load_ontology.sh
 
-# Let the base image entrypoint run first, then execute our script via CMD.
-# Restore this line to run the loading script.
+# Explicitly set the user for the CMD to match Virtuoso's likely user
+# This might prevent permission conflicts with files/dirs created by the entrypoint
+USER virtuoso
+
+# Let the base image entrypoint run first, then execute our script via CMD as the 'virtuoso' user.
 CMD ["/opt/virtuoso-opensource/bin/load_ontology.sh"]

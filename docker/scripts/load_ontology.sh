@@ -1,12 +1,26 @@
 #!/bin/bash
 set -e
 
+echo "--- load_ontology.sh starting ---"
+
+# --- Debug: Check script user and directory permissions ---
+echo "Running as user: $(whoami)"
+DB_DIR="/opt/virtuoso-opensource/database/data"
+LOG_DIR="/opt/virtuoso-opensource/database/logs"
+echo "Checking permissions for $DB_DIR:"
+ls -ld "$DB_DIR" || echo "Directory $DB_DIR not found."
+echo "Checking permissions for $LOG_DIR:"
+ls -ld "$LOG_DIR" || echo "Directory $LOG_DIR not found."
+# --- End Debug ---
+
+
 # Give the base entrypoint and Virtuoso more time to fully initialize
-echo "Waiting 30 seconds for Virtuoso initial startup and stabilization..." >&2
-sleep 30
+# Reducing this slightly as the main issue seems to be startup failure, not just delay
+echo "Waiting 20 seconds for Virtuoso initial startup and stabilization..." >&2
+sleep 20
 
 # --- Debug: Display Virtuoso log before attempting connection ---
-LOG_FILE="/opt/virtuoso-opensource/database/logs/virtuoso.log"
+LOG_FILE="$LOG_DIR/virtuoso.log"
 echo "--- Checking Virtuoso log ($LOG_FILE) ---" >&2
 if [ -f "$LOG_FILE" ]; then
     cat "$LOG_FILE"
@@ -18,6 +32,7 @@ echo "--- End of Virtuoso log check ---" >&2
 
 # Set up directories (still useful for organizing copied ontology)
 VIRTUOSO_ONTOLOGIES_DIR="/opt/virtuoso-opensource/share/ontologies"
+# Ensure this directory is created by the correct user (now 'virtuoso')
 mkdir -p $VIRTUOSO_ONTOLOGIES_DIR
 
 # Always use a standard name for the ontology inside the container
@@ -39,9 +54,11 @@ if [[ "$ONTOLOGY_FILE" != /data/* ]]; then
 fi
 
 echo "Looking for ontology file at: $ONTOLOGY_FILE" >&2
-ls -la $(dirname "$ONTOLOGY_FILE") >&2
+# Check if the source /data volume is readable by current user
+echo "Checking readability of source directory:"
+ls -la $(dirname "$ONTOLOGY_FILE") >&2 || echo "Cannot list source directory $(dirname "$ONTOLOGY_FILE")"
 
-# Check if the ontology file exists inside the container volume mount
+# Check if the source ontology file exists inside the container volume mount
 if [ ! -f "$ONTOLOGY_FILE" ]; then
     echo "Error: Ontology file $ONTOLOGY_FILE not found inside the container!" >&2
     # Provide more context for debugging
@@ -54,7 +71,7 @@ fi
 # Copy the ontology file to the Virtuoso ontologies directory with the standard name
 echo "Copying ontology from $ONTOLOGY_FILE to $VIRTUOSO_ONTOLOGY_PATH" >&2
 cp "$ONTOLOGY_FILE" "$VIRTUOSO_ONTOLOGY_PATH"
-chmod 644 "$VIRTUOSO_ONTOLOGY_PATH"
+# No need to chmod 644, default permissions should be fine
 
 # Verify the file was copied
 if [ ! -f "$VIRTUOSO_ONTOLOGY_PATH" ]; then
@@ -83,6 +100,10 @@ for i in {1..40}; do
         tail -n 20 "$LOG_FILE"
     else
         echo "Virtuoso log file still not found." >&2
+        # Maybe the process died? Check if virtuoso-t is running
+        if ! pgrep -f virtuoso-t > /dev/null; then
+            echo "Debug: virtuoso-t process not found!" >&2
+        fi
     fi
     echo "--- End log tail check ---" >&2
     # --- End log tail check ---
@@ -92,7 +113,7 @@ done
 # Check if the loop completed without Virtuoso becoming ready
 if [ "$READY" = false ]; then
     echo "Error: Virtuoso SQL endpoint did not become ready after substantial waiting time." >&2
-    echo "Review the Virtuoso log output above for specific startup or connection errors." >&2
+    echo "Review the Virtuoso log output and permission checks above." >&2
     # Attempt connection without password just for final diagnostics
     echo "Attempting final diagnostic connection without password..." >&2
     if echo "SELECT 1;" | isql 1111 -U dba > /dev/null 2>&1; then
