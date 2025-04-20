@@ -18,8 +18,8 @@ if [ ! -f "$ONTOLOGY_FILE" ]; then
     exit 1
 fi
 
-echo "Stopping and removing existing Virtuoso container..."
-docker compose down
+echo "Stopping and removing existing Virtuoso container and volumes..."
+docker compose down -v
 
 echo "Starting Virtuoso with the new ontology: $ONTOLOGY_FILE"
 ONTOLOGY_FILE=/$ONTOLOGY_FILE docker compose up -d

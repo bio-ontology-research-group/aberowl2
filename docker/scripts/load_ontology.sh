@@ -74,8 +74,11 @@ done
 echo "Loading ontology from $VIRTUOSO_ONTOLOGY_PATH..." >&2
 
 # Drop the existing graph if it exists and create a new one
-isql 1111 dba dba EXEC="SPARQL DROP SILENT GRAPH <http://localhost:8890/ontology>;"
-isql 1111 dba dba EXEC="SPARQL CREATE GRAPH <http://localhost:8890/ontology>;"
+# Use a transaction to ensure atomicity and prevent errors
+isql 1111 dba dba << EOF
+SPARQL CLEAR GRAPH <http://localhost:8890/ontology>;
+SPARQL CREATE SILENT GRAPH <http://localhost:8890/ontology>;
+EOF
 
 # Load the ontology file with better error handling
 echo "Loading RDF data into Virtuoso..." >&2
