@@ -19,11 +19,11 @@ echo "Entrypoint: Permissions set."
 ls -ld "$DB_DIR" "$LOG_DIR"
 
 # Start Virtuoso server in the background as the 'virtuoso' user
-echo "Entrypoint: Starting Virtuoso server in background..."
-# Use gosu to switch user. Pass +wait and +configfile arguments.
-gosu virtuoso virtuoso-t +configfile "$VIRTUOSO_INI" +wait &
+echo "Entrypoint: Starting Virtuoso server as a daemon..."
+# Use gosu to switch user. Remove +wait when running as a daemon in the background.
+gosu virtuoso virtuoso-t +configfile "$VIRTUOSO_INI" &
 VIRTUOSO_PID=$!
-echo "Entrypoint: Virtuoso started with PID $VIRTUOSO_PID"
+echo "Entrypoint: Virtuoso daemon started with PID $VIRTUOSO_PID"
 
 # Execute the ontology loading script as the 'virtuoso' user
 echo "Entrypoint: Executing ontology loading script..."
@@ -32,9 +32,16 @@ gosu virtuoso /opt/virtuoso-opensource/bin/load_ontology.sh
 # Check if Virtuoso process is still running after load script finishes
 if kill -0 $VIRTUOSO_PID > /dev/null 2>&1; then
     echo "Entrypoint: Ontology loading script finished. Waiting for Virtuoso process (PID $VIRTUOSO_PID) to exit..."
+    # Wait for the background Virtuoso process to terminate naturally or via signal
     wait $VIRTUOSO_PID
 else
     echo "Entrypoint: Virtuoso process (PID $VIRTUOSO_PID) seems to have exited prematurely."
+    # Check the log file for errors if it exists
+    if [ -f "$LOG_DIR/virtuoso.log" ]; then
+      echo "--- Tail of Virtuoso log ---"
+      tail -n 50 "$LOG_DIR/virtuoso.log"
+      echo "--- End of log ---"
+    fi
     # Exit with an error code if Virtuoso died
     exit 1
 fi
