@@ -19,13 +19,10 @@ if [ ! -f "$ONTOLOGY_FILE" ]; then
 fi
 
 echo "Stopping and removing existing Virtuoso container..."
-docker-compose down
-
-echo "Setting environment variable for the new ontology..."
-export ONTOLOGY_FILE=$ONTOLOGY_FILE
+docker compose down
 
 echo "Starting Virtuoso with the new ontology: $ONTOLOGY_FILE"
-docker-compose up -d
+ONTOLOGY_FILE=/$ONTOLOGY_FILE docker compose up -d
 
-echo "Virtuoso is restarting. You can check logs with: docker-compose logs -f virtuoso"
+echo "Virtuoso is restarting. You can check logs with: docker compose logs -f virtuoso"
 echo "SPARQL endpoint will be available at: http://localhost:8890/sparql"
