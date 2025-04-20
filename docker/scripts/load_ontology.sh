@@ -1,9 +1,15 @@
 #!/bin/bash
 set -e
 
-# Give the base entrypoint and Virtuoso ample time to start up and set password
-echo "Waiting 15 seconds for Virtuoso initial startup and password setup..." >&2
-sleep 15
+# Give the base entrypoint and Virtuoso *some* time to start or fail
+echo "Waiting 10 seconds for Virtuoso initial startup attempt..." >&2
+sleep 10
+
+# --- Debug: Display Virtuoso log before attempting connection ---
+echo "--- Displaying Virtuoso log (virtuoso.log) ---" >&2
+cat /opt/virtuoso-opensource/database/logs/virtuoso.log || echo "Virtuoso log file not found or empty." >&2
+echo "--- End of Virtuoso log ---" >&2
+# --- End Debug ---
 
 # Set up directories (still useful for organizing copied ontology)
 VIRTUOSO_ONTOLOGIES_DIR="/opt/virtuoso-opensource/share/ontologies"
@@ -36,6 +42,7 @@ if [ ! -f "$ONTOLOGY_FILE" ]; then
     # Provide more context for debugging
     echo "Listing contents of /data volume:" >&2
     ls -la /data >&2
+    # Exit here if file not found, as the rest of script will fail anyway
     exit 1
 fi
 
@@ -56,7 +63,7 @@ echo "Ontology file copied successfully. File size: $(stat -c%s $VIRTUOSO_ONTOLO
 # Wait for Virtuoso to be ready - Password should already be set to 'dba'
 echo "Waiting for Virtuoso to become ready..." >&2
 READY=false
-# Increase attempts slightly
+# Keep attempts relatively high, but log check should reveal issues sooner
 for i in {1..40}; do
     # Use explicit -U and -P flags, assuming base entrypoint set password correctly
     if isql 1111 -U dba -P dba -K EXEC="status();" > /dev/null 2>&1; then
@@ -65,24 +72,26 @@ for i in {1..40}; do
         break
     fi
     echo "Waiting for Virtuoso connection (attempt $i/40)..." >&2
-    sleep 3 # Slightly longer sleep
+    # Check log again inside loop if it keeps failing? Maybe too verbose.
+    sleep 3 # Slightly longer sleep between checks
 done
 
 # Check if the loop completed without Virtuoso becoming ready
 if [ "$READY" = false ]; then
     echo "Error: Virtuoso did not become ready after substantial waiting time." >&2
-    echo "Check Virtuoso logs (docker compose logs virtuoso)." >&2
+    echo "Review the Virtuoso log output above for specific startup errors." >&2
     # Attempt connection without password just for diagnostics
-    echo "Attempting diagnostic connection without password..." >&2
+    echo "Attempting final diagnostic connection without password..." >&2
     if isql 1111 -U dba -K EXEC="status();" > /dev/null 2>&1; then
-        echo "Diagnostic: Connection WITHOUT password succeeded. DBA_PASSWORD env var might not be working as expected." >&2
+        echo "Diagnostic: Connection WITHOUT password succeeded. DBA_PASSWORD handling failed?" >&2
     else
-        echo "Diagnostic: Connection WITHOUT password also failed." >&2
+        echo "Diagnostic: Connection WITHOUT password also failed. Virtuoso likely crashed or failed to start." >&2
     fi
+    # Exit script if Virtuoso isn't ready
     exit 1
 fi
 
-# Password should be set. Do NOT try to set it again here.
+# --- Proceed with ontology loading only if Virtuoso is ready ---
 
 echo "Loading ontology from $VIRTUOSO_ONTOLOGY_PATH..." >&2
 
@@ -129,3 +138,4 @@ echo "SPARQL endpoint available at: http://localhost:8890/sparql" >&2
 # Keep the container running since this script is the main CMD process
 echo "Setup complete. Keeping container alive (tail -f /dev/null)..." >&2
 tail -f /dev/null
+
