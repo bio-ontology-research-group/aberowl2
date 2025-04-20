@@ -21,8 +21,10 @@ fi
 echo "Stopping and removing existing Virtuoso container and volumes..."
 docker compose down -v
 
-echo "Starting Virtuoso with the new ontology: $ONTOLOGY_FILE"
-ONTOLOGY_FILE=/$ONTOLOGY_FILE docker compose up -d
+# Use --build to ensure the image incorporates the latest load_ontology.sh
+echo "Building and starting Virtuoso with the new ontology: $ONTOLOGY_FILE"
+ONTOLOGY_FILE=/$ONTOLOGY_FILE docker compose up --build -d
 
 echo "Virtuoso is restarting. You can check logs with: docker compose logs -f virtuoso"
 echo "SPARQL endpoint will be available at: http://localhost:8890/sparql"
+
