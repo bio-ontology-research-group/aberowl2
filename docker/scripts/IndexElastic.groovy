@@ -77,9 +77,15 @@ for (String url:urls) {
 	idx++;
 }
 
+// Print debug info about connection
+println "Connecting to Elasticsearch at: ${urls.join(', ')}"
+println "Using indices: ontology=${ontologyIndexName}, class=${owlClassIndexName}"
+println "Processing ontology file: ${fileName}"
+
 restClient = null
 
 if (!username.isEmpty() &&  !password.isEmpty()) {
+	println "Using authentication with username: ${username}"
 	final CredentialsProvider credentialsProvider =
 		new BasicCredentialsProvider();
 	credentialsProvider.setCredentials(AuthScope.ANY,
@@ -95,12 +101,22 @@ if (!username.isEmpty() &&  !password.isEmpty()) {
         }
     });
 } else {
+	println "No authentication provided, connecting without credentials"
 	// Original code incorrectly used 'esUrl' which would only use the last URL from the loop
 	// Corrected to use 'hosts' array which contains all specified hosts
 	restClient = RestClient.builder(hosts)
 }
 
-esClient = new RestHighLevelClient(restClient)
+try {
+    esClient = new RestHighLevelClient(restClient)
+    // Test connection
+    def pingResponse = esClient.ping(RequestOptions.DEFAULT)
+    println "Connected to Elasticsearch: ${pingResponse}"
+} catch (Exception e) {
+    println "ERROR: Failed to connect to Elasticsearch: ${e.message}"
+    e.printStackTrace()
+    System.exit(1)
+}
 
 def indexExists(indexName) {
 	try {
@@ -207,11 +223,29 @@ def index(def indexName, def obj) {
 
 
 void indexOntology(String fileName, def data) {
+    println "Starting to index ontology from file: ${fileName}"
+    
     // Initialize index
-    initIndex()
+    try {
+        initIndex()
+        println "Initialized Elasticsearch indices"
+    } catch (Exception e) {
+        println "ERROR: Failed to initialize indices: ${e.message}"
+        e.printStackTrace()
+        System.exit(1)
+    }
 
-    OWLOntologyManager manager = OWLManager.createOWLOntologyManager()
-    OWLOntology ont = manager.loadOntologyFromOntologyDocument(new File(fileName))
+    try {
+        println "Loading ontology from: ${fileName}"
+        File ontologyFile = new File(fileName)
+        if (!ontologyFile.exists()) {
+            println "ERROR: Ontology file does not exist: ${fileName}"
+            System.exit(1)
+        }
+        
+        OWLOntologyManager manager = OWLManager.createOWLOntologyManager()
+        OWLOntology ont = manager.loadOntologyFromOntologyDocument(ontologyFile)
+        println "Successfully loaded ontology: ${ont.getOntologyID()}"
     OWLDataFactory fac = manager.getOWLDataFactory()
     ConsoleProgressMonitor progressMonitor = new ConsoleProgressMonitor()
     OWLReasonerConfiguration config = new SimpleConfiguration(progressMonitor)
@@ -358,39 +392,78 @@ String convertArrayToBase64(double[] array) {
     return new String(encodedBB.array());
 }
 
-def data = System.in.newReader().getText()
-def slurper = new JsonSlurper()
-data = slurper.parseText(data)
+try {
+    println "Reading data from standard input..."
+    def dataText = System.in.newReader().getText()
+    
+    if (dataText == null || dataText.isEmpty()) {
+        println "ERROR: No data received from standard input"
+        System.exit(1)
+    }
+    
+    println "Parsing JSON data..."
+    def slurper = new JsonSlurper()
+    def data = slurper.parseText(dataText)
+    
+    if (data == null) {
+        println "ERROR: Failed to parse JSON data"
+        System.exit(1)
+    }
+    
+    println "Successfully parsed JSON data with keys: ${data.keySet()}"
 
 
-if (skip_embbedding.equals("False")) {
-	// Read embeddings
-	def embeds = [:]
-    def embeddingFile = new File(fileName + ".embs")
-    if (embeddingFile.exists()) {
-        embeddingFile.splitEachLine(" ") { it ->
-            if (it.size() > 1) { // Ensure there's at least a key and one value
-                double[] vector = new double[it.size() - 1]
-                try {
-                    for (int i = 1; i < it.size(); ++i) {
-                        vector[i - 1] = Double.parseDouble(it[i]);
+    println "Checking for embeddings (skip_embedding=${skip_embbedding})..."
+    if (skip_embbedding.equals("False")) {
+        // Read embeddings
+        def embeds = [:]
+        def embeddingFile = new File(fileName + ".embs")
+        println "Looking for embedding file: ${embeddingFile.path}"
+        if (embeddingFile.exists()) {
+            println "Reading embeddings from file: ${embeddingFile.path}"
+            int lineCount = 0
+            int successCount = 0
+            embeddingFile.splitEachLine(" ") { it ->
+                lineCount++
+                if (it.size() > 1) { // Ensure there's at least a key and one value
+                    double[] vector = new double[it.size() - 1]
+                    try {
+                        for (int i = 1; i < it.size(); ++i) {
+                            vector[i - 1] = Double.parseDouble(it[i]);
+                        }
+                        embeds[it[0]] = convertArrayToBase64(vector);
+                        successCount++
+                    } catch (NumberFormatException e) {
+                        println "WARN: Could not parse embedding vector line: ${it.join(' ')} - ${e.message}"
                     }
-                    embeds[it[0]] = convertArrayToBase64(vector);
-                } catch (NumberFormatException e) {
-                    println "WARN: Could not parse embedding vector line: ${it.join(' ')} - ${e.message}"
+                } else {
+                    println "WARN: Skipping malformed embedding line: ${it.join(' ')}"
                 }
-            } else {
-                println "WARN: Skipping malformed embedding line: ${it.join(' ')}"
             }
+            println "Processed ${lineCount} embedding lines, successfully loaded ${successCount} embeddings"
+            data["embeds"] = embeds
+        } else {
+            println "WARN: Embedding file not found: ${embeddingFile.path}"
         }
-	    data["embeds"] = embeds
     } else {
-        println "WARN: Embedding file not found: ${embeddingFile.path}"
+        println "Skipping embeddings as requested"
     }
 
-
+    println "Starting indexing process..."
+    indexOntology(fileName, data)
+    
+    println "Closing Elasticsearch client..."
+    esClient.close()
+    println "Elasticsearch client closed. Indexing completed successfully."
+} catch (Exception e) {
+    println "ERROR: Failed during indexing process: ${e.message}"
+    e.printStackTrace()
+    if (esClient != null) {
+        try {
+            esClient.close()
+        } catch (Exception closeError) {
+            println "ERROR: Failed to close Elasticsearch client: ${closeError.message}"
+        }
+    }
+    System.exit(1)
 }
-
-indexOntology(fileName, data)
-esClient.close()
-println "Elasticsearch client closed."
