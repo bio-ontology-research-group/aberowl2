@@ -12,7 +12,7 @@ fi
 
 HOST_ONTOLOGY_PATH=$1
 ONTOLOGY_FILENAME=$(basename "$HOST_ONTOLOGY_PATH")
-# The path expected by the script inside the container via ENV var
+# The path expected by the virtuoso load script inside the container via ENV var
 CONTAINER_ONTOLOGY_PATH="/data/$ONTOLOGY_FILENAME"
 
 # Check if the ontology file exists on the host
@@ -30,22 +30,27 @@ echo "Attempting to remove existing Virtuoso volumes ($DATA_VOLUME, $LOGS_VOLUME
 docker volume rm "$DATA_VOLUME" 2>/dev/null || true # Ignore error if not found
 docker volume rm "$LOGS_VOLUME" 2>/dev/null || true # Ignore error if not found
 
-echo "Stopping and removing existing Virtuoso container and networks (including anonymous volumes)..."
+echo "Stopping and removing existing containers and networks (including anonymous volumes)..."
 # -v removes anonymous volumes attached to containers
 docker compose down -v
 
-# Use --build to ensure the image incorporates the latest changes (like uncommented CMD)
-echo "Building and starting Virtuoso with the ontology: $HOST_ONTOLOGY_PATH"
-echo "Passing ONTOLOGY_FILE=$CONTAINER_ONTOLOGY_PATH to the container environment."
+# Use --build to ensure images incorporate the latest changes
+echo "Building and starting services with the ontology: $HOST_ONTOLOGY_PATH"
+echo "Passing ONTOLOGY_FILE=$CONTAINER_ONTOLOGY_PATH to virtuoso."
+echo "Passing ONTOLOGY_FILENAME=$ONTOLOGY_FILENAME to ontology-api."
 
-# Set the environment variable for docker compose up
+# Set the environment variables for docker compose up
 export ONTOLOGY_FILE="$CONTAINER_ONTOLOGY_PATH"
+export ONTOLOGY_FILENAME="$ONTOLOGY_FILENAME" # Export filename for the API container command
 docker compose up --build -d
 
-echo "Virtuoso is restarting. Container will run load_ontology.sh."
-echo "You can check logs with: docker compose logs -f virtuoso"
+echo "Services are restarting. Virtuoso container will run load_ontology.sh."
+echo "You can check logs with: docker compose logs -f"
 echo "When loading completes, SPARQL endpoint will be available at: http://localhost:8890/sparql"
+echo "Ontology API should be available at: http://localhost:8080"
 
-# Unset the variable so it doesn't leak into the user's shell environment
+
+# Unset the variables so they don't leak into the user's shell environment
 unset ONTOLOGY_FILE
+unset ONTOLOGY_FILENAME
 

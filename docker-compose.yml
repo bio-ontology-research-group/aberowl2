@@ -14,6 +14,23 @@ services:
       - virtuoso_logs:/opt/virtuoso-opensource/database/logs
     restart: unless-stopped
 
+  ontology-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8080:8080" # API port
+    environment:
+      - ONTOLOGY_FILE=${ONTOLOGY_FILE}
+    volumes:
+      # Mount the data directory containing ontologies
+      - ./data:/app/ontology
+    command: python3 /app/api_server.py /app/ontology/${ONTOLOGY_FILENAME:-pizza.owl} # Default to pizza.owl if ONTOLOGY_FILENAME is not set
+    depends_on:
+      - virtuoso
+    restart: unless-stopped
+
 volumes:
   virtuoso_data:
   virtuoso_logs:
+
