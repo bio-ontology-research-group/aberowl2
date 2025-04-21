@@ -74,8 +74,8 @@ def main():
     classes = query_ontology_classes()
     
     if classes:
-        print(f"\nFound {len(classes)} classes:")
-        for i, class_uri in enumerate(classes, 1):
+        print(f"\nFound {len(classes)} classes. Printing first 10:")
+        for i, class_uri in enumerate(classes[:10], 1):
             print(f"{i}. {class_uri}")
     else:
         print("No classes found or error occurred.")
