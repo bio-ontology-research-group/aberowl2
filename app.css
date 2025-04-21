@@ -1,0 +1,428 @@
+/* Main styling for health.groovy ontology viewer */
+:root {
+  --primary-color: #337ab7;
+  --secondary-color: #5bc0de;
+  --dark-color: #222;
+  --light-color: #f8f9fa;
+  --border-color: #ddd;
+}
+
+body {
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  line-height: 1.6;
+  color: #333;
+  margin: 0;
+  padding: 0;
+  background-color: white;
+}
+
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 15px;
+}
+
+/* Header styling */
+header {
+  background-color: white;
+  color: var(--dark-color);
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.navbar {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.navbar-brand {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: var(--primary-color);
+  text-decoration: none;
+  margin-bottom: 1rem;
+}
+
+.navbar-nav {
+  display: flex;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  margin-bottom: 0.5rem;
+}
+
+.nav-item {
+  margin-right: 1.5rem;
+}
+
+.nav-link {
+  color: var(--primary-color);
+  text-decoration: none;
+  transition: color 0.3s;
+}
+
+.nav-link:hover {
+  text-decoration: underline;
+}
+
+/* Main content area */
+.main-content {
+  background-color: white;
+  margin: 1rem 0;
+  padding: 1rem;
+}
+
+.ontology-header {
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 1rem;
+  margin-bottom: 2rem;
+}
+
+.ontology-title {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.ontology-description {
+  color: #666;
+  margin-bottom: 1rem;
+}
+
+/* Tabs styling */
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 1.5rem;
+}
+
+.tab {
+  padding: 0.75rem 1.5rem;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.3s;
+}
+
+.tab.active {
+  border-bottom-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+/* Search box */
+.search-box {
+  margin-bottom: 1.5rem;
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+/* Results area */
+.results-area {
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 1rem;
+  min-height: 300px;
+}
+
+.result-item {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.result-item:last-child {
+  border-bottom: none;
+}
+
+/* Class hierarchy styling */
+.class-hierarchy {
+  margin-top: 1.5rem;
+}
+
+.class-item {
+  padding: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  margin-bottom: 0.75rem;
+  background-color: #f9f9f9;
+}
+
+.class-item h4 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  color: var(--primary-color);
+}
+
+.class-item p {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+}
+
+.class-children {
+  font-size: 0.8rem;
+  color: #666;
+  font-style: italic;
+}
+
+/* Tree view styling */
+.tree {
+  margin-bottom: 10px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.tree ul {
+  list-style-type: none;
+  padding-left: 20px;
+}
+
+.tree > ul {
+  padding-left: 0;
+}
+
+.tree li {
+  margin: 5px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree li.active > a {
+  font-weight: bold;
+  color: var(--primary-color);
+}
+
+.tree .glyphicon {
+  cursor: pointer;
+  margin-right: 5px;
+}
+
+.tree a {
+  color: #333;
+  text-decoration: none;
+}
+
+.tree a:hover {
+  color: var(--primary-color);
+  text-decoration: underline;
+}
+
+.panel-title {
+  font-size: 16px;
+  font-weight: bold;
+  margin: 0;
+}
+
+.panel-body {
+  padding: 10px;
+}
+
+.sidebar .panel {
+  margin-bottom: 15px;
+}
+
+/* SPARQL and DL Query styling */
+.margin-top-15 {
+  margin-top: 15px;
+}
+
+.nav-pills > li > a {
+  border-radius: 4px;
+}
+
+.nav-pills > li.active > a,
+.nav-pills > li.active > a:hover,
+.nav-pills > li.active > a:focus {
+  color: #fff;
+  background-color: var(--primary-color);
+}
+
+/* Visualization styling */
+.visualization-container {
+  margin: 1.5rem 0;
+  text-align: center;
+}
+
+.visualization-caption {
+  font-style: italic;
+  color: #666;
+  margin-top: 0.5rem;
+}
+
+/* Class details styling */
+.class-details h3 {
+  color: var(--primary-color);
+  margin-top: 0;
+  margin-bottom: 15px;
+}
+
+.class-details p {
+  margin-bottom: 20px;
+}
+
+.class-hierarchy-nav {
+  margin: 20px 0;
+}
+
+.class-hierarchy-results {
+  margin-top: 20px;
+}
+
+/* Footer styling */
+footer {
+  background-color: white;
+  color: var(--dark-color);
+  padding: 1rem 0;
+  margin-top: 2rem;
+  border-top: 1px solid var(--border-color);
+  font-size: 0.9rem;
+}
+
+.footer-content {
+  text-align: center;
+}
+
+.footer-links {
+  list-style: none;
+  padding: 0;
+}
+
+.footer-links li {
+  margin-bottom: 0.5rem;
+}
+
+.footer-links a {
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+.footer-links a:hover {
+  text-decoration: underline;
+}
+
+/* Buttons */
+.btn {
+  display: inline-block;
+  padding: 0.4rem 0.8rem;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 0.3s;
+  margin-right: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.btn:hover {
+  background-color: #286090;
+}
+
+.btn-secondary {
+  background-color: var(--secondary-color);
+}
+
+.btn-secondary:hover {
+  background-color: #46b8da;
+}
+
+/* Form styling */
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: bold;
+}
+
+textarea.search-input {
+  min-height: 100px;
+  resize: vertical;
+}
+
+/* Ontology specific styles */
+.ontology-view {
+  margin-top: 1rem;
+}
+
+.ontology-title {
+  font-size: 1.8rem;
+  margin-bottom: 1rem;
+}
+
+.ontology-metadata {
+  margin-bottom: 2rem;
+}
+
+.ontology-metadata table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ontology-metadata th {
+  text-align: left;
+  padding: 0.5rem;
+  background-color: #f5f5f5;
+  border: 1px solid var(--border-color);
+}
+
+.ontology-metadata td {
+  padding: 0.5rem;
+  border: 1px solid var(--border-color);
+}
+
+/* Loading overlay */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(255, 255, 255, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.spinner {
+  padding: 20px;
+  background-color: white;
+  border-radius: 5px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.error-message {
+  padding: 20px;
+  margin: 20px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .navbar-nav {
+    flex-direction: column;
+    margin-top: 0.5rem;
+    width: 100%;
+  }
+  
+  .nav-item {
+    margin-right: 0;
+    margin-bottom: 0.5rem;
+  }
+}

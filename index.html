@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pizza Ontology Viewer</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+    <link rel="stylesheet" href="app.css">
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="ontology.js"></script>
+    <script src="main.js"></script>
+</head>
+<body>
+    <div x-data="mainApp">
+        <!-- Loading and error states from main app -->
+        <div x-show="isLoading && !$store.ontologyApp.ontology" class="loading-overlay">
+            <div class="spinner">Loading...</div>
+        </div>
+        
+        <div x-show="error" class="error-message">
+            <div class="alert alert-danger" x-text="error"></div>
+        </div>
+        
+        <div x-data="ontologyApp" x-show="!isLoading || $store.ontologyApp.ontology">
+        <!-- Header -->
+        <header>
+            <div class="container">
+                <nav class="navbar">
+                    <ul class="navbar-nav">
+                        <li class="nav-item"><a href="#/Browse" class="nav-link">Browse Ontologies</a></li>
+                        <li class="nav-item"><a href="#" class="nav-link">Add New Ontology</a></li>
+                        <li class="nav-item"><a href="#" class="nav-link">About</a></li>
+                        <li class="nav-item"><a href="#" class="nav-link">API Documentation</a></li>
+                    </ul>
+                    <ul class="navbar-nav">
+                        <li class="nav-item"><a href="#" class="nav-link">Login</a></li>
+                        <li class="nav-item"><a href="#" class="nav-link">Register</a></li>
+                    </ul>
+                </nav>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="container">
+            <div x-show="isLoading" class="loading text-center">
+                <h3>Loading ontology data...</h3>
+            </div>
+            
+            <div x-show="!isLoading" class="main-content">
+                <!-- Search Form in top row -->
+                <div class="row">
+                    <div class="col-md-12">
+                        <form class="form">
+                            <div class="form-group">
+                                <input class="form-control" type="text"
+                                    x-model="search" @input="handleSearchChange($event)"
+                                    placeholder="Search"/>
+                            </div>
+                        </form>
+                        
+                        <!-- Search Results -->
+                        <div :class="{'dropdown': true, 'open': searchResultsShow}">
+                            <ul class="dropdown-menu">
+                                <template x-for="item in searchResults" :key="item.owlClass">
+                                    <li>
+                                        <a :href="'#/Browse/' + encodeURIComponent(item.owlClass)"
+                                            @click="handleSearchItemClick(item.label[0])" x-text="item.label[0]"></a>
+                                    </li>
+                                </template>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <!-- Left sidebar with class hierarchy - always visible -->
+                    <div class="col-sm-4 col-md-3 sidebar">
+                        <!-- Classes Tree -->
+                        <div class="panel panel-default">
+                            <div class="panel-heading">
+                                <h4 class="panel-title">Classes</h4>
+                            </div>
+                            <div class="panel-body">
+                                <div class="tree">
+                                    <ul>
+                                        <!-- Pizza -->
+                                        <li :class="{ 'active': isNodeActive(ontology?.classes[0]) }">
+                                            <span>
+                                                <i :class="'glyphicon ' + (ontology?.classes[0]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')" 
+                                                   @click.prevent="toggleCollapsed($event, ontology?.classes[0])"></i>
+                                            </span>
+                                            <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[0]?.owlClass)" 
+                                               @click="handleNodeClick($event, ontology?.classes[0]?.owlClass)">Pizza</a>
+                                            
+                                            <ul x-show="!ontology?.classes[0]?.collapsed">
+                                                <!-- NamedPizza -->
+                                                <li :class="{ 'active': isNodeActive(ontology?.classes[0]?.children[0]) }">
+                                                    <span>
+                                                        <i :class="'glyphicon ' + (ontology?.classes[0]?.children[0]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')" 
+                                                           @click.prevent="toggleCollapsed($event, ontology?.classes[0]?.children[0])"></i>
+                                                    </span>
+                                                    <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[0]?.children[0]?.owlClass)" 
+                                                       @click="handleNodeClick($event, ontology?.classes[0]?.children[0]?.owlClass)">NamedPizza</a>
+                                                    
+                                                    <ul x-show="!ontology?.classes[0]?.children[0]?.collapsed">
+                                                        <!-- Margherita -->
+                                                        <li :class="{ 'active': isNodeActive(ontology?.classes[0]?.children[0]?.children[0]) }">
+                                                            <span>
+                                                                <i :class="'glyphicon ' + (ontology?.classes[0]?.children[0]?.children[0]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')" 
+                                                                   @click.prevent="toggleCollapsed($event, ontology?.classes[0]?.children[0]?.children[0])"></i>
+                                                            </span>
+                                                            <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[0]?.children[0]?.children[0]?.owlClass)" 
+                                                               @click="handleNodeClick($event, ontology?.classes[0]?.children[0]?.children[0]?.owlClass)">Margherita</a>
+                                                        </li>
+                                                        
+                                                        <!-- Americana -->
+                                                        <li :class="{ 'active': isNodeActive(ontology?.classes[0]?.children[0]?.children[1]) }">
+                                                            <span>
+                                                                <i :class="'glyphicon ' + (ontology?.classes[0]?.children[0]?.children[1]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')" 
+                                                                   @click.prevent="toggleCollapsed($event, ontology?.classes[0]?.children[0]?.children[1])"></i>
+                                                            </span>
+                                                            <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[0]?.children[0]?.children[1]?.owlClass)" 
+                                                               @click="handleNodeClick($event, ontology?.classes[0]?.children[0]?.children[1]?.owlClass)">Americana</a>
+                                                        </li>
+                                                        
+                                                        <!-- Capricciosa -->
+                                                        <li :class="{ 'active': isNodeActive(ontology?.classes[0]?.children[0]?.children[2]) }">
+                                                            <span>
+                                                                <i :class="'glyphicon ' + (ontology?.classes[0]?.children[0]?.children[2]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')" 
+                                                                   @click.prevent="toggleCollapsed($event, ontology?.classes[0]?.children[0]?.children[2])"></i>
+                                                            </span>
+                                                            <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[0]?.children[0]?.children[2]?.owlClass)" 
+                                                               @click="handleNodeClick($event, ontology?.classes[0]?.children[0]?.children[2]?.owlClass)">Capricciosa</a>
+                                                        </li>
+                                                        
+                                                        <!-- FourSeasons -->
+                                                        <li :class="{ 'active': isNodeActive(ontology?.classes[0]?.children[0]?.children[3]) }">
+                                                            <span>
+                                                                <i :class="'glyphicon ' + (ontology?.classes[0]?.children[0]?.children[3]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')" 
+                                                                   @click.prevent="toggleCollapsed($event, ontology?.classes[0]?.children[0]?.children[3])"></i>
+                                                            </span>
+                                                            <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[0]?.children[0]?.children[3]?.owlClass)" 
+                                                               @click="handleNodeClick($event, ontology?.classes[0]?.children[0]?.children[3]?.owlClass)">FourSeasons</a>
+                                                        </li>
+                                                    </ul>
+                                                </li>
+                                            </ul>
+                                        </li>
+                                        
+                                        <!-- PizzaBase -->
+                                        <li :class="{ 'active': isNodeActive(ontology?.classes[1]) }">
+                                            <span>
+                                                <i :class="'glyphicon ' + (ontology?.classes[1]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')" 
+                                                   @click.prevent="toggleCollapsed($event, ontology?.classes[1])"></i>
+                                            </span>
+                                            <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[1]?.owlClass)" 
+                                               @click="handleNodeClick($event, ontology?.classes[1]?.owlClass)">PizzaBase</a>
+                                            
+                                            <ul x-show="!ontology?.classes[1]?.collapsed">
+                                                <!-- DeepPanBase -->
+                                                <li :class="{ 'active': isNodeActive(ontology?.classes[1]?.children[0]) }">
+                                                    <span>
+                                                        <i :class="'glyphicon ' + (ontology?.classes[1]?.children[0]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')" 
+                                                           @click.prevent="toggleCollapsed($event, ontology?.classes[1]?.children[0])"></i>
+                                                    </span>
+                                                    <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[1]?.children[0]?.owlClass)" 
+                                                       @click="handleNodeClick($event, ontology?.classes[1]?.children[0]?.owlClass)">DeepPanBase</a>
+                                                </li>
+                                                
+                                                <!-- ThinAndCrispyBase -->
+                                                <li :class="{ 'active': isNodeActive(ontology?.classes[1]?.children[1]) }">
+                                                    <span>
+                                                        <i :class="'glyphicon ' + (ontology?.classes[1]?.children[1]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')" 
+                                                           @click.prevent="toggleCollapsed($event, ontology?.classes[1]?.children[1])"></i>
+                                                    </span>
+                                                    <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[1]?.children[1]?.owlClass)" 
+                                                       @click="handleNodeClick($event, ontology?.classes[1]?.children[1]?.owlClass)">ThinAndCrispyBase</a>
+                                                </li>
+                                            </ul>
+                                        </li>
+                                        
+                                        <!-- PizzaTopping -->
+                                        <li :class="{ 'active': isNodeActive(ontology?.classes[2]) }">
+                                            <span>
+                                                <i :class="'glyphicon ' + (ontology?.classes[2]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')" 
+                                                   @click.prevent="toggleCollapsed($event, ontology?.classes[2])"></i>
+                                            </span>
+                                            <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[2]?.owlClass)" 
+                                               @click="handleNodeClick($event, ontology?.classes[2]?.owlClass)">PizzaTopping</a>
+                                            
+                                            <ul x-show="!ontology?.classes[2]?.collapsed">
+                                                <!-- CheeseTopping -->
+                                                <li :class="{ 'active': isNodeActive(ontology?.classes[2]?.children[0]) }">
+                                                    <span>
+                                                        <i :class="'glyphicon ' + (ontology?.classes[2]?.children[0]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')" 
+                                                           @click.prevent="toggleCollapsed($event, ontology?.classes[2]?.children[0])"></i>
+                                                    </span>
+                                                    <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[2]?.children[0]?.owlClass)" 
+                                                       @click="handleNodeClick($event, ontology?.classes[2]?.children[0]?.owlClass)">CheeseTopping</a>
+                                                    
+                                                    <ul x-show="!ontology?.classes[2]?.children[0]?.collapsed">
+                                                        <!-- MozzarellaTopping -->
+                                                        <li :class="{ 'active': isNodeActive(ontology?.classes[2]?.children[0]?.children[0]) }">
+                                                            <span>
+                                                                <i :class="'glyphicon ' + (ontology?.classes[2]?.children[0]?.children[0]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')" 
+                                                                   @click.prevent="toggleCollapsed($event, ontology?.classes[2]?.children[0]?.children[0])"></i>
+                                                            </span>
+                                                            <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[2]?.children[0]?.children[0]?.owlClass)" 
+                                                               @click="handleNodeClick($event, ontology?.classes[2]?.children[0]?.children[0]?.owlClass)">MozzarellaTopping</a>
+                                                        </li>
+                                                        
+                                                        <!-- ParmesanTopping -->
+                                                        <li :class="{ 'active': isNodeActive(ontology?.classes[2]?.children[0]?.children[1]) }">
+                                                            <span>
+                                                                <i :class="'glyphicon ' + (ontology?.classes[2]?.children[0]?.children[1]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')" 
+                                                                   @click.prevent="toggleCollapsed($event, ontology?.classes[2]?.children[0]?.children[1])"></i>
+                                                            </span>
+                                                            <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[2]?.children[0]?.children[1]?.owlClass)" 
+                                                               @click="handleNodeClick($event, ontology?.classes[2]?.children[0]?.children[1]?.owlClass)">ParmesanTopping</a>
+                                                        </li>
+                                                    </ul>
+                                                </li>
+                                                
+                                                <!-- MeatTopping -->
+                                                <li :class="{ 'active': isNodeActive(ontology?.classes[2]?.children[1]) }">
+                                                    <span>
+                                                        <i :class="'glyphicon ' + (ontology?.classes[2]?.children[1]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')" 
+                                                           @click.prevent="toggleCollapsed($event, ontology?.classes[2]?.children[1])"></i>
+                                                    </span>
+                                                    <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[2]?.children[1]?.owlClass)" 
+                                                       @click="handleNodeClick($event, ontology?.classes[2]?.children[1]?.owlClass)">MeatTopping</a>
+                                                    
+                                                    <ul x-show="!ontology?.classes[2]?.children[1]?.collapsed">
+                                                        <!-- HamTopping -->
+                                                        <li :class="{ 'active': isNodeActive(ontology?.classes[2]?.children[1]?.children[0]) }">
+                                                            <span>
+                                                                <i :class="'glyphicon ' + (ontology?.classes[2]?.children[1]?.children[0]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')" 
+                                                                   @click.prevent="toggleCollapsed($event, ontology?.classes[2]?.children[1]?.children[0])"></i>
+                                                            </span>
+                                                            <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[2]?.children[1]?.children[0]?.owlClass)" 
+                                                               @click="handleNodeClick($event, ontology?.classes[2]?.children[1]?.children[0]?.owlClass)">HamTopping</a>
+                                                        </li>
+                                                        
+                                                        <!-- PepperoniTopping -->
+                                                        <li :class="{ 'active': isNodeActive(ontology?.classes[2]?.children[1]?.children[1]) }">
+                                                            <span>
+                                                                <i :class="'glyphicon ' + (ontology?.classes[2]?.children[1]?.children[1]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')" 
+                                                                   @click.prevent="toggleCollapsed($event, ontology?.classes[2]?.children[1]?.children[1])"></i>
+                                                            </span>
+                                                            <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[2]?.children[1]?.children[1]?.owlClass)" 
+                                                               @click="handleNodeClick($event, ontology?.classes[2]?.children[1]?.children[1]?.owlClass)">PepperoniTopping</a>
+                                                        </li>
+                                                    </ul>
+                                                </li>
+                                                
+                                                <!-- VegetableTopping -->
+                                                <li :class="{ 'active': isNodeActive(ontology?.classes[2]?.children[2]) }">
+                                                    <span>
+                                                        <i :class="'glyphicon ' + (ontology?.classes[2]?.children[2]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')" 
+                                                           @click.prevent="toggleCollapsed($event, ontology?.classes[2]?.children[2])"></i>
+                                                    </span>
+                                                    <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[2]?.children[2]?.owlClass)" 
+                                                       @click="handleNodeClick($event, ontology?.classes[2]?.children[2]?.owlClass)">VegetableTopping</a>
+                                                    
+                                                    <ul x-show="!ontology?.classes[2]?.children[2]?.collapsed">
+                                                        <!-- TomatoTopping -->
+                                                        <li :class="{ 'active': isNodeActive(ontology?.classes[2]?.children[2]?.children[0]) }">
+                                                            <span>
+                                                                <i :class="'glyphicon ' + (ontology?.classes[2]?.children[2]?.children[0]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')" 
+                                                                   @click.prevent="toggleCollapsed($event, ontology?.classes[2]?.children[2]?.children[0])"></i>
+                                                            </span>
+                                                            <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[2]?.children[2]?.children[0]?.owlClass)" 
+                                                               @click="handleNodeClick($event, ontology?.classes[2]?.children[2]?.children[0]?.owlClass)">TomatoTopping</a>
+                                                        </li>
+                                                        
+                                                        <!-- MushroomTopping -->
+                                                        <li :class="{ 'active': isNodeActive(ontology?.classes[2]?.children[2]?.children[1]) }">
+                                                            <span>
+                                                                <i :class="'glyphicon ' + (ontology?.classes[2]?.children[2]?.children[1]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')" 
+                                                                   @click.prevent="toggleCollapsed($event, ontology?.classes[2]?.children[2]?.children[1])"></i>
+                                                            </span>
+                                                            <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[2]?.children[2]?.children[1]?.owlClass)" 
+                                                               @click="handleNodeClick($event, ontology?.classes[2]?.children[2]?.children[1]?.owlClass)">MushroomTopping</a>
+                                                        </li>
+                                                        
+                                                        <!-- OliveTopping -->
+                                                        <li :class="{ 'active': isNodeActive(ontology?.classes[2]?.children[2]?.children[2]) }">
+                                                            <span>
+                                                                <i :class="'glyphicon ' + (ontology?.classes[2]?.children[2]?.children[2]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')" 
+                                                                   @click.prevent="toggleCollapsed($event, ontology?.classes[2]?.children[2]?.children[2])"></i>
+                                                            </span>
+                                                            <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[2]?.children[2]?.children[2]?.owlClass)" 
+                                                               @click="handleNodeClick($event, ontology?.classes[2]?.children[2]?.children[2]?.owlClass)">OliveTopping</a>
+                                                        </li>
+                                                        
+                                                        <!-- ArtichokeTopping -->
+                                                        <li :class="{ 'active': isNodeActive(ontology?.classes[2]?.children[2]?.children[3]) }">
+                                                            <span>
+                                                                <i :class="'glyphicon ' + (ontology?.classes[2]?.children[2]?.children[3]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')" 
+                                                                   @click.prevent="toggleCollapsed($event, ontology?.classes[2]?.children[2]?.children[3])"></i>
+                                                            </span>
+                                                            <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[2]?.children[2]?.children[3]?.owlClass)" 
+                                                               @click="handleNodeClick($event, ontology?.classes[2]?.children[2]?.children[3]?.owlClass)">ArtichokeTopping</a>
+                                                        </li>
+                                                    </ul>
+                                                </li>
+                                            </ul>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Object Properties -->
+                        <div class="panel panel-default">
+                            <div class="panel-heading">
+                                <h4 class="panel-title">Object Properties</h4>
+                            </div>
+                            <div class="panel-body">
+                                <div class="tree properties">
+                                    <ul>
+                                        <template x-for="node in ontology?.properties" :key="node.owlClass">
+                                            <li :class="{ 'active': isPropertyActive(node) }">
+                                                <span>
+                                                    <i :class="'glyphicon ' + (node.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')" 
+                                                       @click.prevent="togglePropertyCollapsed($event, node)"></i>
+                                                </span>
+                                                <a :href="'#/Property/' + encodeURIComponent(node.owlClass)" 
+                                                   @click="handlePropertyClick($event, node.owlClass)" x-text="node.label"></a>
+                                                
+                                                <!-- Render children if not collapsed -->
+                                                <template x-if="'children' in node && !node.collapsed">
+                                                    <ul>
+                                                        <template x-for="child in node.children" :key="child.owlClass">
+                                                            <li :class="{ 'active': isPropertyActive(child) }">
+                                                                <span>
+                                                                    <i :class="'glyphicon ' + (child.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')" 
+                                                                       @click.prevent="togglePropertyCollapsed($event, child)"></i>
+                                                                </span>
+                                                                <a :href="'#/Property/' + encodeURIComponent(child.owlClass)" 
+                                                                   @click="handlePropertyClick($event, child.owlClass)" x-text="child.label"></a>
+                                                            </li>
+                                                        </template>
+                                                    </ul>
+                                                </template>
+                                            </li>
+                                        </template>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-sm-8 col-md-9 main">
+                        <h1 x-text="(ontology?.acronym || 'PIZZA') + ' - ' + (ontology?.name || 'Pizza Ontology')"></h1>
+                        <h5 x-text="ontology?.description"></h5>
+                        
+                        <!-- Tabs -->
+                        <ul class="nav nav-tabs">
+                            <template x-for="tab in tabs" :key="tab">
+                                <li role="presentation" :class="{ 'active': isTabActive(tab) }">
+                                    <a :href="'#/' + tab" x-text="tab"></a>
+                                </li>
+                            </template>
+                        </ul>
+                        
+                        <!-- Tab Content -->
+                        
+                        <!-- Overview Tab -->
+                        <div x-show="currentTab === 'Overview'">
+                            <h2>Ontology metadata</h2>
+                            <table class="table table-hover">
+                                <tbody>
+                                    <template x-for="(data, index) in getOverviewMetadata()" :key="index">
+                                        <tr>
+                                            <td x-text="data[0]"></td>
+                                            <td x-html="data[1]"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                            
+                            <h3>Statistics</h3>
+                            <table class="table table-hover">
+                                <tbody>
+                                    <tr>
+                                        <td>Number of classes</td>
+                                        <td x-text="ontology?.submission?.nb_classes || '100'"></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Number of properties</td>
+                                        <td>25</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Number of individuals</td>
+                                        <td>15</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Maximum children</td>
+                                        <td x-text="ontology?.submission?.max_children || '15'"></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Average children</td>
+                                        <td x-text="ontology?.submission?.avg_children || '4.2'"></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Maximum depth</td>
+                                        <td x-text="ontology?.submission?.max_depth || '5'"></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            
+                            <h3>Metrics</h3>
+                            <table class="table table-hover">
+                                <tbody>
+                                    <tr>
+                                        <td>DL Expressivity</td>
+                                        <td>ALCROIQ(D)</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Axioms</td>
+                                        <td>940</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Logical axioms</td>
+                                        <td>712</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Declaration axioms</td>
+                                        <td>228</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Class count</td>
+                                        <td x-text="ontology?.submission?.nb_classes || '100'"></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Object property count</td>
+                                        <td>8</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Data property count</td>
+                                        <td>0</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Individual count</td>
+                                        <td>15</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Annotation property count</td>
+                                        <td>17</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Browse Tab -->
+                        <div x-show="currentTab === 'Browse'">
+                            <template x-if="selectedClass === null">
+                                <div>Please select an ontology class.</div>
+                            </template>
+                            
+                            <template x-if="selectedClass !== null">
+                                <div>
+                                    <h3 x-text="selectedClass.label"></h3>
+                                    <p x-text="selectedClass.definition"></p>
+                                    
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Annotation</th>
+                                                <th>Value</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td>IRI</td>
+                                                <td x-text="selectedClass.owlClass"></td>
+                                            </tr>
+                                            <tr>
+                                                <td>Label</td>
+                                                <td x-text="selectedClass.label"></td>
+                                            </tr>
+                                            <tr>
+                                                <td>Definition</td>
+                                                <td x-text="selectedClass.definition"></td>
+                                            </tr>
+                                            <template x-for="(data, index) in getClassData()" :key="index">
+                                                <tr>
+                                                    <td x-text="data[0]"></td>
+                                                    <td x-html="data[1]"></td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                    
+                                    <div class="margin-top-15">
+                                        <h4>Hierarchy</h4>
+                                        <ul class="nav nav-pills">
+                                            <li role="presentation" class="active">
+                                                <a href="#" @click.prevent="setDLQuery(selectedClass.owlClass, 'subclass')">Subclasses</a>
+                                            </li>
+                                            <li role="presentation">
+                                                <a href="#" @click.prevent="setDLQuery(selectedClass.owlClass, 'superclass')">Superclasses</a>
+                                            </li>
+                                        </ul>
+                                        
+                                        <div class="margin-top-15" x-show="dlResults.length > 0">
+                                            <table class="table table-hover">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Class</th>
+                                                        <th>Definition</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <template x-for="(item, index) in dlResults" :key="index">
+                                                        <tr>
+                                                            <td>
+                                                                <a :href="'#/Browse/' + encodeURIComponent(item.owlClass)" x-text="item.label"></a>
+                                                            </td>
+                                                            <td x-text="item.definition"></td>
+                                                        </tr>
+                                                    </template>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                        
+                        <!-- DLQuery Tab -->
+                        <div x-show="currentTab === 'DLQuery'">
+                            <div layout="row">
+                                <form>
+                                    <div class="form-group margin-top-15">
+                                        <input class="form-control" type="text" id="dlquery" placeholder="Query" 
+                                            x-model="dlQueryExp" @input="onDlQueryChange($event)"/>
+                                    </div>
+                                </form>
+                            </div>
+                            
+                            <ul class="nav nav-pills">
+                                <template x-for="button in getDLQueryButtons()" :key="button[0]">
+                                    <li role="presentation" :class="{ 'active': isDLQueryActive(button[0]) }">
+                                        <a :href="'#/DLQuery/' + encodeURIComponent(dlQueryExp) + '/' + button[0]"
+                                           @click.prevent="setDLQuery(dlQueryExp, button[0])" x-text="button[1]"></a>
+                                    </li>
+                                </template>
+                            </ul>
+                            
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>OWLClass</th>
+                                        <th>Label</th>
+                                        <th>Definition</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template x-for="(item, index) in dlResults" :key="index">
+                                        <tr>
+                                            <td>
+                                                <a :href="'#/Browse/' + encodeURIComponent(item.owlClass)" x-text="item.owlClass"></a>
+                                            </td>
+                                            <td x-text="item.label"></td>
+                                            <td x-text="item.definition"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- SPARQL Tab -->
+                        <div x-show="currentTab === 'SPARQL'">
+                            <form @submit.prevent="executeSparql">
+                                <div layout="row">
+                                    <div class="form-group margin-top-15">
+                                        <textarea class="form-control" id="sparql" rows="10" col="5" placeholder="SPARQL Query" 
+                                            x-model="query" @input="onSparqlChange($event)"></textarea>
+                                    </div>
+                                </div>
+                                <div layout="row">
+                                    <label for="format">Results Format</label>
+                                    <select class="form-control" @change="onFormatChange($event)" x-model="format">
+                                        <template x-for="item in getSparqlFormats()" :key="item.format">
+                                            <option :value="item.format" x-text="item.name"></option>
+                                        </template>
+                                    </select>
+                                </div>
+                                <div layout="row" class="margin-top-15">
+                                    <button type="submit" class="btn btn-primary">Execute</button>
+                                </div>
+                            </form>
+                            
+                            <div layout="row" class="margin-top-15">
+                                <h4>Example Queries</h4>
+                                <ul>
+                                    <li>List of 'metabolite replacement' procedures and phenotypes corrected in DDIEM with aberowl Values form query.
+                                        <a href="#/SPARQL" @click.prevent="setDDIEMExampleQuery">Show Query</a>
+                                    </li>
+                                    <li>List of 'metabolite replacement' procedures and phenotypes corrected in DDIEM with aberowl Filter form query.
+                                        <a href="#/SPARQL" @click.prevent="setDDIEMFilterExampleQuery">Show Query</a>
+                                    </li>
+                                    <li>Retreive interacting proteins involved in 'response to hypoxia' from BioGateway Sparql endpoint.
+                                        <a href="#/SPARQL" @click.prevent="setBioGatewayExampleQuery">Show Query</a>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <!-- Download Tab -->
+                        <div x-show="currentTab === 'Download'">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <template x-for="field in getDownloadFields()" :key="field">
+                                            <th x-text="field"></th>
+                                        </template>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template x-for="(item, index) in ontology?.downloads" :key="index">
+                                        <tr>
+                                            <td x-text="item[0]"></td>
+                                            <td x-text="item[1]"></td>
+                                            <td><a :href="'/' + item[2]">Download</a></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Property Tab -->
+                        <div x-show="currentTab === 'Property'">
+                            <template x-if="selectedProp === null">
+                                <h2>Please select an object property!</h2>
+                            </template>
+                            
+                            <template x-if="selectedProp !== null">
+                                <div>
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Property</th>
+                                                <th>Value</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <template x-for="(data, index) in getPropertyData()" :key="index">
+                                                <tr>
+                                                    <td x-text="data[0]"></td>
+                                                    <td x-html="data[1]"></td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer>
+            <div class="container">
+                <div class="footer-content">
+                    <p>
+                        Pizza Ontology is maintained by the Pizza Ontology Working Group<br>
+                        Report issues at <a href="https://github.com/health-groovy/ontology-repo/issues">Github</a>.
+                    </p>
+                </div>
+            </div>
+        </footer>
+        </div>
+    </div>
+</body>
+</html>

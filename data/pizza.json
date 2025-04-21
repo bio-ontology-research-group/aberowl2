@@ -1,0 +1,210 @@
+{
+  "acronym": "PIZZA",
+  "name": "Pizza Ontology",
+  "description": "A comprehensive ontology of pizza types, toppings, and bases",
+  "classes": [
+    {
+      "owlClass": "http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza",
+      "label": "Pizza",
+      "definition": "A flat base of dough baked with toppings",
+      "collapsed": true,
+      "children": [
+        {
+          "owlClass": "http://www.co-ode.org/ontologies/pizza/pizza.owl#NamedPizza",
+          "label": "NamedPizza",
+          "definition": "Pizzas with specific names and toppings",
+          "collapsed": true,
+          "children": [
+            {
+              "owlClass": "http://www.co-ode.org/ontologies/pizza/pizza.owl#Margherita",
+              "label": "Margherita",
+              "definition": "Pizza with tomato and mozzarella",
+              "collapsed": true,
+              "children": []
+            },
+            {
+              "owlClass": "http://www.co-ode.org/ontologies/pizza/pizza.owl#Americana",
+              "label": "Americana",
+              "definition": "Pizza with tomato, cheese and pepperoni",
+              "collapsed": true,
+              "children": []
+            },
+            {
+              "owlClass": "http://www.co-ode.org/ontologies/pizza/pizza.owl#Capricciosa",
+              "label": "Capricciosa",
+              "definition": "Pizza with mozzarella, tomato, mushrooms, artichokes and ham",
+              "collapsed": true,
+              "children": []
+            },
+            {
+              "owlClass": "http://www.co-ode.org/ontologies/pizza/pizza.owl#FourSeasons",
+              "label": "FourSeasons",
+              "definition": "Pizza with ham, mushrooms, olives and artichokes",
+              "collapsed": true,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "owlClass": "http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase",
+      "label": "PizzaBase",
+      "definition": "The base of a pizza",
+      "collapsed": true,
+      "children": [
+        {
+          "owlClass": "http://www.co-ode.org/ontologies/pizza/pizza.owl#DeepPanBase",
+          "label": "DeepPanBase",
+          "definition": "A deep pan base",
+          "collapsed": true,
+          "children": []
+        },
+        {
+          "owlClass": "http://www.co-ode.org/ontologies/pizza/pizza.owl#ThinAndCrispyBase",
+          "label": "ThinAndCrispyBase",
+          "definition": "A thin and crispy base",
+          "collapsed": true,
+          "children": []
+        }
+      ]
+    },
+    {
+      "owlClass": "http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping",
+      "label": "PizzaTopping",
+      "definition": "Toppings for pizzas",
+      "collapsed": true,
+      "children": [
+        {
+          "owlClass": "http://www.co-ode.org/ontologies/pizza/pizza.owl#CheeseTopping",
+          "label": "CheeseTopping",
+          "definition": "Cheese toppings",
+          "collapsed": true,
+          "children": [
+            {
+              "owlClass": "http://www.co-ode.org/ontologies/pizza/pizza.owl#MozzarellaTopping",
+              "label": "MozzarellaTopping",
+              "definition": "Mozzarella cheese topping",
+              "collapsed": true,
+              "children": []
+            },
+            {
+              "owlClass": "http://www.co-ode.org/ontologies/pizza/pizza.owl#ParmesanTopping",
+              "label": "ParmesanTopping",
+              "definition": "Parmesan cheese topping",
+              "collapsed": true,
+              "children": []
+            }
+          ]
+        },
+        {
+          "owlClass": "http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatTopping",
+          "label": "MeatTopping",
+          "definition": "Meat toppings",
+          "collapsed": true,
+          "children": [
+            {
+              "owlClass": "http://www.co-ode.org/ontologies/pizza/pizza.owl#HamTopping",
+              "label": "HamTopping",
+              "definition": "Ham topping",
+              "collapsed": true,
+              "children": []
+            },
+            {
+              "owlClass": "http://www.co-ode.org/ontologies/pizza/pizza.owl#PepperoniTopping",
+              "label": "PepperoniTopping",
+              "definition": "Pepperoni topping",
+              "collapsed": true,
+              "children": []
+            }
+          ]
+        },
+        {
+          "owlClass": "http://www.co-ode.org/ontologies/pizza/pizza.owl#VegetableTopping",
+          "label": "VegetableTopping",
+          "definition": "Vegetable toppings",
+          "collapsed": true,
+          "children": [
+            {
+              "owlClass": "http://www.co-ode.org/ontologies/pizza/pizza.owl#TomatoTopping",
+              "label": "TomatoTopping",
+              "definition": "Tomato topping",
+              "collapsed": true,
+              "children": []
+            },
+            {
+              "owlClass": "http://www.co-ode.org/ontologies/pizza/pizza.owl#MushroomTopping",
+              "label": "MushroomTopping",
+              "definition": "Mushroom topping",
+              "collapsed": true,
+              "children": []
+            },
+            {
+              "owlClass": "http://www.co-ode.org/ontologies/pizza/pizza.owl#OliveTopping",
+              "label": "OliveTopping",
+              "definition": "Olive topping",
+              "collapsed": true,
+              "children": []
+            },
+            {
+              "owlClass": "http://www.co-ode.org/ontologies/pizza/pizza.owl#ArtichokeTopping",
+              "label": "ArtichokeTopping",
+              "definition": "Artichoke topping",
+              "collapsed": true,
+              "children": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "properties": [
+    {
+      "owlClass": "http://www.co-ode.org/ontologies/pizza/pizza.owl#hasTopping",
+      "label": "hasTopping",
+      "definition": "Relates a pizza to its toppings",
+      "collapsed": true,
+      "children": []
+    },
+    {
+      "owlClass": "http://www.co-ode.org/ontologies/pizza/pizza.owl#hasBase",
+      "label": "hasBase",
+      "definition": "Relates a pizza to its base",
+      "collapsed": true,
+      "children": []
+    },
+    {
+      "owlClass": "http://www.co-ode.org/ontologies/pizza/pizza.owl#isIngredientOf",
+      "label": "isIngredientOf",
+      "definition": "Inverse of hasTopping",
+      "collapsed": true,
+      "children": []
+    },
+    {
+      "owlClass": "http://www.co-ode.org/ontologies/pizza/pizza.owl#isBaseOf",
+      "label": "isBaseOf",
+      "definition": "Inverse of hasBase",
+      "collapsed": true,
+      "children": []
+    }
+  ],
+  "submission": {
+    "description": "The Pizza ontology was developed as a teaching example for OWL and Protégé.",
+    "version": "1.5.0",
+    "date_released": "2025-03-15",
+    "home_page": "http://www.co-ode.org/ontologies/pizza/pizza.owl",
+    "documentation": "http://www.co-ode.org/ontologies/pizza/pizza.html",
+    "publication": "Smith, M. et al. (2004). OWL Web Ontology Language Guide.",
+    "has_ontology_language": "OWL",
+    "nb_classes": "100",
+    "nb_inconsistent": "0",
+    "max_children": "15",
+    "avg_children": "4.2",
+    "max_depth": "5"
+  },
+  "downloads": [
+    ["1.5.0", "2025-03-15", "downloads/pizza-1.5.0.owl"],
+    ["1.4.0", "2024-11-10", "downloads/pizza-1.4.0.owl"],
+    ["1.3.0", "2024-06-22", "downloads/pizza-1.3.0.owl"]
+  ]
+}
