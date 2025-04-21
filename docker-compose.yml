@@ -2,7 +2,7 @@ services:
   virtuoso:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.virtuoso
     ports:
       - "8890:8890"  # SPARQL and HTTP
       - "1111:1111"  # SQL port
@@ -14,6 +14,23 @@ services:
       - virtuoso_logs:/opt/virtuoso-opensource/database/logs
     restart: unless-stopped
 
+  ontology-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8080:8080" # API port
+    environment:
+      - ONTOLOGY_FILE=${ONTOLOGY_FILE}
+    volumes:
+      # Mount the data directory containing ontologies
+      - ./data:/data
+    command: python3 /app/api_server.py ${ONTOLOGY_FILE}
+    depends_on:
+      - virtuoso
+    restart: unless-stopped
+
 volumes:
   virtuoso_data:
   virtuoso_logs:
+
