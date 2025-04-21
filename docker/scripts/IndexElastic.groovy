@@ -194,6 +194,7 @@ def createIndex(indexName, settings) {
 		CreateIndexResponse createIndexResponse = esClient.indices().create(request, RequestOptions.DEFAULT);
 		println('Index created :' + indexName)
 	}  catch (Exception e) {
+		println "ERROR: Failed to create index ${indexName}: ${e.message}"
 		e.printStackTrace();
 	}
 }
@@ -411,8 +412,7 @@ try {
     }
     
     println "Successfully parsed JSON data with keys: ${data.keySet()}"
-
-
+    
     println "Checking for embeddings (skip_embedding=${skip_embbedding})..."
     if (skip_embbedding.equals("False")) {
         // Read embeddings
