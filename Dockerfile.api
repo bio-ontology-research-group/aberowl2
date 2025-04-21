@@ -1,5 +1,5 @@
 # Use an official Groovy image based on JDK 11
-FROM groovy:3.0.21-jdk11
+FROM groovy:4.0-jdk11
 
 WORKDIR /app
 

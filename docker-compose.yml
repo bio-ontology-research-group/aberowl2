@@ -24,8 +24,8 @@ services:
       - ONTOLOGY_FILE=${ONTOLOGY_FILE}
     volumes:
       # Mount the data directory containing ontologies
-      - ./data:/app/ontology
-    command: python3 /app/api_server.py /app/ontology/${ONTOLOGY_FILENAME:-pizza.owl} # Default to pizza.owl if ONTOLOGY_FILENAME is not set
+      - ./data:/data
+    command: python3 /app/api_server.py ${ONTOLOGY_FILE}
     depends_on:
       - virtuoso
     restart: unless-stopped
