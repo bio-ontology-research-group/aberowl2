@@ -16,6 +16,7 @@ HOST_ONTOLOGY_PATH=$1
 ONTOLOGY_FILENAME=$(basename "$HOST_ONTOLOGY_PATH")
 # Path expected by virtuoso load script and ontology-api *inside the container*
 CONTAINER_ONTOLOGY_PATH="/data/$ONTOLOGY_FILENAME"
+HOST_INDEXER_SCRIPT_PATH="docker/scripts/run_indexer.sh" # Define path to host script
 
 # Elasticsearch settings (can be overridden by environment variables)
 export ELASTICSEARCH_URL=${ELASTICSEARCH_URL:-"http://elasticsearch:9200"}
@@ -26,6 +27,12 @@ export SKIP_EMBEDDING=${SKIP_EMBEDDING:-"True"} # Set to "False" to attempt embe
 # Check if the ontology file exists on the host
 if [ ! -f "$HOST_ONTOLOGY_PATH" ]; then
     echo "Error: Ontology file $HOST_ONTOLOGY_PATH not found on the host!"
+    exit 1
+fi
+
+# Check if the indexer script exists on the host
+if [ ! -f "$HOST_INDEXER_SCRIPT_PATH" ]; then
+    echo "Error: Indexer script $HOST_INDEXER_SCRIPT_PATH not found on the host!"
     exit 1
 fi
 
@@ -59,6 +66,10 @@ export ONTOLOGY_FILE="$CONTAINER_ONTOLOGY_PATH"
 
 # Export other variables needed by docker-compose.yml for the indexer service
 # Note: ELASTICSEARCH_URL, ONTOLOGY_INDEX_NAME, CLASS_INDEX_NAME, SKIP_EMBEDDING were exported earlier
+
+# Ensure the indexer script is executable on the host (important if mounted as a volume)
+echo "Setting execute permissions on host script: $HOST_INDEXER_SCRIPT_PATH"
+chmod +x "$HOST_INDEXER_SCRIPT_PATH"
 
 # Run docker compose up
 # We use -d for detached mode. The indexer service will run, index, and then exit.
