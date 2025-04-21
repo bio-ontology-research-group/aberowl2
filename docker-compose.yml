@@ -58,7 +58,7 @@ services:
     container_name: indexer
     environment:
       # These are passed via reload_docker.sh or .env file
-      - ONTOLOGY_FILE_PATH=${ONTOLOGY_FILE:-/data/pizza.owl} # Use same ONTOLOGY_FILE as virtuoso
+      - ONTOLOGY_FILE_PATH=${ONTOLOGY_FILE} # Use same ONTOLOGY_FILE as other services
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL:-http://elasticsearch:9200}
       - ONTOLOGY_INDEX_NAME=${ONTOLOGY_INDEX_NAME:-ontology_index}
       - CLASS_INDEX_NAME=${CLASS_INDEX_NAME:-owl_class_index}
