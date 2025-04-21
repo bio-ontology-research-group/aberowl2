@@ -40,19 +40,24 @@ Log.setLog(new StdErrLog())
 
 def startServer(def ontologyFilePath, def port) {
 
+    println "Starting Jetty server process..."
     Server server = new Server(port)
     if (!server) {
-	System.err.println("Failed to create server, cannot open port.")
-	System.exit(-1)
+        System.err.println("Failed to create server, cannot open port " + port)
+        System.exit(-1)
     }
     
     def context = new ServletContextHandler(server, '/', ServletContextHandler.SESSIONS)
-    context.resourceBase = '.'
+    
+    // Set resource base relative to the script's CWD (which is set to aberowlapi/ by Popen)
+    context.resourceBase = '.' 
+    println "Setting Jetty resourceBase to: ${new File(context.resourceBase).absolutePath}" // Should be /app/aberowlapi
 
     def localErrorHandler = new ErrorHandler()
     localErrorHandler.setShowStacks(true)
     context.setErrorHandler(localErrorHandler)
-    context.resourceBase = '.'
+
+    // Paths are relative to resourceBase ('.', which is /app/aberowlapi)
     context.addServlet(GroovyServlet, '/health.groovy')
     context.addServlet(GroovyServlet, '/api/runQuery.groovy')
     context.addServlet(GroovyServlet, '/api/reloadOntology.groovy')
@@ -61,36 +66,86 @@ def startServer(def ontologyFilePath, def port) {
     context.addServlet(GroovyServlet, '/api/retrieveRSuccessors.groovy')
     context.addServlet(GroovyServlet, '/api/retrieveAllLabels.groovy')
     context.addServlet(GroovyServlet, '/api/sparql.groovy')
+
     context.setAttribute('port', port)
     context.setAttribute('version', '0.2')
-    server.start()
-    println "Server started on " + server.getURI()
-    def manager
 
+    println "Attempting to start Jetty server on port ${port}..."
+    server.start()
+    println "Server started successfully on " + server.getURI()
+    
+    def manager
     def tryAgain = false
 
-    String ontId = ontologyFilePath.split("/")[-1]
+    // Extract filename to use as ID
+    String ontId = ontologyFilePath.tokenize('/')[-1] 
+    println "Extracted ontology ID: ${ontId} from path: ${ontologyFilePath}"
 
-    // IRI ontIRI = IRI.create(new File(ontologyFilePath))
+    println "Attempting to load ontology via RequestManager for ID: ${ontId} using path: ${ontologyFilePath}"
+    try {
+        manager = RequestManager.create(ontId, ontologyFilePath)
+        if (manager == null) {
+            println("Initial RequestManager creation returned null for ${ontId}. Retrying...")
+            tryAgain = true
+        } else {
+             println("Initial RequestManager creation successful for ${ontId}.")
+        }
+    } catch (Exception e) {
+         println("Exception during initial RequestManager.create for ${ontId}: ${e.getMessage()}")
+         e.printStackTrace()
+         tryAgain = true // Attempt retry even on exception
+    }
 
-    manager = RequestManager.create(ontId, ontologyFilePath)
-    if (manager == null) {
-        tryAgain = true
+    if (tryAgain) {
+        println("Retrying RequestManager creation for ${ontId}...")
+        try {
+            manager = RequestManager.create(ontId, ontologyFilePath)
+            if (manager == null){
+                println("Retry RequestManager creation returned null for ${ontId}. Ontology might be unloadable.")
+            } else {
+                 println("Retry RequestManager creation successful for ${ontId}.")
+            }
+        } catch (Exception e) {
+             println("Exception during retry RequestManager.create for ${ontId}: ${e.getMessage()}")
+             e.printStackTrace()
+        }
     }
     
-    if (tryAgain) {
-	manager = RequestManager.create(ontId, ontologyFilePath)
-	if (manager == null){
-	    println("Can't start " + ontId)
-	}   
+    if (manager != null) {
+        context.setAttribute("manager", manager)
+        println("RequestManager set in context for ${ontId}.")
+    } else {
+        println("Failed to create or set RequestManager in context for ${ontId}. API calls relying on it will fail.")
+        // Consider stopping the server if the manager is essential? Or let it run for health checks?
     }
-    context.setAttribute("manager", manager)
+
+    // Keep the script running while the server is active. 
+    // server.join() // Don't join here, let the Python parent manage the process lifetime
+    println "Ontology loading sequence complete. Jetty server is running."
 }
 
-def data = System.in.newReader().getText()
-def slurper = new JsonSlurper()
+
+// --- Script Execution Start --- 
+if (args.length < 1) {
+    System.err.println("FATAL ERROR: Ontology file path argument missing.")
+    System.exit(1) // Exit if no ontology path is provided
+}
+def ontologyArg = args[0]
+println "OntologyServer.groovy received argument: ${ontologyArg}"
+
+// Removed blocking System.in read
+// def data = System.in.newReader().getText() 
+// def slurper = new JsonSlurper()
 // def ontology = slurper.parseText(data)
-// println data
-// def ontology = "data/pizza.owl"
-def ontology = args[0]
-startServer(ontology, 8080)
+
+println "Proceeding to start server with ontology: ${ontologyArg}"
+try {
+    startServer(ontologyArg, 8080) // Use port 8080
+} catch (Exception e) {
+    println "FATAL ERROR during server startup: ${e.getMessage()}"
+    e.printStackTrace()
+    System.exit(1) // Exit if server startup fails critically
+}
+
+println "OntologyServer.groovy script main execution finished. Server should be running in background threads."
+// The script itself finishes, but the Jetty server thread keeps the process alive.

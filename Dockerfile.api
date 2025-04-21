@@ -10,10 +10,8 @@ RUN apt-get update && \
 
 # Copy the application files
 COPY aberowlapi/ /app/aberowlapi/
-COPY data/ /app/data/
+# COPY data/ /app/data/ # Removed: Ontology data is mounted via volume in docker-compose.yml
 COPY api_server.py /app/api_server.py
-
-# No need for mkdir -p /app/ontology as the volume mount in compose uses /data
 
 # Expose the API port
 EXPOSE 8080
