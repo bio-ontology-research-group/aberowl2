@@ -8,6 +8,7 @@
     @Grab(group='net.sourceforge.owlapi', module='owlapi-parsers', version='4.2.3'),
     @Grab(group='org.slf4j', module='slf4j-nop', version='1.7.25'),
     @Grab(group='ch.qos.reload4j', module='reload4j', version='1.2.18.5'),
+    @Grab('org.apache.commons:commons-lang3:3.12.0'), // Added for StringEscapeUtils
     @GrabExclude(group='log4j', module='log4j'),
 ])
 
@@ -55,6 +56,8 @@ import java.nio.file.*
 import java.util.*
 import org.apache.logging.log4j.*
 import java.net.URL
+import org.apache.commons.lang3.StringEscapeUtils // Added import
+import java.util.Base64 // Added import
 
 urls = args[0].split(",")
 username = args[1]
@@ -69,7 +72,7 @@ hosts = new HttpHost[urls.length];
 idx=0
 
 for (String url:urls) {
-	esUrl= new URL(url) 
+	esUrl= new URL(url)
 	hosts[idx] = new HttpHost(esUrl.getHost(), esUrl.getPort(), esUrl.getProtocol());
 	idx++;
 }
@@ -92,7 +95,9 @@ if (!username.isEmpty() &&  !password.isEmpty()) {
         }
     });
 } else {
-	restClient = RestClient.builder(new HttpHost(esUrl.getHost(), esUrl.getPort(), esUrl.getProtocol()))
+	// Original code incorrectly used 'esUrl' which would only use the last URL from the loop
+	// Corrected to use 'hosts' array which contains all specified hosts
+	restClient = RestClient.builder(hosts)
 }
 
 esClient = new RestHighLevelClient(restClient)
@@ -166,7 +171,7 @@ def initIndex() {
     }
 }
 
-def createIndex(indexName, settings) { 
+def createIndex(indexName, settings) {
 	try {
 		CreateIndexRequest request = new CreateIndexRequest(indexName);
 		request.source(new JsonBuilder(settings).toString(), XContentType.JSON)
@@ -183,7 +188,7 @@ def deleteOntologyData(ontology) {
 		request.setQuery(new MatchQueryBuilder("ontology", ontology));
 		request.setTimeout(new TimeValue(10 * 60000));
 		response = esClient.deleteByQuery(request, RequestOptions.DEFAULT);
-		println("total=" + response.total + "|deletedDocs=" + response.deleted + "|searchRetries=" 
+		println("total=" + response.total + "|deletedDocs=" + response.deleted + "|searchRetries="
 			+ response.searchRetries + "|bulkRetries=" + response.bulkRetries)
 	}  catch (Exception e) {
 		e.printStackTrace();
@@ -204,7 +209,7 @@ def index(def indexName, def obj) {
 void indexOntology(String fileName, def data) {
     // Initialize index
     initIndex()
-    
+
     OWLOntologyManager manager = OWLManager.createOWLOntologyManager()
     OWLOntology ont = manager.loadOntologyFromOntologyDocument(new File(fileName))
     OWLDataFactory fac = manager.getOWLDataFactory()
@@ -214,11 +219,11 @@ void indexOntology(String fileName, def data) {
     OWLReasoner reasoner = f1.createReasoner(ont, config)
     def oReasoner = reasoner
     def df = fac
-    
+
     def identifiers = [
 	df.getOWLAnnotationProperty(new IRI('http://purl.org/dc/elements/1.1/identifier')),
     ]
-    
+
     def labels = [
 	df.getRDFSLabel(),
 	df.getOWLAnnotationProperty(new IRI('http://www.w3.org/2004/02/skos/core#prefLabel')),
@@ -244,17 +249,18 @@ void indexOntology(String fileName, def data) {
     def acronym = data.acronym
     def name = data.name
     def description = data.description
-    
+
     def omap = [:]
     omap.ontology = acronym
     omap.name = name
     if (description) {
-	omap.description = StringEscapeUtils.escapeJava(description)
+	// Use StringEscapeUtils here
+	omap.description = StringEscapeUtils.escapeJson(description) // Use escapeJson for JSON context
     }
-    
+
     // Delete ontology data
     deleteOntologyData(acronym)
-    
+
     index(ontologyIndexName, omap)
 
     // Re-add all classes for this ont
@@ -279,7 +285,7 @@ void indexOntology(String fileName, def data) {
 	    def aProp = annot.getProperty()
 	    if (annot.isDeprecatedIRIAnnotation()) {
 		deprecated = true
-	    } else 
+	    } else
 		if (aProp in identifiers) {
 			if (annot.getValue() instanceof OWLLiteral) {
 				def aVal = annot.getValue().getLiteral()
@@ -294,48 +300,52 @@ void indexOntology(String fileName, def data) {
 	    } else if (aProp in definitions) {
 			if (annot.getValue() instanceof OWLLiteral) {
 				def aVal = annot.getValue().getLiteral()
-				info["definition"] << StringEscapeUtils.escapeJava(aVal)
+				// Use StringEscapeUtils here
+				info["definition"] << StringEscapeUtils.escapeJson(aVal) // Use escapeJson for JSON context
 			}
 	    } else if (aProp in synonyms) {
 			if (annot.getValue() instanceof OWLLiteral) {
 				def aVal = annot.getValue().getLiteral()
 				info["synonyms"] << aVal
 			}
-	    } 
+	    }
 	}
-	// if (!deprecated) {
+	// Original commented out block start: if (!deprecated) {
 
-	info['deprecated'] = deprecated
+	info['deprecated'] = deprecated // Store deprecated status
 	if (!hasLabel) {
-	info["label"] << c.getIRI().getFragment().toString()
+	    info["label"] << c.getIRI().getFragment().toString()
 	}
 
 	// Add an embedding to the document
 	if (data["embeds"] != null && data["embeds"].containsKey(cIRI)) {
 		info["embedding_vector"] = data["embeds"][cIRI];
-	} 
-	
+	}
+
 	// generate OBO-style ID for the index
 	def oboId = ""
 	if (cIRI.lastIndexOf('?') > -1) {
-	oboId = cIRI.substring(cIRI.lastIndexOf('?') + 1)
+	    oboId = cIRI.substring(cIRI.lastIndexOf('?') + 1)
 	} else if (cIRI.lastIndexOf('#') > -1) {
-	oboId = cIRI.substring(cIRI.lastIndexOf('#') + 1)
+	    oboId = cIRI.substring(cIRI.lastIndexOf('#') + 1)
 	} else if (cIRI.lastIndexOf('/') > -1) {
-	oboId = cIRI.substring(cIRI.lastIndexOf('/') + 1)
+	    oboId = cIRI.substring(cIRI.lastIndexOf('/') + 1)
 	}
 	if (oboId.length() > 0) {
-	oboId = oboId.replaceAll("_", ":")
-	info["oboid"] = oboId
+	    oboId = oboId.replaceAll("_", ":")
+	    info["oboid"] = oboId
 	}
-	
-	
-	index(owlClassIndexName, info)
-	// }
-    }
+
+
+	// Index the class info (Consider uncommenting the check if needed)
+	// if (!deprecated) {
+	    index(owlClassIndexName, info)
+	// } // Original commented out block end
+
+    } // End of classes loop
 
 	println('Finished indexing :' + acronym)
-}
+} // End of indexOntology method
 
 String convertArrayToBase64(double[] array) {
     final int capacity = 8 * array.length;
@@ -356,18 +366,31 @@ data = slurper.parseText(data)
 if (skip_embbedding.equals("False")) {
 	// Read embeddings
 	def embeds = [:]
+    def embeddingFile = new File(fileName + ".embs")
+    if (embeddingFile.exists()) {
+        embeddingFile.splitEachLine(" ") { it ->
+            if (it.size() > 1) { // Ensure there's at least a key and one value
+                double[] vector = new double[it.size() - 1]
+                try {
+                    for (int i = 1; i < it.size(); ++i) {
+                        vector[i - 1] = Double.parseDouble(it[i]);
+                    }
+                    embeds[it[0]] = convertArrayToBase64(vector);
+                } catch (NumberFormatException e) {
+                    println "WARN: Could not parse embedding vector line: ${it.join(' ')} - ${e.message}"
+                }
+            } else {
+                println "WARN: Skipping malformed embedding line: ${it.join(' ')}"
+            }
+        }
+	    data["embeds"] = embeds
+    } else {
+        println "WARN: Embedding file not found: ${embeddingFile.path}"
+    }
 
-	new File(fileName + ".embs").splitEachLine(" ") { it ->
-		double[] vector = new double[it.size() - 1]
-		for (int i = 1; i < it.size(); ++i) {
-		vector[i - 1] = Double.parseDouble(it[i]);
-		}
-		embeds[it[0]] = convertArrayToBase64(vector);
-	}
 
-
-	data["embeds"] = embeds
 }
 
-indexOntology(fileName, data)  
+indexOntology(fileName, data)
 esClient.close()
+println "Elasticsearch client closed."
