@@ -7,9 +7,10 @@ services:
       - "8890:8890"  # SPARQL and HTTP
       - "1111:1111"  # SQL port
     environment:
-      - ONTOLOGY_FILE=${ONTOLOGY_FILE}
+      # ONTOLOGY_FILE is the path *inside* the container where load_ontology.sh expects it
+      - ONTOLOGY_FILE=${ONTOLOGY_FILE:-/data/pizza.owl} # Default to pizza.owl if not set
     volumes:
-      - ./data:/data
+      - ./data:/data # Mount local data dir into container's /data
       - virtuoso_data:/opt/virtuoso-opensource/database/data
       - virtuoso_logs:/opt/virtuoso-opensource/database/logs
     restart: unless-stopped
@@ -21,16 +22,64 @@ services:
     ports:
       - "8080:8080" # API port
     environment:
-      - ONTOLOGY_FILE=${ONTOLOGY_FILE}
+      # ONTOLOGY_FILE is the path *inside* the container
+      - ONTOLOGY_FILE=${ONTOLOGY_FILE:-/data/pizza.owl} # Default to pizza.owl if not set
     volumes:
       # Mount the data directory containing ontologies
       - ./data:/data
+    # Command uses the ONTOLOGY_FILE env var which should be the path inside the container
     command: python3 /app/api_server.py ${ONTOLOGY_FILE}
     depends_on:
       - virtuoso
     restart: unless-stopped
 
+  elasticsearch:
+    image: elasticsearch:7.17.10 # Use a 7.x version compatible with the groovy script client
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m # Adjust memory as needed
+    ports:
+      - "9200:9200" # HTTP port
+      - "9300:9300" # Transport port
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    restart: unless-stopped
+    healthcheck:
+        test: ["CMD-SHELL", "curl -s --fail http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s || exit 1"]
+        interval: 10s
+        timeout: 10s
+        retries: 5
+
+  indexer:
+    build:
+      context: .
+      dockerfile: Dockerfile.indexer
+    container_name: indexer
+    environment:
+      # These are passed via reload_docker.sh or .env file
+      - ONTOLOGY_FILE_PATH=${ONTOLOGY_FILE:-/data/pizza.owl} # Path inside the container
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL:-http://elasticsearch:9200}
+      - ONTOLOGY_INDEX_NAME=${ONTOLOGY_INDEX_NAME:-ontology_index}
+      - CLASS_INDEX_NAME=${CLASS_INDEX_NAME:-owl_class_index}
+      - SKIP_EMBEDDING=${SKIP_EMBEDDING:-True}
+      - ES_USERNAME=${ES_USERNAME:-} # Add username if needed
+      - ES_PASSWORD=${ES_PASSWORD:-} # Add password if needed
+    volumes:
+      - ./data:/data # Mount ontology data
+      - ./docker/scripts:/scripts # Mount scripts including IndexElastic.groovy and run_indexer.sh
+    depends_on:
+      elasticsearch:
+        condition: service_healthy # Wait for elasticsearch to be healthy
+    command: /scripts/run_indexer.sh # This script will execute the groovy script
+    # This service should run once to index, then stop.
+    # Use 'profiles' if you only want to run it explicitly: docker compose --profile indexer up
+    # Or let it run on 'up', and it will exit after indexing. 'restart: no' ensures it doesn't restart.
+    restart: 'no'
+
+
 volumes:
   virtuoso_data:
   virtuoso_logs:
+  elasticsearch_data:
 

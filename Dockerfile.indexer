@@ -1,0 +1,16 @@
+# Use a Groovy base image with a compatible JDK (e.g., JDK 11 for ES 7.x libraries)
+FROM groovy:4.0-jdk11
+
+# Install curl for health checking/waiting and bash
+RUN apt-get update && apt-get install -y curl bash procps && rm -rf /var/lib/apt/lists/*
+
+# Set working directory (optional)
+WORKDIR /app
+
+# The entrypoint script will be mounted via volume
+# Set permissions for the entrypoint script
+COPY docker/scripts/run_indexer.sh /scripts/run_indexer.sh
+RUN chmod +x /scripts/run_indexer.sh
+
+# Command is specified in docker-compose.yml to run the entrypoint script
+# ENTRYPOINT ["/scripts/run_indexer.sh"]
