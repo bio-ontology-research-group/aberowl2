@@ -6,7 +6,8 @@
   - Groovy
   - Anaconda/Miniconda
   - Docker and Docker Compose
- - Virtuoso (for SPARQL queries)
+ 
+
 ## Installation
 
 ```
@@ -15,35 +16,16 @@ cd aberowl2
 conda env create -f environment.yml
 ```
 
-## Running Virtuoso SPARQL Server
-
-The project includes a Dockerized Virtuoso SPARQL server that automatically loads an OWL ontology file at startup.
-
-### Configuration
-
-- Place your ontology file (e.g., `pizza.owl`) data at `data/`
-- Start the docker
-```bash
-ONTOLOGY_FILE=/data/pizza.owl docker-compose up -d
-```
-
-The system will automatically:
-1. Look for the file in the `./data` directory
-2. Copy it to the Virtuoso server
-3. Rename it to `ontology.owl` inside the container for consistency
-
-**Note:** The ONTOLOGY_FILE environment variable must be set, or the container will exit with an error.
-
 ### Starting and restarting the server
 To use your own ontology file (must be placed in the data directory):
 
+Copy your ontology to the data directory first
 ```bash
-# Copy your ontology to the data directory first
 cp /path/to/your/ontology.owl ./data/
 ```
 
 ```
- ./reload_docker data/your_ontology.owl
+./reload_docker data/your_ontology.owl
 ```
 
 
