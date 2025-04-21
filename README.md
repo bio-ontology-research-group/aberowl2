@@ -34,60 +34,32 @@ The system will automatically:
 
 **Note:** The ONTOLOGY_FILE environment variable must be set, or the container will exit with an error.
 
-### Restarting the server
- ```
- docker compose down
- ```
-### Starting the Server
-
+### Starting and restarting the server
 To use your own ontology file (must be placed in the data directory):
 
 ```bash
 # Copy your ontology to the data directory first
 cp /path/to/your/ontology.owl ./data/
-
-# Then start the server with your ontology
-ONTOLOGY_FILE=/data/yourontology.owl docker-compose up -d
 ```
 
-To see the logs and verify the ontology was loaded correctly:
-
-```bash
-docker-compose logs -f virtuoso
 ```
+ ./reload_docker data/your_ontology.owl
+```
+
 
 This will start the Virtuoso server with the following endpoints:
 - SPARQL endpoint: http://localhost:8890/sparql
 - ISQL admin interface: localhost:1111 (username: dba, password: dba)
+- API endpoint: http://localhost:8080/api/
 
-### Example SPARQL Queries
-```
-python query_classes.py
-```
+### Tests
+- Test SPARQL Queries
+  ```
+  python query_classes.py
+  ```
+- Test API:
+  ```
+  http://10.72.186.4:8000/health.groovy
+  ```
+  You should see "OK".
 
-## Running unittests
-
-The following unittests check that the url `localhost:8000/health.groovy` runs correctly. It uses `pizza.owl` located in `data/` as input.
-
-```
-pytest tests/
-```
-
-To run the Virtuoso tests specifically:
-
-```
-pytest tests/aberowlapi/test_virtuoso.py
-```
-
- 
-
-## Development (temporary)
-
-The webserver is available at `10.72.186.4:8000`. For example, in your browser go to:
-
-```
-http://10.72.186.4:8000/health.groovy
-```
-You should see "OK".
-
-Currently, the server is providing API for pizza.owl.
