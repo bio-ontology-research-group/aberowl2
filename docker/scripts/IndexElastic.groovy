@@ -380,7 +380,11 @@ void indexOntology(String fileName, def data) {
     } // End of classes loop
 
 	println('Finished indexing :' + acronym)
-    } // End of try block inside indexOntology method
+    } catch (Exception e) {
+        println "ERROR: Failed during ontology processing: ${e.message}"
+        e.printStackTrace()
+        System.exit(1)
+    }
 } // End of indexOntology method
 
 String convertArrayToBase64(double[] array) {
