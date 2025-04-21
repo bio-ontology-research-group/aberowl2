@@ -6,7 +6,6 @@ USER root
 
 WORKDIR /app
 
-# Install Python, pip, and CA certificates (Groovy is included in the base image)
 # Note: Base image might be Debian-based, apt-get should work.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -21,7 +20,7 @@ RUN apt-get update && \
 
 # Copy the application files FIRST, so we can use OntologyServer.groovy for grabs
 COPY aberowlapi/ /app/aberowlapi/
-COPY api_server.py /app/api_server.py
+COPY docker/scripts/api_server.py /app/api_server.py
 
 # Pre-resolve Grapes dependencies during build using the base image's Groovy
 # This will download the JARs into the image layer's Grapes cache
@@ -60,6 +59,4 @@ RUN mkdir /tmp/grapes_resolve && cd /tmp/grapes_resolve && \
 
 # Expose the API port
 EXPOSE 8080
-
-# No CMD needed here, it's provided by docker-compose.yml's 'command'
 
