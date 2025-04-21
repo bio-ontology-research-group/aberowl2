@@ -2,18 +2,60 @@ FROM openjdk:11-jdk
 
 WORKDIR /app
 
-# Install Python, pip, and Groovy
+# Install Python, pip, Groovy, and CA certificates
 RUN apt-get update && \
-    apt-get install -y python3 python3-pip groovy && \
+    apt-get install -y --no-install-recommends \
+        python3 \
+        python3-pip \
+        groovy \
+        ca-certificates && \
     pip3 install gevent requests rdflib && \
-    rm -rf /var/lib/apt/lists/*
+    # Clean apt cache
+    rm -rf /var/lib/apt/lists/* && \
+    # Clean default root grapes cache (just in case)
+    rm -rf /root/.groovy/grapes
 
-# Copy the application files
+# Copy the application files FIRST, so we can use OntologyServer.groovy for grabs
 COPY aberowlapi/ /app/aberowlapi/
-# COPY data/ /app/data/ # Removed: Ontology data is mounted via volume in docker-compose.yml
 COPY api_server.py /app/api_server.py
+
+# Pre-resolve Grapes dependencies during build
+# This will download the JARs into the image layer's Grapes cache
+# Use temporary directory to avoid polluting /app
+RUN mkdir /tmp/grapes_resolve && cd /tmp/grapes_resolve && \
+    echo "Attempting to grab dependencies..." && \
+    groovy -e "@Grapes([ \
+        @Grab(group='org.eclipse.rdf4j', module='rdf4j-runtime', version='2.5.4'), \
+        @Grab(group='javax.servlet', module='javax.servlet-api', version='3.1.0'), \
+        @Grab(group='javax.servlet.jsp', module='javax.servlet.jsp-api', version='2.3.1'), \
+        @Grab(group='org.eclipse.jetty', module='jetty-server', version='9.4.7.v20170914'), \
+        @Grab(group='org.eclipse.jetty', module='jetty-servlet', version='9.4.7.v20170914'), \
+        @Grab(group='com.google.code.gson', module='gson', version='2.3.1'), \
+        @Grab(group='com.googlecode.json-simple', module='json-simple', version='1.1.1'), \
+        @Grab(group='org.slf4j', module='slf4j-nop', version='1.7.25'), \
+        @Grab(group='org.semanticweb.elk', module='elk-owlapi', version='0.4.3'), \
+        @Grab(group='net.sourceforge.owlapi', module='owlapi-api', version='4.3.2'), \
+        @Grab(group='net.sourceforge.owlapi', module='owlapi-apibinding', version='4.3.2'), \
+        @Grab(group='net.sourceforge.owlapi', module='owlapi-impl', version='4.3.2'), \
+        @Grab(group='net.sourceforge.owlapi', module='owlapi-parsers', version='4.3.2'), \
+        @Grab(group='org.codehaus.gpars', module='gpars', version='1.1.0'), \
+        @Grab(group='com.google.guava', module='guava', version='19.0'), \
+        @Grab(group='ch.qos.reload4j', module='reload4j', version='1.2.18.5'), \
+        @GrabExclude(group='xml-apis', module='xml-apis'), \
+        @GrabExclude(group='log4j', module='log4j'), \
+        @Grab(group='aopalliance', module='aopalliance', version='1.0'), \
+        @Grab(group='javax.el', module='javax.el-api', version='3.0.0'), \
+        @GrabConfig(systemClassLoader=true) \
+    ]) \
+    class Empty {} ; println 'Dependency grab successful.'" && \
+    echo "Cleaning up temporary directory..." && \
+    cd / && rm -rf /tmp/grapes_resolve && \
+    # Verify grapes cache exists (optional)
+    echo "Checking for Grapes cache..." && ls -ld /root/.groovy/grapes || echo "Grapes cache not found at /root/.groovy/grapes (might be elsewhere or empty)"
+
 
 # Expose the API port
 EXPOSE 8080
 
 # No CMD needed here, it's provided by docker-compose.yml's 'command'
+
