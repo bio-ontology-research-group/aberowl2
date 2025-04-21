@@ -13,11 +13,9 @@ COPY aberowlapi/ /app/aberowlapi/
 COPY data/ /app/data/
 COPY api_server.py /app/api_server.py
 
-# Create directory for mounted ontology
-RUN mkdir -p /app/ontology
+# No need for mkdir -p /app/ontology as the volume mount in compose uses /data
 
 # Expose the API port
 EXPOSE 8080
 
-# Command to run the API directly
-CMD ["python3", "/app/api_server.py", "/app/ontology/ontology.owl"]
+# No CMD needed here, it's provided by docker-compose.yml's 'command'
