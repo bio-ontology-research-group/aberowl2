@@ -2,10 +2,11 @@ FROM openjdk:11-jdk
 
 WORKDIR /app
 
-# Install Python and dependencies
+# Install Python, pip, and Groovy
 RUN apt-get update && \
-    apt-get install -y python3 python3-pip && \
-    pip3 install gevent requests rdflib
+    apt-get install -y python3 python3-pip groovy && \
+    pip3 install gevent requests rdflib && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy the application files
 COPY aberowlapi/ /app/aberowlapi/
