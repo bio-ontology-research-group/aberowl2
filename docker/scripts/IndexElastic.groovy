@@ -458,7 +458,7 @@ try {
     indexOntology(fileName, data)
     
     println "Closing Elasticsearch client..."
-    esClient.close()
+    // esClient.close()
     println "Elasticsearch client closed. Indexing completed successfully."
 } catch (Exception e) {
     println "ERROR: Failed during indexing process: ${e.message}"
