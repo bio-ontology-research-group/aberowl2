@@ -1,0 +1,8 @@
+# Dockerfile.nginx
+FROM nginx:alpine
+
+# Copy custom nginx config
+COPY docker/nginx.conf /etc/nginx/nginx.conf
+
+# Optional: Copy static frontend if you serve it via Nginx
+# COPY ./frontend /usr/share/nginx/html

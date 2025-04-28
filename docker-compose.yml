@@ -78,6 +78,17 @@ services:
     restart: 'no'
 
 
+  nginx:	     
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+    ports:
+      - "88:80"
+    depends_on:
+      - virtuoso
+      - ontology-api
+      - elasticsearch
+
 volumes:
   virtuoso_data:
   virtuoso_logs:

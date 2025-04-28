@@ -9,7 +9,9 @@ import time
 import requests
 from SPARQLWrapper import SPARQLWrapper, JSON
 
-def check_endpoint_availability(endpoint_url="http://localhost:8890/sparql", max_retries=3):
+old_endpoint_url = "http://localhost:8890/sparql"
+endpoint_url = "http://localhost:88/virtuoso/"
+def check_endpoint_availability(endpoint_url=endpoint_url, max_retries=3):
     """Check if the SPARQL endpoint is available."""
     print(f"Checking if SPARQL endpoint is available...")
     
