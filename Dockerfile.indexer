@@ -1,0 +1,25 @@
+# Use a Groovy base image with a compatible JDK (e.g., JDK 11 for ES 7.x libraries)
+FROM groovy:4.0-jdk11
+
+# Switch to root user to install packages
+USER root
+
+# Install curl for health checking/waiting and bash
+RUN apt-get update && apt-get install -y --no-install-recommends curl bash procps && rm -rf /var/lib/apt/lists/*
+
+# Set working directory (optional)
+WORKDIR /app
+
+# The entrypoint script will be mounted via volume
+# Set permissions for the entrypoint script
+COPY docker/scripts/run_indexer.sh /scripts/run_indexer.sh
+RUN chmod +x /scripts/run_indexer.sh
+
+# Command is specified in docker-compose.yml to run the entrypoint script
+# ENTRYPOINT ["/scripts/run_indexer.sh"]
+
+# Note: The container will run as root by default after this.
+# If desired, you could switch to a non-root user using USER groovy (or another user)
+# at the end of the Dockerfile, but ensure the /scripts/run_indexer.sh
+# has permissions to execute and access necessary directories (/data, /scripts).
+# For this indexer service that runs once and exits, running as root is generally acceptable.
