@@ -610,7 +610,6 @@ document.addEventListener('alpine:init', () => {
     handleSearchChange(event) {
       const value = event.target.value;
       this.search = value;
-      
       if (value.length >= 3) {
         this.searchResultsShow = true;
         this.executeSearch(value);
@@ -620,30 +619,40 @@ document.addEventListener('alpine:init', () => {
     },
     
     executeSearch(search) {
-      this.isLoading = true;
-      
-      // Make a real API call to search the ontology
-      fetch(`/api/class/_startwith?query=${encodeURIComponent(search)}&ontology=PIZZA`)
-        .then(response => {
-          if (!response.ok) {
-            throw new Error('Network response was not ok');
-          }
-          return response.json();
+      // Direct Elasticsearch query for label matches
+      fetch('/elastic/owl_class_index/_search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query: {
+            bool: {
+              must: [
+                {match_bool_prefix: {label: search.toLowerCase()}},
+              ]
+            }
+          },
+          _source: {excludes: ['embedding_vector',]},
+          size: 10
         })
-        .then(data => {
-          if (data.status === 'ok') {
-            this.searchResults = data.result || [];
-          } else {
-            this.searchResults = [];
-          }
-          this.isLoading = false;
-        })
-        .catch(error => {
-          console.error('Error executing search:', error);
-          this.isLoading = false;
-          // Fallback to empty results
-          this.searchResults = [];
-        });
+      })
+      .then(response => {
+        if (!response.ok) throw new Error('Network response was not ok');
+        return response.json();
+      })
+      .then(data => {
+        console.log('Elasticsearch response:', data);
+        this.searchResults = data.hits?.hits?.map(hit => ({
+          owlClass: hit._source.owlClass,
+          label: hit._source.label,
+          score: hit._score
+        })) || [];
+      })
+      .catch(error => {
+        console.error('Elasticsearch error:', error);
+        this.searchResults = [];
+      });
     },
 
     handleSearchItemClick(search) {
