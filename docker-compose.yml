@@ -78,7 +78,7 @@ services:
     restart: 'no'
 
 
-  nginx:	     
+  nginx:     
     build:
       context: .
       dockerfile: Dockerfile.nginx

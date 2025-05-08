@@ -14,9 +14,9 @@ RUN apt-get update && \
         ca-certificates && \
     pip3 install gevent requests rdflib && \
     # Clean apt cache
-    rm -rf /var/lib/apt/lists/* && \
+    rm -rf /var/lib/apt/lists/*
     # Clean default root grapes cache (just in case) - should now have permission
-    rm -rf /root/.groovy/grapes
+    # rm -rf /root/.groovy/grapes
 
 # Copy the application files FIRST, so we can use OntologyServer.groovy for grabs
 COPY aberowlapi/ /app/aberowlapi/
