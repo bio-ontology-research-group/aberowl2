@@ -12,13 +12,17 @@ def ontology = params.ontology;
 def property = params.property;
 def manager = application.manager;
 
-
 response.contentType = 'application/json';
-if (property == null) {
-    def objectProperties = manager.getObjectProperties()
-    print(new JsonBuilder(objectProperties))
+
+if(ontology && manager) {
+    if (property == null) {
+        def objectProperties = manager.getObjectProperties()
+        print(new JsonBuilder(objectProperties))
+    } else {
+        property = URLDecoder.decode(property, "UTF-8")
+        def objectProperties = managers[ontology].getObjectProperties(property)
+        print(new JsonBuilder(objectProperties))
+    }
 } else {
-    property = URLDecoder.decode(property, "UTF-8")
-    def objectProperties = managers[ontology].getObjectProperties(property)
-    print(new JsonBuilder(objectProperties))
+    print('{status: "error", message: "Please provide an ontology!"}')
 }
