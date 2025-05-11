@@ -45,7 +45,7 @@ ES_DATA_VOLUME="${PROJECT_NAME}_elasticsearch_data"
 # --- Stop and Clean Up ---
 echo "Stopping and removing existing containers and networks (including anonymous volumes)..."
 # -v removes anonymous volumes attached to containers
-docker-compose down -v --remove-orphans
+docker compose down -v --remove-orphans
 
 echo "Attempting to remove existing named volumes ($VIRTUOSO_DATA_VOLUME, $VIRTUOSO_LOGS_VOLUME, $ES_DATA_VOLUME)..."
 docker volume rm "$VIRTUOSO_DATA_VOLUME" 2>/dev/null || true # Ignore error if not found
@@ -64,7 +64,7 @@ echo "Skip Embedding: $SKIP_EMBEDDING"
 # Set the environment variable for the container path used by multiple services
 export ONTOLOGY_FILE="$CONTAINER_ONTOLOGY_PATH"
 
-# Export other variables needed by docker-compose.yml for the indexer service
+# Export other variables needed by docker compose.yml for the indexer service
 # Note: ELASTICSEARCH_URL, ONTOLOGY_INDEX_NAME, CLASS_INDEX_NAME, SKIP_EMBEDDING were exported earlier
 
 # Ensure the indexer script is executable on the host (important if mounted as a volume)
@@ -73,7 +73,7 @@ chmod +x "$HOST_INDEXER_SCRIPT_PATH"
 
 # Run docker compose up
 # We use -d for detached mode. The indexer service will run, index, and then exit.
-docker-compose up --build -d
+docker compose up --build -d
 
 # --- Output Information ---
 echo "Services are starting/restarting."
