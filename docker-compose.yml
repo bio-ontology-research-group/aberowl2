@@ -27,8 +27,9 @@ services:
     volumes:
       # Mount the data directory containing ontologies
       - ./data:/data
+      - ./aberowlapi:/api/aberowlapi
     # Command uses the ONTOLOGY_FILE env var which should be the path inside the container
-    command: python3 /app/api_server.py ${ONTOLOGY_FILE}
+    command: python3 /api/api_server.py ${ONTOLOGY_FILE}
     depends_on:
       - virtuoso
     restart: unless-stopped
@@ -78,16 +79,16 @@ services:
     restart: 'no'
 
 
-  nginx:     
-    build:
-      context: .
-      dockerfile: Dockerfile.nginx
-    ports:
-      - "88:80"
-    depends_on:
-      - virtuoso
-      - ontology-api
-      - elasticsearch
+  # nginx:     
+    # build:
+      # context: .
+      # dockerfile: Dockerfile.nginx
+    # ports:
+      # - "88:80"
+    # depends_on:
+      # - virtuoso
+      # - ontology-api
+      # - elasticsearch
 
 volumes:
   virtuoso_data:

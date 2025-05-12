@@ -4,7 +4,7 @@ FROM groovy:4.0-jdk11
 # Ensure subsequent commands and the final container run as root
 USER root
 
-WORKDIR /app
+WORKDIR /api
 
 # Note: Base image might be Debian-based, apt-get should work.
 RUN apt-get update && \
@@ -19,12 +19,12 @@ RUN apt-get update && \
     # rm -rf /root/.groovy/grapes
 
 # Copy the application files FIRST, so we can use OntologyServer.groovy for grabs
-COPY aberowlapi/ /app/aberowlapi/
-COPY docker/scripts/api_server.py /app/api_server.py
+# COPY aberowlapi/ /app/aberowlapi/
+COPY docker/scripts/api_server.py /api/api_server.py
 
 # Pre-resolve Grapes dependencies during build using the base image's Groovy
 # This will download the JARs into the image layer's Grapes cache
-# Use temporary directory to avoid polluting /app
+# Use temporary directory to avoid polluting /api
 RUN mkdir /tmp/grapes_resolve && cd /tmp/grapes_resolve && \
     echo "Attempting to grab dependencies using base image Groovy (as root)..." && \
     groovy -e "@Grapes([ \
