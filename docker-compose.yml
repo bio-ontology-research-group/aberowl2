@@ -27,9 +27,9 @@ services:
     volumes:
       # Mount the data directory containing ontologies
       - ./data:/data
-      - ./aberowlapi:/api/aberowlapi
+      - ./aberowlapi:/app/aberowlapi
     # Command uses the ONTOLOGY_FILE env var which should be the path inside the container
-    command: python3 /api/api_server.py ${ONTOLOGY_FILE}
+    command: python3 /app/api_server.py ${ONTOLOGY_FILE}
     depends_on:
       - virtuoso
     restart: unless-stopped

@@ -8,13 +8,14 @@ if(!application) {
 }
 
 def params = Util.extractParams(request);
+print(params)
 def ontology = params.ontology;
 def property = params.property;
 def manager = application.manager;
 
 response.contentType = 'application/json';
 
-if(ontology && manager) {
+if(manager) {
     if (property == null) {
         def objectProperties = manager.getObjectProperties()
         print(new JsonBuilder(objectProperties))
