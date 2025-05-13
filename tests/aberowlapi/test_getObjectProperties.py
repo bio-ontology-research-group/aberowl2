@@ -11,11 +11,11 @@ import time
 import os
 # gevent.config.loop = "default"
 
-class TestHealth(TestCase):
+class TestGetObjectProperties(TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.BASE_URL = "http://localhost:8080"
+        cls.BASE_URL = "http://localhost:88/api"
         cls.manager = OntologyServerManager(os.path.abspath("data/pizza.owl"))
         cls.server_greenlet = gevent.spawn(cls.manager.run)
         time.sleep(10)
@@ -30,6 +30,7 @@ class TestHealth(TestCase):
     def test_getObjectProperties(cls):
         response = requests.get(f"{cls.BASE_URL}/api/getObjectProperties.groovy")
         assert response.status_code == 200
-        assert "CountryOfOrigin" in str(response.content)
+        cls.assertIn("CountryOfOrigin", str(response.content))
 
 
+    

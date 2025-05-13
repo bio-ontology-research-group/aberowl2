@@ -16,7 +16,8 @@ class TestHealth(TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.BASE_URL = "http://localhost:8080"
+        # cls.BASE_URL = "http://localhost:8080"
+        cls.BASE_URL = "http://localhost:88/api" # dockerized version
         cls.manager = OntologyServerManager(os.path.abspath("data/pizza.owl"))
         cls.server_greenlet = gevent.spawn(cls.manager.run)
         time.sleep(6)
