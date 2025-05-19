@@ -9,8 +9,10 @@ import time
 import requests
 from SPARQLWrapper import SPARQLWrapper, JSON
 
-old_endpoint_url = "http://localhost:8890/sparql"
+#endpoint_url = "http://localhost:8890/sparql/"
 endpoint_url = "http://localhost:88/virtuoso/"
+# endpoint_url = "http://10.74.250.168:88/virtuoso/"
+
 def check_endpoint_availability(endpoint_url=endpoint_url, max_retries=3):
     """Check if the SPARQL endpoint is available."""
     print(f"Checking if SPARQL endpoint is available...")
@@ -33,7 +35,7 @@ def check_endpoint_availability(endpoint_url=endpoint_url, max_retries=3):
     print(f"SPARQL endpoint is not available after {max_retries} attempts.")
     return False
 
-def query_ontology_classes(endpoint_url="http://localhost:8890/sparql"):
+def query_ontology_classes(endpoint_url):
     """Query all classes in the ontology using SPARQL."""
     # Initialize the SPARQL wrapper
     sparql = SPARQLWrapper(endpoint_url)
@@ -73,7 +75,7 @@ def main():
         print("Cannot connect to SPARQL endpoint. Make sure the Virtuoso server is running.")
         sys.exit(1)
     
-    classes = query_ontology_classes()
+    classes = query_ontology_classes(endpoint_url)
     
     if classes:
         print(f"\nFound {len(classes)} classes. Printing first 10:")

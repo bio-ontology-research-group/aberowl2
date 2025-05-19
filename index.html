@@ -578,6 +578,55 @@
                 <form @submit.prevent="executeSparql">
                   <div layout="row">
                     <div class="form-group margin-top-15">
+                      <textarea class="form-control" x-model="query" @input="onSparqlChange($event)" placeholder="SPARQL Query"
+                        rows="10"></textarea>
+                    </div>
+                  </div>
+
+                  <div layout="row">
+                    <select class="form-control" @change="onFormatChange($event)" x-model="format">
+                      <template x-for="item in getSparqlFormats()" :key="item.format">
+                        <option :value="item.format" x-text="item.name"></option>
+                      </template>
+                    </select>
+                  </div>
+                </form>
+
+                <div layout="row" class="margin-top-15">
+                  <ul>
+                    <li>List of 'metabolite replacement' procedures and phenotypes corrected in <a href="#"
+                        @click="setDDIEMExampleQuery($event)">DDIEM</a>
+                    </li>
+                    <li>List of 'metabolite replacement' procedures and phenotypes corrected in <a href="#"
+                        @click="setDDIEMFilterExampleQuery($event)">DDIEM</a>
+                    </li>
+                    <li>Retreive interacting proteins involved in 'response to hypoxia' from <a href="#"
+                        @click="setBioGatewayExampleQuery($event)">BioGateway</a>
+                    </li>
+                  </ul>
+                </div>
+
+                <!-- Display SPARQL Results -->
+                <div class="margin-top-15" x-show="dlResults.length > 0">
+                  <table class="table table-hover">
+                    <thead>
+                      <tr>
+                        <th>Result</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <template x-for="(item, index) in dlResults" :key="index">
+                        <tr>
+                          <td x-html="item.label"></td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+                <form @submit.prevent="executeSparql">
+                  <div layout="row">
+                    <div class="form-group margin-top-15">
                       <textarea class="form-control" id="sparql" rows="10" col="5" placeholder="SPARQL Query"
                         x-model="query" @input="onSparqlChange($event)"></textarea>
                     </div>

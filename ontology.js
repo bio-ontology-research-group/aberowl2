@@ -438,50 +438,106 @@ document.addEventListener('alpine:init', () => {
     
     setDDIEMExampleQuery(event) {
       if (event) event.preventDefault();
+	const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
+	      "PREFIX owl: <http://www.w3.org/2002/07/owl#> \n" +
+              "SELECT DISTINCT ?class \n" + 
+	      " WHERE { ?class rdf:type owl:Class . } \n" +
+	      "ORDER BY ?class \n" +
+	      "LIMIT 10";
       
-      const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>   \n" +
-      "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>   \n" +
-      "PREFIX obo: <http://purl.obolibrary.org/obo/>   \n" +
-      "SELECT ?procedure ?evidenceCode ?phenotypeCorrected   \n" +
-      "FROM <http://ddiem.phenomebrowser.net>   \n" +
-      "WHERE {   \n" +
-      "	VALUES ?procedureType {     \n" +
-      "		OWL equivalent <http://ddiem.phenomebrowser.net/sparql> <DDIEM> {     \n" +
-      "			'metabolite replacement'    \n" +
-      "		}     \n" +
-      "	} .     \n" +
-      "	?procedure rdf:type ?procedureType .   \n" +
-      "	?procedure obo:RO_0002558 ?evidenceCode .   \n" +
-      "	?procedure obo:RO_0002212 ?phenotypes .   \n" +
-      "	?phenotypes rdfs:label ?phenotypeCorrected .   \n" +
-      "}";
+      // const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>   \n" +     // 
+      // "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>   \n" +
+      // "PREFIX obo: <http://purl.obolibrary.org/obo/>   \n" +
+      // "SELECT ?procedure ?evidenceCode ?phenotypeCorrected   \n" +
+      // "FROM <http://ddiem.phenomebrowser.net>   \n" +
+      // "WHERE {   \n" +
+      // "	VALUES ?procedureType {     \n" +
+      // "		OWL equivalent <http://ddiem.phenomebrowser.net/sparql> <DDIEM> {     \n" +
+      // "			'metabolite replacement'    \n" +
+      // "		}     \n" +
+      // "	} .     \n" +
+      // "	?procedure rdf:type ?procedureType .   \n" +
+      // "	?procedure obo:RO_0002558 ?evidenceCode .   \n" +
+      // "	?procedure obo:RO_0002212 ?phenotypes .   \n" +
+      // "	?phenotypes rdfs:label ?phenotypeCorrected .   \n" +
+      // "}";
       
       this.query = query;
     },
     
     setDDIEMFilterExampleQuery(event) {
       if (event) event.preventDefault();
-      
-      const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
-      "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>   \n" +
-      "PREFIX obo: <http://purl.obolibrary.org/obo/>   \n" +   
-      "SELECT ?procedure ?evidenceCode ?phenotypeCorrected   \n" +   
-      "FROM <http://ddiem.phenomebrowser.net>    \n" +  
-      "WHERE {    \n" +     
-      "	?procedure rdf:type ?procedureType .    \n" +  
-      "	?procedure obo:RO_0002558 ?evidenceCode .     \n" + 
-      "	?procedure obo:RO_0002212 ?phenotypes .      \n" +
-      "	?phenotypes rdfs:label ?phenotypeCorrected .      \n" +
-      "	FILTER ( ?procedureType in (    \n" +
-      "		OWL equivalent <http://ddiem.phenomebrowser.net/sparql> <DDIEM> {     \n" +   
-      "			'metabolite replacement'       \n" +
-      "		}        \n" +
-      "	) ).     \n" +
-      "}";
+	const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
+	      "PREFIX owl: <http://www.w3.org/2002/07/owl#> \n" +
+              "SELECT DISTINCT ?class \n" + 
+	      " WHERE { ?class rdf:type owl:Class . } \n" +
+	      "ORDER BY ?class \n" +
+	      "LIMIT 10";
+
+      // const query2 = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
+      // "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>   \n" +
+      // "PREFIX obo: <http://purl.obolibrary.org/obo/>   \n" +   
+      // "SELECT ?procedure ?evidenceCode ?phenotypeCorrected   \n" +   
+      // "FROM <http://ddiem.phenomebrowser.net>    \n" +  
+      // "WHERE {    \n" +     
+      // "	?procedure rdf:type ?procedureType .    \n" +  
+      // "	?procedure obo:RO_0002558 ?evidenceCode .     \n" + 
+      // "	?procedure obo:RO_0002212 ?phenotypes .      \n" +
+      // "	?phenotypes rdfs:label ?phenotypeCorrected .      \n" +
+      // "	FILTER ( ?procedureType in (    \n" +
+      // "		OWL equivalent <http://ddiem.phenomebrowser.net/sparql> <DDIEM> {     \n" +   
+      // "			'metabolite replacement'       \n" +
+      // "		}        \n" +
+      // "	) ).     \n" +
+      // "}";
       
       this.query = query;
     },
     
+      executeSparql(event) {
+	  if (event) event.preventDefault();
+	  this.isLoading = true;
+  
+	  const sparqlUrl = 'http://localhost:88/api/api/sparql.groovy';
+	  const formData = new URLSearchParams();
+	  formData.append('query', this.query.trim());
+  
+	  const queryUrl = `${sparqlUrl}?${formData.toString()}`;
+	  
+	  fetch(queryUrl, {
+	      method: 'GET',
+	      headers: {
+		  'Accept': 'application/sparql-results+json,*/*;q=0.9'
+	      }
+	  })
+	      .then(response => {
+		  if (!response.ok) {
+		      throw new Error('Network response was not ok');
+		  }
+		  return response.text(); // Get the raw response as text
+	      })
+	      .then(data => {
+		  // Display the SPARQL results in a new div
+		  this.dlResults = [{label: data}]; // Display results in dlResults array
+		  this.isLoading = false;
+	      })
+	      .catch(error => {
+		  console.error('Error executing SPARQL query:', error);
+		  this.isLoading = false;
+		  this.dlResults = [{label: 'Error: ' + error.message}]; // Display error in dlResults array
+	      });
+      },
+
+
+    getDownloadFields() {
+      return [
+        'Version',
+        'Release date',
+        'Download'
+      ];
+    },
+
+
     setBioGatewayExampleQuery(event) {
       if (event) event.preventDefault();
       
@@ -499,23 +555,6 @@ document.addEventListener('alpine:init', () => {
       this.query = query;
     },
     
-    executeSparql(event) {
-      if (event) event.preventDefault();
-      
-      const sparqlUrl = '/api/sparql?query=' + encodeURIComponent(this.query) + '&format=' + encodeURIComponent(this.format);
-      window.open(sparqlUrl, "_blank");
-    },
-
-    // Similar classes functionality is commented out in the original code
-
-    getDownloadFields() {
-      return [
-        'Version',
-        'Release date',
-        'Download'
-      ];
-    },
-
     // This will be handled with x-show directives in the template
 
     isNodeActive(node) {

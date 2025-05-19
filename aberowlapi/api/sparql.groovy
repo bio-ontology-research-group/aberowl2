@@ -16,20 +16,15 @@ print(params)
 def query = params.query
 def manager = application.manager
 
-def response_dbg = queryEngine.expandAndExecQuery(manager, query)
-// print new JsonBuilder(response).toString() 
-
 try {
     def data = queryEngine.expandAndExecQuery(manager, query)
-    // throw new RuntimeException("sparql.groovy:"+ data.query + " || " + data.endpoint)
     def expandedQuery = data.query
     def endpoint = data.endpoint
 
     if (endpoint == null || endpoint.isEmpty()){
-	endpoint = "http://localhost:88/virtuoso"
+	endpoint = "http://virtuoso:8890/sparql/" // NOTE: internal docker endpoint
     }
     def response
-    endpoint = "http://localhost:88/virtuoso/"
     def connection = new URL(endpoint).openConnection() as HttpURLConnection
     connection.setRequestMethod("POST")
     connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
@@ -39,7 +34,7 @@ try {
     def queryParams = "query=" + URLEncoder.encode(expandedQuery, "UTF-8")
     
     connection.getOutputStream().write(queryParams.getBytes("UTF-8"))
-    throw new RuntimeException("sparql.groovy: "+ expandedQuery + " || " + endpoint)
+
     def responseCode = connection.getResponseCode()
     if (responseCode == HttpURLConnection.HTTP_OK) {
 	def reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))
