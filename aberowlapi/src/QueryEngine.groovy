@@ -59,7 +59,6 @@ public class QueryEngine {
         }
         OWLClassExpression cExpression = parser.parse(mOwl, labels);
         Set<OWLClass> classes = new HashSet<>();
-
         if(cExpression == null) {
             return classes
         }

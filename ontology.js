@@ -435,32 +435,26 @@ document.addEventListener('alpine:init', () => {
     onFormatChange(event) {
       this.format = event.target.value;
     },
-    
-    setDDIEMExampleQuery(event) {
+
+      setCheesyPizzaExampleQuery(event) {
+	  if (event) event.preventDefault();
+	    const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
+		  "PREFIX owl: <http://www.w3.org/2002/07/owl#> \n" +
+		  "SELECT DISTINCT ?class \n" +
+		  "WHERE { \n" +
+		  "VALUES ?class {OWL superclass <> <> { cheesypizza } } . } \n" +
+		  "ORDER BY ?class \n"
+	  this.query = query
+      },
+      
+    setQueryClassesExampleQuery(event) {
       if (event) event.preventDefault();
 	const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
 	      "PREFIX owl: <http://www.w3.org/2002/07/owl#> \n" +
               "SELECT DISTINCT ?class \n" + 
-	      " WHERE { ?class rdf:type owl:Class . } \n" +
+	      "WHERE { ?class rdf:type owl:Class . } \n" +
 	      "ORDER BY ?class \n" +
 	      "LIMIT 10";
-      
-      // const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>   \n" +     // 
-      // "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>   \n" +
-      // "PREFIX obo: <http://purl.obolibrary.org/obo/>   \n" +
-      // "SELECT ?procedure ?evidenceCode ?phenotypeCorrected   \n" +
-      // "FROM <http://ddiem.phenomebrowser.net>   \n" +
-      // "WHERE {   \n" +
-      // "	VALUES ?procedureType {     \n" +
-      // "		OWL equivalent <http://ddiem.phenomebrowser.net/sparql> <DDIEM> {     \n" +
-      // "			'metabolite replacement'    \n" +
-      // "		}     \n" +
-      // "	} .     \n" +
-      // "	?procedure rdf:type ?procedureType .   \n" +
-      // "	?procedure obo:RO_0002558 ?evidenceCode .   \n" +
-      // "	?procedure obo:RO_0002212 ?phenotypes .   \n" +
-      // "	?phenotypes rdfs:label ?phenotypeCorrected .   \n" +
-      // "}";
       
       this.query = query;
     },
@@ -493,7 +487,30 @@ document.addEventListener('alpine:init', () => {
       
       this.query = query;
     },
-    
+
+      transformSparqlResults(rawJsonString) {
+	  try {
+              const data = JSON.parse(rawJsonString);
+              
+              return data.results.bindings.map(binding => {
+		  const classUri = binding.class.value;
+		  const className = classUri.includes('#') 
+			? classUri.split('#').pop() 
+			: classUri.split('/').pop();
+		  return {
+                      label: className,
+                      fullUri: classUri
+		  };
+              });
+	  } catch (error) {
+              console.error('Error transforming SPARQL results:', error);
+              return [{label: 'Error parsing results'}];
+	  }
+      },
+
+
+
+      
       executeSparql(event) {
 	  if (event) event.preventDefault();
 	  this.isLoading = true;
@@ -518,7 +535,10 @@ document.addEventListener('alpine:init', () => {
 	      })
 	      .then(data => {
 		  // Display the SPARQL results in a new div
-		  this.dlResults = [{label: data}]; // Display results in dlResults array
+
+		  this.dlResults = this.transformSparqlResults(data)
+		  // this.dlResults = [{label: data}]; // Display results in dlResults array
+	
 		  this.isLoading = false;
 	      })
 	      .catch(error => {
@@ -528,7 +548,7 @@ document.addEventListener('alpine:init', () => {
 	      });
       },
 
-
+      
     getDownloadFields() {
       return [
         'Version',
@@ -702,13 +722,14 @@ document.addEventListener('alpine:init', () => {
     // The render method is replaced by Alpine.js template in index.html
     
     // Add event listener for hash changes to handle navigation
-    init() {
-      window.addEventListener('hashchange', () => {
-        this.checkUrlHash();
-      });
+      init() {
+	  window.addEventListener('hashchange', () => {
+              this.checkUrlHash();
+	  });
       
-      // Initialize with default SPARQL query
-      this.setDDIEMExampleQuery();
+	  // Initialize with default SPARQL query
+	  this.setQueryClassesExampleQuery();
+
     }
   }));
 });

@@ -578,30 +578,32 @@
                 <form @submit.prevent="executeSparql">
                   <div layout="row">
                     <div class="form-group margin-top-15">
-                      <textarea class="form-control" x-model="query" @input="onSparqlChange($event)" placeholder="SPARQL Query"
+                      <textarea class="form-control" id="sparql" x-model="query" @input="onSparqlChange($event)" placeholder="SPARQL Query"
                         rows="10"></textarea>
                     </div>
                   </div>
 
                   <div layout="row">
+		    <label for="format">Results Format</label>
                     <select class="form-control" @change="onFormatChange($event)" x-model="format">
                       <template x-for="item in getSparqlFormats()" :key="item.format">
                         <option :value="item.format" x-text="item.name"></option>
                       </template>
                     </select>
                   </div>
+		  <div layout="row" class="margin-top-15">
+                    <button type="submit" class="btn btn-primary">Execute</button>
+                  </div>
+
                 </form>
 
                 <div layout="row" class="margin-top-15">
                   <ul>
-                    <li>List of 'metabolite replacement' procedures and phenotypes corrected in <a href="#"
-                        @click="setDDIEMExampleQuery($event)">DDIEM</a>
+                    <li>List of superclasses of CheesyPizza <a href="#"
+                        @click="setCheesyPizzaExampleQuery($event)">Get superclasses</a>
                     </li>
-                    <li>List of 'metabolite replacement' procedures and phenotypes corrected in <a href="#"
-                        @click="setDDIEMFilterExampleQuery($event)">DDIEM</a>
-                    </li>
-                    <li>Retreive interacting proteins involved in 'response to hypoxia' from <a href="#"
-                        @click="setBioGatewayExampleQuery($event)">BioGateway</a>
+                    <li>List of classes of the loaded ontology <a href="#"
+                        @click="setQueryClassesExampleQuery($event)">List classes</a>
                     </li>
                   </ul>
                 </div>
@@ -623,46 +625,6 @@
                     </tbody>
                   </table>
                 </div>
-              </div>
-                <form @submit.prevent="executeSparql">
-                  <div layout="row">
-                    <div class="form-group margin-top-15">
-                      <textarea class="form-control" id="sparql" rows="10" col="5" placeholder="SPARQL Query"
-                        x-model="query" @input="onSparqlChange($event)"></textarea>
-                    </div>
-                  </div>
-                  <div layout="row">
-                    <label for="format">Results Format</label>
-                    <select class="form-control" @change="onFormatChange($event)" x-model="format">
-                      <template x-for="item in getSparqlFormats()" :key="item.format">
-                        <option :value="item.format" x-text="item.name"></option>
-                      </template>
-                    </select>
-                  </div>
-                  <div layout="row" class="margin-top-15">
-                    <button type="submit" class="btn btn-primary">Execute</button>
-                  </div>
-                </form>
-
-                <div layout="row" class="margin-top-15">
-                  <h4>Example Queries</h4>
-                  <ul>
-                    <li>List of 'metabolite replacement' procedures and phenotypes corrected in
-                      DDIEM with aberowl Values form query.
-                      <a href="#/SPARQL" @click.prevent="setDDIEMExampleQuery">Show Query</a>
-                    </li>
-                    <li>List of 'metabolite replacement' procedures and phenotypes corrected in
-                      DDIEM with aberowl Filter form query.
-                      <a href="#/SPARQL" @click.prevent="setDDIEMFilterExampleQuery">Show
-                        Query</a>
-                    </li>
-                    <li>Retreive interacting proteins involved in 'response to hypoxia' from
-                      BioGateway Sparql endpoint.
-                      <a href="#/SPARQL" @click.prevent="setBioGatewayExampleQuery">Show Query</a>
-                    </li>
-                  </ul>
-                </div>
-              </div>
 
               <!-- Download Tab -->
               <div x-show="currentTab === 'Download'">

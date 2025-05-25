@@ -310,7 +310,7 @@ public class RequestManager {
      * @return Set of OWL Classes.
      */
     Set runQuery(String mOwlQuery, String type, boolean direct, boolean labels, boolean axioms) {
-	type = type.toLowerCase()
+        type = type.toLowerCase()
 	def requestType
 	switch (type) {
 	    case "superclass": requestType = RequestType.SUPERCLASS; break;
@@ -322,8 +322,9 @@ public class RequestManager {
 	    default: requestType = RequestType.SUBEQ; break;
 	}
 
+        
 	Set resultSet = Sets.newHashSet(Iterables.limit(queryEngine.getClasses(mOwlQuery, requestType, direct, labels), MAX_REASONER_RESULTS))
-	resultSet.remove(df.getOWLNothing())
+        resultSet.remove(df.getOWLNothing())
 	resultSet.remove(df.getOWLThing())
 	def classes = classes2info(resultSet, axioms);
 	return classes.sort {x, y -> x["label"].compareTo(y["label"])};
@@ -331,7 +332,7 @@ public class RequestManager {
 
 
     Set runQuery(String mOwlQuery, String type) {
-	return runQuery(mOwlQuery, type, false)
+        return runQuery(mOwlQuery, type, false)
     }
 
     /** This returns the direct R-successors of a class C in O

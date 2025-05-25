@@ -12,13 +12,15 @@ if(!application) {
 
 def queryEngine = new AberowlManchesterOwlQueryEngine();
 def params = Util.extractParams(request)
-print(params)
+// print(params)
 def query = params.query
 def manager = application.manager
 
 try {
     def data = queryEngine.expandAndExecQuery(manager, query)
     def expandedQuery = data.query
+    // println "\nExpanded query: " + expandedQuery
+    
     def endpoint = data.endpoint
 
     if (endpoint == null || endpoint.isEmpty()){

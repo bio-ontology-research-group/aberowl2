@@ -10,8 +10,10 @@ public class AberowlManchesterOwlParser {
     private static final String FILTER_FRAME_REGEX =
         "(FILTER|filter)[\\r\\n\\s]+[\\(]{1}[\\r\\n\\s]+\\?[A-Za-z0-9]+[\\s]+in+[\\s]+\\([\\r\\n\\s]*(OWL|owl){1}[\\s]*(superclass|subclass|equivalent|supeq|subeq|realize){1}[\\s]*\\<.+\\>[\\s]+[\\r\\n\\s]*\\<.*\\>[\\s]+[\\r\\n\\s]*\\{[\\r\\n\\s]+.+[\\r\\n\\s]+\\}[\\r\\n\\s]*\\)[\\r\\n\\s]*\\)[\\s]*[\\.]*";
 
-    private static final String QUERY_REGEX = 
-        "(OWL|owl){1}[\\s]*(superclass|subclass|equivalent|supeq|subeq|realize){1}[\\s]*\\<([\\w]+:\\/\\/[\\w\\.\\/]+)>[\\s]+[\\r\\n\\s]*\\<([\\w-]*)\\>[\\s]+[\\r\\n\\s]*\\{[\\r\\n\\s]+([\\w\\s\']+)[\\r\\n\\s]+\\}[\\s]*[\\.]*";
+    private static final String QUERY_REGEX =
+	"(OWL|owl){1}[\\s]*(superclass|subclass|equivalent|supeq|subeq|realize){1}[\\s]*\\<([^>]*)>[\\s]+[\\r\\n\\s]*\\<([^>]*)\\>[\\s]+[\\r\\n\\s]*\\{[\\r\\n\\s]*([\\w\\s\']+)[\\r\\n\\s]*\\}[\\s]*[\\.]*"
+
+    // "(OWL|owl){1}[\\s]*(superclass|subclass|equivalent|supeq|subeq|realize){1}[\\s]*\\<([\\w]+:\\/\\/[\\w\\.\\/]+)>[\\s]+[\\r\\n\\s]*\\<([\\w-]*)\\>[\\s]+[\\r\\n\\s]*\\{[\\r\\n\\s]+([\\w\\s\']+)[\\r\\n\\s]+\\}[\\s]*[\\.]*";
 
     private static final String VARIABLE_REGEX = "\\?[A-Za-z0-9]+"
 
@@ -45,7 +47,6 @@ public class AberowlManchesterOwlParser {
             if (!manchesterOwlQuery.trim().isEmpty()) {
                 return parse(manchesterOwlQuery);
 	    }	    
-            // throw new RuntimeException("AberowlManchesterOwlParser.grrovy: query is null: " + manchesterOwlQuery + " ||");
             return null;
         }
     }
@@ -56,12 +57,16 @@ public class AberowlManchesterOwlParser {
             throw new RuntimeException("SPARQL query is null");
         }
 
+        
         Pattern pattern = Pattern.compile(VALUE_FRAME_REGEX);
         Matcher matcher = pattern.matcher(sparql);
         if (matcher.find()) {
             return matcher.group(0);
         }
-	
+
+        
+	// If no match is found, return an empty string
+	//
 	return "";
     }
 
