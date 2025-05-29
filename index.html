@@ -19,11 +19,11 @@
       <div class="spinner">Loading...</div>
     </div>
 
-    <div x-show="error" class="error-message">
-      <div class="alert alert-danger" x-text="error"></div>
-    </div>
+    <!-- <div x-show="error" class="error-message"> -->
+      <!-- <div class="alert alert-danger" x-text="error"></div> -->
+    <!-- </div> -->
 
-    <div x-data="ontologyApp" x-show="!isLoading || $store.ontologyApp.ontology">
+    <div x-show="!isLoading || $store.ontologyApp.ontology">
       <!-- Header -->
       <header>
         <div class="container">
@@ -583,15 +583,7 @@
                     </div>
                   </div>
 
-                  <div layout="row">
-		    <label for="format">Results Format</label>
-                    <select class="form-control" @change="onFormatChange($event)" x-model="format">
-                      <template x-for="item in getSparqlFormats()" :key="item.format">
-                        <option :value="item.format" x-text="item.name"></option>
-                      </template>
-                    </select>
-                  </div>
-		  <div layout="row" class="margin-top-15">
+                  <div layout="row" class="margin-top-15">
                     <button type="submit" class="btn btn-primary">Execute</button>
                   </div>
 
@@ -608,6 +600,24 @@
                   </ul>
                 </div>
 
+                <!-- Results Format and Download -->
+                <div layout="row" class="margin-top-15" x-show="dlResults.length > 0">
+                  <div class="col-md-6">
+                    <label for="format">Results Format</label>
+                    <select class="form-control" @change="onFormatChange($event)" x-model="format">
+                      <template x-for="item in getSparqlFormats()" :key="item.format">
+                        <option :value="item.format" x-text="item.name"></option>
+                      </template>
+                    </select>
+                  </div>
+                  <div class="col-md-6">
+                    <label for="download">Download Results</label>
+                    <form @submit.prevent="downloadResults($event)">
+                      <button type="submit" id="download" class="btn btn-success form-control">Download</button>
+                    </form>
+                  </div>
+                </div>
+                
                 <!-- Display SPARQL Results -->
                 <div class="margin-top-15" x-show="dlResults.length > 0">
                   <table class="table table-hover">

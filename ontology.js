@@ -1,49 +1,61 @@
+console.log('Loading ontology.js');
+
 document.addEventListener('alpine:init', () => {
-  // Create an Alpine.js store for sharing data between components
-  Alpine.store('ontologyApp', {
-    ontology: null,
-    selectedClass: null,
-    selectedProp: null,
-    currentTab: 'Overview'
-  });
-  
-  Alpine.data('ontologyApp', () => ({
-    ontology: null,
-    classesMap: new Map(),
-    propsMap: new Map(),
-    tabs: [
-      'Overview', 'Browse', 'DLQuery', 'SPARQL', 'Download'
-    ],
-    currentTab: 'Overview',
-    selectedClass: null,
-    selectedProp: null,
-    dlQuery: null,
-    dlQueryExp: null,
-    dlResults: [],
-    simResults: [],
-    search: '',
-    searchResults: [],
-    searchResultsShow: false,
-    format: 'text/html',
-    query: '',
-    isLoading: false,
+    // Create an Alpine.js store for sharing data between components
+    Alpine.store('ontologyApp', {
+	ontology: null,
+	selectedClass: null,
+	selectedProp: null,
+	currentTab: 'Overview'
+    });
+
+    Alpine.data('ontologyApp', () => ({
+	ontology: null,
+	classesMap: new Map(),
+	propsMap: new Map(),
+	tabs: [
+	    'Overview', 'Browse', 'DLQuery', 'SPARQL', 'Download'
+	],
+	currentTab: 'Overview',
+	selectedClass: null,
+	selectedProp: null,
+	dlQuery: null,
+	dlQueryExp: null,
+	dlResults: [],
+	rawSparqlResults: null,
+	simResults: [],
+	search: '',
+	searchResults: [],
+	searchResultsShow: false,
+	format: 'text/html',
+	query: '',
+	isLoading: false,
     
-    init() {
-      // Fetch the ontology data
-      this.fetchOntologyData();
+	init() {
+    
+	    // Fetch the ontology data
+	    this.fetchOntologyData();
       
-      // Listen for custom events from main.js
-      window.addEventListener('ontology:data', (event) => {
-        if (event.detail && event.detail.ontology) {
-          this.ontology = event.detail.ontology;
-          this.processOntologyData();
-        }
-      });
+	    // Listen for custom events from main.js
+	    window.addEventListener('ontology:data', (event) => {
+		if (event.detail && event.detail.ontology) {
+		    this.ontology = event.detail.ontology;
+		    this.processOntologyData();
+		}
+	    });
       
-      window.addEventListener('hash:changed', () => {
-        this.checkUrlHash();
-      });
-    },
+	    window.addEventListener('hash:changed', () => {
+		this.checkUrlHash();
+	    });
+
+	    window.addEventListener('hashchange', () => {
+		this.checkUrlHash();
+	    });
+  
+	    // Initialize with default SPARQL query
+	    this.setQueryClassesExampleQuery();
+	    
+	},
     
     // Process ontology data after loading
     processOntologyData() {
@@ -419,10 +431,10 @@ document.addEventListener('alpine:init', () => {
         {name: 'HTML',  format:'text/html'},
         {name: 'XML',  format:'application/sparql-results+xml'},
         {name: 'JSON',  format:'application/sparql-results+json'},
-        {name: 'Javascript',  format:'application/javascript'},
-        {name: 'Turtle',  format:'text/turtle'},
-        {name: 'RDF/XML',  format:'application/rdf+xml'},
-        {name: 'N-Triples',  format:'text/plain'},
+        // {name: 'Javascript',  format:'application/javascript'},
+        // {name: 'Turtle',  format:'text/turtle'},
+        // {name: 'RDF/XML',  format:'application/rdf+xml'},
+        // {name: 'N-Triples',  format:'text/plain'},
         {name: 'CSV',  format:'text/csv'},
         {name: 'TSV',  format:'text/tab-separated-values'}
       ];
@@ -488,30 +500,55 @@ document.addEventListener('alpine:init', () => {
       this.query = query;
     },
 
-      transformSparqlResults(rawJsonString) {
-	  try {
-              const data = JSON.parse(rawJsonString);
-              
-              return data.results.bindings.map(binding => {
-		  const classUri = binding.class.value;
-		  const className = classUri.includes('#') 
-			? classUri.split('#').pop() 
-			: classUri.split('/').pop();
-		  return {
-                      label: className,
-                      fullUri: classUri
-		  };
-              });
-	  } catch (error) {
-              console.error('Error transforming SPARQL results:', error);
-              return [{label: 'Error parsing results'}];
-	  }
+      // Parse the raw JSON string into a structured object
+      parseSparqlResults(rawJsonString) {
+          try {
+              return JSON.parse(rawJsonString);
+          } catch (error) {
+              console.error('Error parsing SPARQL results:', error);
+              return {
+                  results: {
+                      bindings: [{ error: { type: "literal", value: 'Error parsing results: ' + error.message } }]
+                  }
+              };
+          }
       },
-
-
+      
+      // Transform SPARQL results for display only
+      getDisplayResults(results) {
+          if (!results || !results.results || !results.results.bindings) {
+              return [{label: 'No results'}];
+          }
+          
+          return results.results.bindings.map(binding => {
+              // Get the first variable in the binding
+              const firstVarName = Object.keys(binding)[0];
+              if (!firstVarName) {
+                  return { label: "No data" };
+              }
+              
+              const value = binding[firstVarName].value;
+              // If it's a URI, extract the last part after # or /
+              let displayValue = value;
+              if (binding[firstVarName].type === 'uri') {
+                  displayValue = value.includes('#')
+                      ? value.split('#').pop()
+                      : value.split('/').pop();
+              }
+              
+              return {
+                  label: displayValue,
+                  fullUri: value
+              };
+          });
+      },
 
       
       executeSparql(event) {
+	  console.log('Available methods:', Object.getOwnPropertyNames(this));
+	  console.log('testMethod type:', typeof this.testMethod);
+	  console.log('executeSparql type:', typeof this.executeSparql);
+
 	  if (event) event.preventDefault();
 	  this.isLoading = true;
   
@@ -534,20 +571,162 @@ document.addEventListener('alpine:init', () => {
 		  return response.text(); // Get the raw response as text
 	      })
 	      .then(data => {
-		  // Display the SPARQL results in a new div
-
-		  this.dlResults = this.transformSparqlResults(data)
-		  // this.dlResults = [{label: data}]; // Display results in dlResults array
+	   // Store the original parsed results
+	   this.rawSparqlResults = this.parseSparqlResults(data);
+	   
+	   // Transform results for display
+	   this.dlResults = this.getDisplayResults(this.rawSparqlResults);
 	
-		  this.isLoading = false;
+	   this.isLoading = false;
 	      })
 	      .catch(error => {
-		  console.error('Error executing SPARQL query:', error);
-		  this.isLoading = false;
-		  this.dlResults = [{label: 'Error: ' + error.message}]; // Display error in dlResults array
+	   console.error('Error executing SPARQL query:', error);
+	   this.isLoading = false;
+	   this.rawSparqlResults = { results: { bindings: [{ error: { type: "literal", value: 'Error: ' + error.message } }] } };
+	   this.dlResults = [{label: 'Error: ' + error.message}];
 	      });
       },
-
+      
+    downloadResults(event) {
+      if (event) event.preventDefault();
+        if (!this.rawSparqlResults || !this.rawSparqlResults.results || !this.rawSparqlResults.results.bindings || this.rawSparqlResults.results.bindings.length === 0) {
+          console.error('No results to download');
+          return;
+        }
+        
+        let content = '';
+        let filename = 'sparql-results';
+        let contentType = this.format;
+        
+        // Format the results based on the selected format
+        switch (this.format) {
+          case 'text/html':
+            content = '<table border="1">\n<thead>\n<tr>\n';
+            
+            const vars = this.rawSparqlResults.head?.vars || [];
+            vars.forEach(varName => {
+              content += `<th>${varName}</th>\n`;
+            });
+            
+            content += '</tr>\n</thead>\n<tbody>\n';
+            
+            // Add each result row
+            this.rawSparqlResults.results.bindings.forEach(binding => {
+              content += '<tr>\n';
+              vars.forEach(varName => {
+                const value = binding[varName]?.value || '';
+                content += `<td>${value}</td>\n`;
+              });
+              content += '</tr>\n';
+            });
+            
+            content += '</tbody>\n</table>';
+            filename += '.html';
+            break;
+            
+          case 'text/csv':
+            // Create CSV content
+            const csvVars = this.rawSparqlResults.head?.vars || [];
+            content = csvVars.join(',') + '\n';
+            
+            this.rawSparqlResults.results.bindings.forEach(binding => {
+              const values = csvVars.map(varName => {
+                const value = binding[varName]?.value || '';
+                // Escape quotes in CSV
+                return `"${value.replace(/"/g, '""')}"`;
+              });
+              content += values.join(',') + '\n';
+            });
+            
+            filename += '.csv';
+            break;
+            
+          case 'text/tab-separated-values':
+            // Create TSV content
+            const tsvVars = this.rawSparqlResults.head?.vars || [];
+            content = tsvVars.join('\t') + '\n';
+            
+            this.rawSparqlResults.results.bindings.forEach(binding => {
+              const values = tsvVars.map(varName => {
+                const value = binding[varName]?.value || '';
+                // Replace tabs with spaces in TSV
+                return value.replace(/\t/g, ' ');
+              });
+              content += values.join('\t') + '\n';
+            });
+            
+            filename += '.tsv';
+            break;
+            
+          case 'application/json':
+          case 'application/sparql-results+json':
+            // Use the original JSON results
+            content = JSON.stringify(this.rawSparqlResults, null, 2);
+            filename += '.json';
+            break;
+            
+          case 'application/rdf+xml':
+          case 'application/sparql-results+xml':
+            // Create XML content
+            content = '<?xml version="1.0" encoding="UTF-8"?>\n';
+            content += '<sparql xmlns="http://www.w3.org/2005/sparql-results#">\n';
+            
+            // Add head section with variables
+            content += '  <head>\n';
+            const xmlVars = this.rawSparqlResults.head?.vars || [];
+            xmlVars.forEach(varName => {
+              content += `    <variable name="${varName}"/>\n`;
+            });
+            content += '  </head>\n';
+            
+            // Add results section
+            content += '  <results>\n';
+            
+            this.rawSparqlResults.results.bindings.forEach(binding => {
+              content += '    <result>\n';
+              
+              xmlVars.forEach(varName => {
+                if (binding[varName]) {
+                  const type = binding[varName].type;
+                  const value = binding[varName].value;
+                  
+                  if (type === 'uri') {
+                    content += `      <binding name="${varName}"><uri>${value}</uri></binding>\n`;
+                  } else {
+                    content += `      <binding name="${varName}"><literal>${value}</literal></binding>\n`;
+                  }
+                }
+              });
+              
+              content += '    </result>\n';
+            });
+            
+            content += '  </results>\n</sparql>';
+            filename += '.xml';
+            break;
+            
+          default:
+            // Default to plain text
+            content = this.dlResults.map(item => item.label).join('\n');
+            
+            filename += '.txt';
+            contentType = 'text/plain';
+        }
+        
+        // Create a blob with the content
+        const blob = new Blob([content], { type: contentType });
+        
+        // Create a download link and trigger the download
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        
+        // Clean up
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+      },
       
     getDownloadFields() {
       return [
@@ -718,18 +897,6 @@ document.addEventListener('alpine:init', () => {
       this.search = search;
       this.searchResultsShow = false;
     },
-    
-    // The render method is replaced by Alpine.js template in index.html
-    
-    // Add event listener for hash changes to handle navigation
-      init() {
-	  window.addEventListener('hashchange', () => {
-              this.checkUrlHash();
-	  });
-      
-	  // Initialize with default SPARQL query
-	  this.setQueryClassesExampleQuery();
 
-    }
   }));
 });
