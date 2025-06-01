@@ -1,15 +1,11 @@
 from aberowlapi.server_manager import OntologyServerManager
 from aberowlapi.util import release_port
-import gevent
-gevent.monkey.patch_all()
-## KEEP THE 'import requests' after the 'import gevent' and 'gevent.monkey.patch_all()'
 from unittest import TestCase
 import requests
 import threading
 import time
 
 import os
-# gevent.config.loop = "default"
 
 class TestSparql(TestCase):
 

@@ -19,7 +19,6 @@ def manager = application.manager
 try {
     def data = queryEngine.expandAndExecQuery(manager, query)
     def expandedQuery = data.query
-    // println "\nExpanded query: " + expandedQuery
     
     def endpoint = data.endpoint
 

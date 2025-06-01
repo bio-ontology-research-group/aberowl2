@@ -14,7 +14,7 @@ document.addEventListener('alpine:init', () => {
 	classesMap: new Map(),
 	propsMap: new Map(),
 	tabs: [
-	    'Overview', 'Browse', 'DLQuery', 'SPARQL', 'Download'
+	    'Overview', 'Browse', 'DLQuery', 'SPARQL', 'LLMQuery', 'Download'
 	],
 	currentTab: 'Overview',
 	selectedClass: null,
@@ -29,6 +29,8 @@ document.addEventListener('alpine:init', () => {
 	searchResultsShow: false,
 	format: 'text/html',
 	query: '',
+	llmQuery: '',
+	detectedParams: null,
 	isLoading: false,
     
 	init() {
@@ -896,6 +898,171 @@ document.addEventListener('alpine:init', () => {
     handleSearchItemClick(search) {
       this.search = search;
       this.searchResultsShow = false;
+    },
+
+	detectNLParams() {
+	    console.log('Detecting parameters from natural language query:', this.llmQuery);
+	    
+	    // Default values in case the API call fails
+	    let query = "pizza";
+	    let type = "superclass";
+	    const direct = "false";
+	    const labels = "true";
+	    const axioms = "false";
+	    
+	    // Return a promise to allow async processing
+	    return new Promise((resolve, reject) => {
+	        // Call the query parser API
+	        fetch('http://localhost:8000/process', {
+	            method: 'POST',
+	            headers: {
+	                'Content-Type': 'application/json',
+	            },
+	            body: JSON.stringify({ input: this.llmQuery })
+	        })
+	        .then(response => {
+	            if (!response.ok) {
+	                throw new Error('Network response was not ok');
+	            }
+	            return response.json();
+	        })
+	        .then(data => {
+	            console.log('Query parser response:', data);
+	            
+	            // The response should already be a parsed JSON object
+	            // Extract query and type from the data
+	            if (data && typeof data === 'object') {
+	                if (data.query && data.query !== 'unknown') {
+	                    query = data.query;
+	                }
+	                if (data.type && data.type !== 'unknown') {
+	                    type = data.type;
+	                }
+	            }
+	            
+	            // Resolve with the parameters
+	            resolve({
+	                "query": query,
+	                "type": type,
+	                "direct": direct,
+	                "labels": labels,
+	                "axioms": axioms
+	            });
+	        })
+	        .catch(error => {
+	            console.error('Error calling query parser API:', error);
+	            // Resolve with default values in case of error
+	            resolve({
+	                "query": query,
+	                "type": type,
+	                "direct": direct,
+	                "labels": labels,
+	                "axioms": axioms
+	            });
+	        });
+	    });
+	},
+    // Process natural language query and convert to SPARQL
+	processLLMQuery() {
+	    if (!this.llmQuery) {
+		alert('Please enter a natural language query');
+		return;
+	    }
+	    
+	    this.isLoading = true;
+	    const dlQueryUrl = "http://localhost:88/api/api/runQuery.groovy";
+
+	    // First detect parameters from natural language
+	    this.detectNLParams()
+	        .then(all_params => {
+	            const query = all_params.query;
+	            const type = all_params.type;
+	            const direct = all_params.direct;
+	            const labels = all_params.labels;
+	            const axioms = all_params.axioms;
+	            
+	            // Display the detected parameters
+	            this.detectedParams = JSON.stringify(all_params, null, 2);
+	            
+	            // Build the query URL with parameters
+	            const params = `query=${query}&type=${type}&direct=${direct}&labels=${labels}&axioms=${axioms}`;
+	            const queryUrl = `${dlQueryUrl}?${params}`;
+	   
+	            // Execute the query with detected parameters
+	            return fetch(queryUrl, {
+	         method: 'GET',
+	         headers: {
+	             'Accept': 'application/json,*/*;q=0.9'
+	         }
+	            })
+	     .then(response => {
+	         if (!response.ok) {
+	      throw new Error(`HTTP error! status: ${response.status}`);
+	         }
+	         return response.json();
+	     });
+	        })
+		.then(data => {
+		    console.log("LLM query response:", data);
+		    
+		    // Clear any previous results
+		    this.dlResults = [];
+		    
+		    // Process the results for display
+		    if (data && data.result) {
+		        // Format the results similar to SPARQL tab
+		        this.dlResults = data.result.map(item => {
+		            // If item is a string, use it directly
+		            if (typeof item === 'string') {
+		                return { label: item };
+		            }
+		            
+		            // If item is an object with owlClass, use that
+		            if (item.owlClass) {
+		                const displayValue = item.label ?
+		                    item.label :
+		                    item.owlClass.includes('#') ?
+		                        item.owlClass.split('#').pop() :
+		                        item.owlClass.split('/').pop();
+		                        
+		                return {
+		                    label: `<a href="#/Browse/${encodeURIComponent(item.owlClass)}">${displayValue}</a>`
+		                };
+		            }
+		            
+		            // Fallback for other formats
+		            return {
+		                label: item.label || item.value || JSON.stringify(item)
+		            };
+		        });
+		    } else {
+		        // Handle empty or unexpected response
+		        this.dlResults = [{label: "No results found"}];
+		    }
+		    
+		    this.isLoading = false;
+		})
+		.catch(error => {
+		    console.error('Error processing LLM query:', error);
+		    this.isLoading = false;
+		    this.dlResults = [{label: 'Error: ' + error.message}];
+		});
+	},
+    
+    // Handle LLM query input change
+    onLLMQueryChange(event) {
+      this.llmQuery = event.target.value;
+    },
+    
+    // Example queries for LLMQuery tab
+    setSuperclassesCheesyPizzaExample(event) {
+      if (event) event.preventDefault();
+      this.llmQuery = "What are the superclasses of cheesypizza?";
+    },
+    
+    setSubclassesCheesyPizzaExample(event) {
+      if (event) event.preventDefault();
+      this.llmQuery = "What are the subclasses of cheesypizza?";
     },
 
   }));

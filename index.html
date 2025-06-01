@@ -629,37 +629,108 @@
                     <tbody>
                       <template x-for="(item, index) in dlResults" :key="index">
                         <tr>
-                          <td x-html="item.label"></td>
+                            <td x-html="item.label"></td>
                         </tr>
                       </template>
                     </tbody>
                   </table>
                 </div>
 
-              <!-- Download Tab -->
+
+		
+              </div>
+              <!-- LLM query Tab -->
+              <div x-show="currentTab === 'LLMQuery'">
+                  <div layout="row">
+                      <div class="form-group margin-top-15">
+                          <label for="llmquery-input">Natural Language Query:</label>
+                          <textarea class="form-control" id="llmquery-input" x-model="llmQuery" @input="onLLMQueryChange($event)"
+                              placeholder="Enter your query in natural language" rows="5"></textarea>
+                      </div>
+                  </div>
+
+                  <div layout="row" class="margin-top-15">
+                      <button type="button" class="btn btn-primary" @click="processLLMQuery">Run Query</button>
+                  </div>
+
+                  <div layout="row" class="margin-top-15">
+                      <div class="alert alert-info">
+                          <p>Enter your query in natural language and click "Run Query" to execute it.</p>
+                          <p>Examples:
+                             <a href="#" @click="setSuperclassesCheesyPizzaExample">What are the superclasses of cheesypizza?</a> |
+                             <a href="#" @click="setSubclassesCheesyPizzaExample">What are the subclasses of cheesypizza?</a>
+                          </p>
+                      </div>
+                  </div>
+                  
+                  <!-- Display Detected Parameters -->
+                  <div class="margin-top-15" x-show="detectedParams">
+                      <h4>Detected Parameters</h4>
+                      <pre class="code-block"><code x-text="detectedParams"></code></pre>
+                  </div>
+                  
+                  <!-- Results Format and Download -->
+                  <div layout="row" class="margin-top-15" x-show="dlResults.length > 0">
+                      <div class="col-md-6">
+			  <label for="format">Results Format</label>
+			  <select class="form-control" @change="onFormatChange($event)" x-model="format">
+			      <template x-for="item in getSparqlFormats()" :key="item.format">
+				  <option :value="item.format" x-text="item.name"></option>
+			      </template>
+			  </select>
+                      </div>
+                      <div class="col-md-6">
+			  <label for="download">Download Results</label>
+			  <form @submit.prevent="downloadResults($event)">
+			      <button type="submit" id="download" class="btn btn-success form-control">Download</button>
+			  </form>
+                      </div>
+                  </div>
+                  
+                  <!-- Display SPARQL Results -->
+                  <div class="margin-top-15" x-show="dlResults.length > 0">
+                    <table class="table table-hover">
+		      <thead>
+			<tr>
+			  <th>Result</th>
+			</tr>
+		      </thead>
+		      <tbody>
+			<template x-for="(item, index) in dlResults" :key="index">
+			  <tr>
+			    <td x-html="item.label"></td>
+			  </tr>
+			</template>
+		      </tbody>
+                    </table>
+                  </div>
+              </div>
+	      
+	      <!-- Download Tab -->
               <div x-show="currentTab === 'Download'">
-                <table class="table table-hover">
-                  <thead>
-                    <tr>
-                      <template x-for="field in getDownloadFields()" :key="field">
-                        <th x-text="field"></th>
-                      </template>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <template x-for="(item, index) in ontology?.downloads" :key="index">
-                      <tr>
-                        <td x-text="item[0]"></td>
-                        <td x-text="item[1]"></td>
-                        <td><a :href="'/' + item[2]">Download</a></td>
-                      </tr>
-                    </template>
-                  </tbody>
-                </table>
+                  <table class="table table-hover">
+                      <thead>
+			  <tr>
+			      <template x-for="field in getDownloadFields()" :key="field">
+				  <th x-text="field"></th>
+			      </template>
+			  </tr>
+                      </thead>
+                      <tbody>
+			  <template x-for="(item, index) in ontology?.downloads" :key="index">
+			      <tr>
+				  <td x-text="item[0]"></td>
+				  <td x-text="item[1]"></td>
+				  <td><a :href="'/' + item[2]">Download</a></td>
+			      </tr>
+			  </template>
+                      </tbody>
+                  </table>
               </div>
 
               <!-- Property Tab -->
-              <div x-show="currentTab === 'Property'">
+
+	      <div x-show="currentTab === 'Property'">
                 <template x-if="selectedProp === null">
                   <h2>Please select an object property!</h2>
                 </template>
@@ -684,9 +755,8 @@
                     </table>
                   </div>
                 </template>
-              </div>
+			    </div>
             </div>
-          </div>
         </div>
       </main>
 

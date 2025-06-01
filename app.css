@@ -7,6 +7,22 @@
   --border-color: #ddd;
 }
 
+/* Styles for the LLM query tab */
+pre.code-block {
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  padding: 10px;
+  margin-top: 10px;
+  font-family: monospace;
+  white-space: pre-wrap;
+}
+
+/* Add some spacing between buttons */
+.btn + .btn {
+  margin-left: 10px;
+}
+
 body {
   font-family: 'Helvetica Neue', Arial, sans-serif;
   line-height: 1.6;
@@ -425,4 +441,31 @@ textarea.search-input {
     margin-right: 0;
     margin-bottom: 0.5rem;
   }
+}
+
+/* Code block styling for LLM query tab */
+.code-block {
+  background-color: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 10px;
+  margin: 10px 0;
+  overflow-x: auto;
+}
+
+.code-block code {
+  font-family: Consolas, Monaco, 'Andale Mono', monospace;
+  color: #333;
+  white-space: pre;
+  display: block;
+}
+
+/* Alert styling for LLM query tab */
+.alert-info {
+  background-color: #d9edf7;
+  border: 1px solid #bce8f1;
+  color: #31708f;
+  padding: 15px;
+  border-radius: 4px;
+  margin-bottom: 20px;
 }
