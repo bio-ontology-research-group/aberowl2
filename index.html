@@ -83,232 +83,43 @@
                 </div>
                 <div class="panel-body">
                   <div class="tree">
-                    <ul>
-                      <!-- Pizza -->
-                      <li :class="{ 'active': isNodeActive(ontology?.classes[0]) }">
-                        <span>
-                          <i :class="'glyphicon ' + (ontology?.classes[0]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"
-                            @click.prevent="toggleCollapsed($event, ontology?.classes[0])"></i>
-                        </span>
-                        <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[0]?.owlClass)"
-                          @click="handleNodeClick($event, ontology?.classes[0]?.owlClass)">Pizza</a>
-
-                        <ul x-show="!ontology?.classes[0]?.collapsed">
-                          <!-- NamedPizza -->
-                          <li :class="{ 'active': isNodeActive(ontology?.classes[0]?.children[0]) }">
-                            <span>
-                              <i :class="'glyphicon ' + (ontology?.classes[0]?.children[0]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"
-                                @click.prevent="toggleCollapsed($event, ontology?.classes[0]?.children[0])"></i>
-                            </span>
-                            <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[0]?.children[0]?.owlClass)"
-                              @click="handleNodeClick($event, ontology?.classes[0]?.children[0]?.owlClass)">NamedPizza</a>
-
-                            <ul x-show="!ontology?.classes[0]?.children[0]?.collapsed">
-                              <!-- Margherita -->
-                              <li :class="{ 'active': isNodeActive(ontology?.classes[0]?.children[0]?.children[0]) }">
-                                <span>
-                                  <i :class="'glyphicon ' + (ontology?.classes[0]?.children[0]?.children[0]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"
-                                    @click.prevent="toggleCollapsed($event, ontology?.classes[0]?.children[0]?.children[0])"></i>
-                                </span>
-                                <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[0]?.children[0]?.children[0]?.owlClass)"
-                                  @click="handleNodeClick($event, ontology?.classes[0]?.children[0]?.children[0]?.owlClass)">Margherita</a>
-                              </li>
-
-                              <!-- Americana -->
-                              <li :class="{ 'active': isNodeActive(ontology?.classes[0]?.children[0]?.children[1]) }">
-                                <span>
-                                  <i :class="'glyphicon ' + (ontology?.classes[0]?.children[0]?.children[1]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"
-                                    @click.prevent="toggleCollapsed($event, ontology?.classes[0]?.children[0]?.children[1])"></i>
-                                </span>
-                                <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[0]?.children[0]?.children[1]?.owlClass)"
-                                  @click="handleNodeClick($event, ontology?.classes[0]?.children[0]?.children[1]?.owlClass)">Americana</a>
-                              </li>
-
-                              <!-- Capricciosa -->
-                              <li :class="{ 'active': isNodeActive(ontology?.classes[0]?.children[0]?.children[2]) }">
-                                <span>
-                                  <i :class="'glyphicon ' + (ontology?.classes[0]?.children[0]?.children[2]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"
-                                    @click.prevent="toggleCollapsed($event, ontology?.classes[0]?.children[0]?.children[2])"></i>
-                                </span>
-                                <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[0]?.children[0]?.children[2]?.owlClass)"
-                                  @click="handleNodeClick($event, ontology?.classes[0]?.children[0]?.children[2]?.owlClass)">Capricciosa</a>
-                              </li>
-
-                              <!-- FourSeasons -->
-                              <li :class="{ 'active': isNodeActive(ontology?.classes[0]?.children[0]?.children[3]) }">
-                                <span>
-                                  <i :class="'glyphicon ' + (ontology?.classes[0]?.children[0]?.children[3]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"
-                                    @click.prevent="toggleCollapsed($event, ontology?.classes[0]?.children[0]?.children[3])"></i>
-                                </span>
-                                <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[0]?.children[0]?.children[3]?.owlClass)"
-                                  @click="handleNodeClick($event, ontology?.classes[0]?.children[0]?.children[3]?.owlClass)">FourSeasons</a>
-                              </li>
-                            </ul>
-                          </li>
-                        </ul>
-                      </li>
-
-                      <!-- PizzaBase -->
-                      <li :class="{ 'active': isNodeActive(ontology?.classes[1]) }">
-                        <span>
-                          <i :class="'glyphicon ' + (ontology?.classes[1]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"
-                            @click.prevent="toggleCollapsed($event, ontology?.classes[1])"></i>
-                        </span>
-                        <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[1]?.owlClass)"
-                          @click="handleNodeClick($event, ontology?.classes[1]?.owlClass)">PizzaBase</a>
-
-                        <ul x-show="!ontology?.classes[1]?.collapsed">
-                          <!-- DeepPanBase -->
-                          <li :class="{ 'active': isNodeActive(ontology?.classes[1]?.children[0]) }">
-                            <span>
-                              <i :class="'glyphicon ' + (ontology?.classes[1]?.children[0]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"
-                                @click.prevent="toggleCollapsed($event, ontology?.classes[1]?.children[0])"></i>
-                            </span>
-                            <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[1]?.children[0]?.owlClass)"
-                              @click="handleNodeClick($event, ontology?.classes[1]?.children[0]?.owlClass)">DeepPanBase</a>
-                          </li>
-
-                          <!-- ThinAndCrispyBase -->
-                          <li :class="{ 'active': isNodeActive(ontology?.classes[1]?.children[1]) }">
-                            <span>
-                              <i :class="'glyphicon ' + (ontology?.classes[1]?.children[1]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"
-                                @click.prevent="toggleCollapsed($event, ontology?.classes[1]?.children[1])"></i>
-                            </span>
-                            <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[1]?.children[1]?.owlClass)"
-                              @click="handleNodeClick($event, ontology?.classes[1]?.children[1]?.owlClass)">ThinAndCrispyBase</a>
-                          </li>
-                        </ul>
-                      </li>
-
-                      <!-- PizzaTopping -->
-                      <li :class="{ 'active': isNodeActive(ontology?.classes[2]) }">
-                        <span>
-                          <i :class="'glyphicon ' + (ontology?.classes[2]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"
-                            @click.prevent="toggleCollapsed($event, ontology?.classes[2])"></i>
-                        </span>
-                        <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[2]?.owlClass)"
-                          @click="handleNodeClick($event, ontology?.classes[2]?.owlClass)">PizzaTopping</a>
-
-                        <ul x-show="!ontology?.classes[2]?.collapsed">
-                          <!-- CheeseTopping -->
-                          <li :class="{ 'active': isNodeActive(ontology?.classes[2]?.children[0]) }">
-                            <span>
-                              <i :class="'glyphicon ' + (ontology?.classes[2]?.children[0]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"
-                                @click.prevent="toggleCollapsed($event, ontology?.classes[2]?.children[0])"></i>
-                            </span>
-                            <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[2]?.children[0]?.owlClass)"
-                              @click="handleNodeClick($event, ontology?.classes[2]?.children[0]?.owlClass)">CheeseTopping</a>
-
-                            <ul x-show="!ontology?.classes[2]?.children[0]?.collapsed">
-                              <!-- MozzarellaTopping -->
-                              <li :class="{ 'active': isNodeActive(ontology?.classes[2]?.children[0]?.children[0]) }">
-                                <span>
-                                  <i :class="'glyphicon ' + (ontology?.classes[2]?.children[0]?.children[0]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"
-                                    @click.prevent="toggleCollapsed($event, ontology?.classes[2]?.children[0]?.children[0])"></i>
-                                </span>
-                                <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[2]?.children[0]?.children[0]?.owlClass)"
-                                  @click="handleNodeClick($event, ontology?.classes[2]?.children[0]?.children[0]?.owlClass)">MozzarellaTopping</a>
-                              </li>
-
-                              <!-- ParmesanTopping -->
-                              <li :class="{ 'active': isNodeActive(ontology?.classes[2]?.children[0]?.children[1]) }">
-                                <span>
-                                  <i :class="'glyphicon ' + (ontology?.classes[2]?.children[0]?.children[1]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"
-                                    @click.prevent="toggleCollapsed($event, ontology?.classes[2]?.children[0]?.children[1])"></i>
-                                </span>
-                                <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[2]?.children[0]?.children[1]?.owlClass)"
-                                  @click="handleNodeClick($event, ontology?.classes[2]?.children[0]?.children[1]?.owlClass)">ParmesanTopping</a>
-                              </li>
-                            </ul>
-                          </li>
-
-                          <!-- MeatTopping -->
-                          <li :class="{ 'active': isNodeActive(ontology?.classes[2]?.children[1]) }">
-                            <span>
-                              <i :class="'glyphicon ' + (ontology?.classes[2]?.children[1]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"
-                                @click.prevent="toggleCollapsed($event, ontology?.classes[2]?.children[1])"></i>
-                            </span>
-                            <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[2]?.children[1]?.owlClass)"
-                              @click="handleNodeClick($event, ontology?.classes[2]?.children[1]?.owlClass)">MeatTopping</a>
-
-                            <ul x-show="!ontology?.classes[2]?.children[1]?.collapsed">
-                              <!-- HamTopping -->
-                              <li :class="{ 'active': isNodeActive(ontology?.classes[2]?.children[1]?.children[0]) }">
-                                <span>
-                                  <i :class="'glyphicon ' + (ontology?.classes[2]?.children[1]?.children[0]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"
-                                    @click.prevent="toggleCollapsed($event, ontology?.classes[2]?.children[1]?.children[0])"></i>
-                                </span>
-                                <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[2]?.children[1]?.children[0]?.owlClass)"
-                                  @click="handleNodeClick($event, ontology?.classes[2]?.children[1]?.children[0]?.owlClass)">HamTopping</a>
-                              </li>
-
-                              <!-- PepperoniTopping -->
-                              <li :class="{ 'active': isNodeActive(ontology?.classes[2]?.children[1]?.children[1]) }">
-                                <span>
-                                  <i :class="'glyphicon ' + (ontology?.classes[2]?.children[1]?.children[1]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"
-                                    @click.prevent="toggleCollapsed($event, ontology?.classes[2]?.children[1]?.children[1])"></i>
-                                </span>
-                                <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[2]?.children[1]?.children[1]?.owlClass)"
-                                  @click="handleNodeClick($event, ontology?.classes[2]?.children[1]?.children[1]?.owlClass)">PepperoniTopping</a>
-                              </li>
-                            </ul>
-                          </li>
-
-                          <!-- VegetableTopping -->
-                          <li :class="{ 'active': isNodeActive(ontology?.classes[2]?.children[2]) }">
-                            <span>
-                              <i :class="'glyphicon ' + (ontology?.classes[2]?.children[2]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"
-                                @click.prevent="toggleCollapsed($event, ontology?.classes[2]?.children[2])"></i>
-                            </span>
-                            <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[2]?.children[2]?.owlClass)"
-                              @click="handleNodeClick($event, ontology?.classes[2]?.children[2]?.owlClass)">VegetableTopping</a>
-
-                            <ul x-show="!ontology?.classes[2]?.children[2]?.collapsed">
-                              <!-- TomatoTopping -->
-                              <li :class="{ 'active': isNodeActive(ontology?.classes[2]?.children[2]?.children[0]) }">
-                                <span>
-                                  <i :class="'glyphicon ' + (ontology?.classes[2]?.children[2]?.children[0]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"
-                                    @click.prevent="toggleCollapsed($event, ontology?.classes[2]?.children[2]?.children[0])"></i>
-                                </span>
-                                <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[2]?.children[2]?.children[0]?.owlClass)"
-                                  @click="handleNodeClick($event, ontology?.classes[2]?.children[2]?.children[0]?.owlClass)">TomatoTopping</a>
-                              </li>
-
-                              <!-- MushroomTopping -->
-                              <li :class="{ 'active': isNodeActive(ontology?.classes[2]?.children[2]?.children[1]) }">
-                                <span>
-                                  <i :class="'glyphicon ' + (ontology?.classes[2]?.children[2]?.children[1]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"
-                                    @click.prevent="toggleCollapsed($event, ontology?.classes[2]?.children[2]?.children[1])"></i>
-                                </span>
-                                <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[2]?.children[2]?.children[1]?.owlClass)"
-                                  @click="handleNodeClick($event, ontology?.classes[2]?.children[2]?.children[1]?.owlClass)">MushroomTopping</a>
-                              </li>
-
-                              <!-- OliveTopping -->
-                              <li :class="{ 'active': isNodeActive(ontology?.classes[2]?.children[2]?.children[2]) }">
-                                <span>
-                                  <i :class="'glyphicon ' + (ontology?.classes[2]?.children[2]?.children[2]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"
-                                    @click.prevent="toggleCollapsed($event, ontology?.classes[2]?.children[2]?.children[2])"></i>
-                                </span>
-                                <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[2]?.children[2]?.children[2]?.owlClass)"
-                                  @click="handleNodeClick($event, ontology?.classes[2]?.children[2]?.children[2]?.owlClass)">OliveTopping</a>
-                              </li>
-
-                              <!-- ArtichokeTopping -->
-                              <li :class="{ 'active': isNodeActive(ontology?.classes[2]?.children[2]?.children[3]) }">
-                                <span>
-                                  <i :class="'glyphicon ' + (ontology?.classes[2]?.children[2]?.children[3]?.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"
-                                    @click.prevent="toggleCollapsed($event, ontology?.classes[2]?.children[2]?.children[3])"></i>
-                                </span>
-                                <a :href="'#/Browse/' + encodeURIComponent(ontology?.classes[2]?.children[2]?.children[3]?.owlClass)"
-                                  @click="handleNodeClick($event, ontology?.classes[2]?.children[2]?.children[3]?.owlClass)">ArtichokeTopping</a>
-                              </li>
-                            </ul>
-                          </li>
-                        </ul>
-                      </li>
-                    </ul>
+                    <template x-if="ontology && ontology.classes">
+                      <ul>
+                        <template x-for="root in ontology.classes" :key="root.owlClass">
+                          <div
+                            x-data="treeNodeComponent({ node: root })"
+                            x-init="init()"
+                            x-template="tree-node">
+                          </div>
+                        </template>
+                      </ul>
+                    </template>
                   </div>
+
+                  <!-- Tree Node Template -->
+                  <template id="tree-node">
+                    <li :class="{ 'active': isNodeActive(node) }">
+                      <span @click.prevent="toggle()">
+                        <i :class="'glyphicon ' + (collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"></i>
+                      </span>
+                      <a href="#"
+                         @click.prevent="handleNodeClick(node.owlClass)"
+                         x-text="node.label">
+                      </a>
+
+                      <template x-if="node.children.length && !collapsed">
+                        <ul>
+                          <template x-for="child in node.children" :key="child.owlClass">
+                            <div
+                              x-data="treeNodeComponent({ node: child })"
+                              x-init="init()"
+                              x-template="tree-node">
+                            </div>
+                          </template>
+                        </ul>
+                      </template>
+                    </li>
+                  </template>
                 </div>
               </div>
 
@@ -320,36 +131,43 @@
                 <div class="panel-body">
                   <div class="tree properties">
                     <ul>
-                      <template x-for="node in ontology?.properties" :key="node.owlClass">
-                        <li :class="{ 'active': isPropertyActive(node) }">
-                          <span>
-                            <i :class="'glyphicon ' + (node.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"
-                              @click.prevent="togglePropertyCollapsed($event, node)"></i>
-                          </span>
-                          <a :href="'#/Property/' + encodeURIComponent(node.owlClass)"
-                            @click="handlePropertyClick($event, node.owlClass)" x-text="node.label"></a>
-
-                          <!-- Render children if not collapsed -->
-                          <template x-if="'children' in node && !node.collapsed">
-                            <ul>
-                              <template x-for="child in node.children" :key="child.owlClass">
-                                <li :class="{ 'active': isPropertyActive(child) }">
-                                  <span>
-                                    <i :class="'glyphicon ' + (child.collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"
-                                      @click.prevent="togglePropertyCollapsed($event, child)"></i>
-                                  </span>
-                                  <a :href="'#/Property/' + encodeURIComponent(child.owlClass)"
-                                    @click="handlePropertyClick($event, child.owlClass)" x-text="child.label"></a>
-                                </li>
-                              </template>
-                            </ul>
-                          </template>
-                        </li>
+                      <template x-for="root in ontology?.properties" :key="root.owlClass">
+                        <div 
+                          x-data="propertyNodeComponent({ node: root })" 
+                          x-init="init()" 
+                          x-bind:key="root.owlClass"
+                          x-template="property-node">
+                        </div>
                       </template>
                     </ul>
                   </div>
                 </div>
               </div>
+
+              <!-- Property Node Template -->
+              <template id="property-node">
+                <li :class="{ 'active': isPropertyActive(node) }">
+                  <span @click.prevent="toggle()">
+                    <i :class="'glyphicon ' + (collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"></i>
+                  </span>
+                  <a href="#"
+                     @click.prevent="$root.handlePropertyClick($event, node.owlClass)"
+                     x-text="node.label"></a>
+
+                  <!-- Render children if not collapsed -->
+                  <template x-if="node.children && node.children.length && !collapsed">
+                    <ul>
+                      <template x-for="child in node.children" :key="child.owlClass">
+                        <div 
+                          x-data="propertyNodeComponent({ node: child })" 
+                          x-init="init()" 
+                          x-template="property-node">
+                        </div>
+                      </template>
+                    </ul>
+                  </template>
+                </li>
+              </template>
             </div>
 
             <div class="col-sm-8 col-md-9 main">
@@ -563,7 +381,7 @@
                     <template x-for="(item, index) in dlResults" :key="index">
                       <tr>
                         <td>
-                          <a :href="'#/Browse/' + encodeURIComponent(item.owlClass)" x-text="item.owlClass"></a>
+                          <a :href="'#/Browse/' + encodeURIComponent(item.owlClass)" @click.prevent="handleNodeClick($event, item.owlClass)" x-text="item.owlClass"></a>
                         </td>
                         <td x-text="item.label"></td>
                         <td x-text="item.definition"></td>
@@ -776,3 +594,4 @@
 </body>
 
 </html>
+

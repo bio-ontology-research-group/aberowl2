@@ -1,6 +1,33 @@
 console.log('Loading ontology.js');
 
 document.addEventListener('alpine:init', () => {
+    Alpine.data('treeNodeComponent', ({ node }) => ({
+        node,
+        collapsed: true,
+        init() { /* ... */ },
+        toggle() { this.collapsed = !this.collapsed; },
+        isNodeActive(n) { return this.$root.isNodeActive(n); },
+        handleNodeClick(iri) { this.$root.handleNodeClick(null, iri); }
+    }));
+    
+    // Register the property node component factory
+    Alpine.data('propertyNodeComponent', ({ node }) => ({
+        node,
+        collapsed: true,
+        init() {
+            // optional: collapse based on some property on node
+        },
+        toggle() {
+            this.collapsed = !this.collapsed;
+        },
+        isPropertyActive(n) {
+            return this.$root.isPropertyActive(n);
+        },
+        handlePropertyClick(iri) {
+            this.$root.handlePropertyClick(null, iri);
+        }
+    }));
+    
     // Create an Alpine.js store for sharing data between components
     Alpine.store('ontologyApp', {
 	ontology: null,
@@ -91,24 +118,23 @@ document.addEventListener('alpine:init', () => {
     ensureCollapsedState(classes) {
       if (!classes) return;
       
-      for (let i = 0; i < classes.length; i++) {
-        const cls = classes[i];
-        // Set all classes to collapsed (hidden)
-        cls.collapsed = true;
+      const processNode = (node) => {
+        if (!node) return;
         
-        // Recursively collapse all children
-        if (cls.children) {
-          for (let j = 0; j < cls.children.length; j++) {
-            if (cls.children[j]) {
-              cls.children[j].collapsed = true;
-              
-              // Recursively collapse all deeper levels
-              if (cls.children[j].children) {
-                this.ensureCollapsedState(cls.children[j].children);
-              }
-            }
+        // Set node to collapsed by default
+        node.collapsed = true;
+        
+        // Process children recursively
+        if (node.children && node.children.length > 0) {
+          for (let i = 0; i < node.children.length; i++) {
+            processNode(node.children[i]);
           }
         }
+      };
+      
+      // Process all top-level classes
+      for (let i = 0; i < classes.length; i++) {
+        processNode(classes[i]);
       }
     },
     
@@ -124,7 +150,58 @@ document.addEventListener('alpine:init', () => {
           return response.json();
         })
         .then(data => {
+          // 1. Index classes and re-initialize children arrays
+          const flat = data.classes;
+          const byIri = new Map();
+          flat.forEach(c => {
+            byIri.set(c.owlClass, c);
+            c.children = []; // Re-initialize so we can build exactly what we want
+          });
+          
+          // 2. Populate children from the subClassOf field
+          flat.forEach(c => {
+            const parents = c.subClassOf || [];
+            if (Array.isArray(parents)) {
+              parents.forEach(parentIri => {
+                const parent = byIri.get(parentIri);
+                if (parent) parent.children.push(c);
+              });
+            } else if (typeof parents === 'string') {
+              // Handle case where subClassOf is a single string
+              const parent = byIri.get(parents);
+              if (parent) parent.children.push(c);
+            }
+          });
+          
+          // Create a parent dictionary for navigation
+          const parentDict = new Map();
+          flat.forEach(c => {
+            if (c.children && c.children.length > 0) {
+              c.children.forEach(child => {
+                if (child && child.owlClass) {
+                  parentDict.set(child.owlClass, c.owlClass);
+                }
+              });
+            }
+          });
+          
+          // Also process properties to ensure they have children arrays
+          if (data.properties) {
+            data.properties.forEach(p => {
+              if (!p.children) {
+                p.children = [];
+              }
+            });
+          }
+          
+          // 3. Extract only the true roots
+          const roots = flat.filter(c => 
+            (c.subClassOf || []).length === 0
+          );
+          
           this.ontology = data;
+          this.ontology.classes = roots;
+          this.ontology.parentDict = parentDict;
           this.processOntologyData();
           this.isLoading = false;
         })
@@ -167,23 +244,43 @@ document.addEventListener('alpine:init', () => {
           // Expand the selected class to show its children
           if (obj.children && obj.children.length > 0) {
             obj.collapsed = false;
+            // Process all children recursively
+            this.processChildrenRecursively(obj.children);
+          } else {
+            // If no children are loaded yet, load them
+            this.loadChildrenForClass(owlClass);
           }
           
           // Execute a DL query to get subclasses
           this.executeBrowseDLQuery(owlClass);
         } else {
-          // In a real app, this would fetch from API
+          // Make a real API call to fetch the class hierarchy
           this.isLoading = true;
           
-          // Simulate API call
-          setTimeout(() => {
-            // For demo purposes, we'll just select the first class
-            if (this.ontology.classes.length > 0) {
-              this.selectedClass = this.ontology.classes[0];
-              this.executeBrowseDLQuery(this.ontology.classes[0].owlClass);
-            }
-            this.isLoading = false;
-          }, 500);
+          // Fetch the class hierarchy from the backend
+          fetch(`/api/ontology/${this.ontology.acronym}/root/${encodeURIComponent(owlClass)}`)
+            .then(response => {
+              if (!response.ok) {
+                throw new Error('Network response was not ok');
+              }
+              return response.json();
+            })
+            .then(data => {
+              // Process the class hierarchy and find the root
+              this.findRoot(owlClass, data);
+              
+              // Set the current tab to Browse
+              this.currentTab = 'Browse';
+              
+              // Execute a DL query to get subclasses
+              this.executeBrowseDLQuery(owlClass);
+              
+              this.isLoading = false;
+            })
+            .catch(error => {
+              console.error('Error fetching class hierarchy:', error);
+              this.isLoading = false;
+            });
         }
       } else if (tab === 'DLQuery' && owlClass) {
         if (this.classesMap.has(owlClass)) {
@@ -205,7 +302,7 @@ document.addEventListener('alpine:init', () => {
       this.isLoading = true;
       
       // Make a real API call to the backend
-      fetch(`/api/dlquery?query=${encodeURIComponent(owlClass)}&type=${queryType}&ontology=PIZZA`)
+      fetch(`/api/dlquery?query=${encodeURIComponent(owlClass)}&type=${queryType}&ontology=${this.ontology.acronym}`)
         .then(response => {
           if (!response.ok) {
             throw new Error('Network response was not ok');
@@ -226,21 +323,89 @@ document.addEventListener('alpine:init', () => {
 
     findRoot(owlClass, data) {
       // Process the class hierarchy and find the root
-      const q = data.result.slice();
-      let it = 0;
+      this.ontology.classes = data.result;
       
-      while(it < q.length) {
-        const cl = q[it];
-        if ('children' in cl) {
-          cl.collapsed = true;
-          q.push(...cl.children);
+      // Clear and rebuild the classesMap and parentDict
+      this.classesMap = new Map();
+      const parentDict = new Map();
+      this.ontology.parentDict = parentDict;
+      
+      // Process all classes recursively to ensure they're in the classesMap
+      const processNodesRecursively = (nodes) => {
+        if (!nodes || nodes.length === 0) return;
+        
+        for (let i = 0; i < nodes.length; i++) {
+          const node = nodes[i];
+          if (!node) continue;
+          
+          // Add to classesMap
+          this.classesMap.set(node.owlClass, node);
+          
+          // Set collapsed state
+          node.collapsed = true;
+          
+          // Process children recursively and build parent dictionary
+          if (node.children && node.children.length > 0) {
+            node.children.forEach(child => {
+              if (child && child.owlClass) {
+                parentDict.set(child.owlClass, node.owlClass);
+              }
+            });
+            processNodesRecursively(node.children);
+          }
         }
-        this.classesMap.set(cl.owlClass, cl);
-        it++;
+      };
+      
+      // Process the entire hierarchy
+      processNodesRecursively(this.ontology.classes);
+      
+      // Set the selected class
+      this.selectedClass = this.classesMap.get(owlClass);
+      
+      // If we found the selected class, expand it
+      if (this.selectedClass) {
+        this.selectedClass.collapsed = false;
+        
+        // Also expand all parent nodes to make the selected class visible
+        this.expandParentNodes(owlClass);
       }
       
-      this.ontology.classes = data.result;
-      this.selectedClass = this.classesMap.get(owlClass);
+      // Update the store
+      Alpine.store('ontologyApp').selectedClass = this.selectedClass;
+      
+      return {
+        classesMap: this.classesMap,
+        selectedClass: this.selectedClass,
+        ontology: this.ontology
+      };
+    },
+    
+    // Helper method to expand all parent nodes of a given class
+    expandParentNodes(owlClass) {
+      // Use the parent dictionary to directly find the path to the root
+      const parentDict = this.ontology.parentDict;
+      if (!parentDict) return;
+      
+      // Build the path from the class to the root
+      const path = [];
+      let currentClass = owlClass;
+      
+      while (currentClass && parentDict.has(currentClass)) {
+        const parentIri = parentDict.get(currentClass);
+        const parentNode = this.classesMap.get(parentIri);
+        
+        if (parentNode) {
+          path.push(parentNode);
+          currentClass = parentIri;
+        } else {
+          break;
+        }
+      }
+      
+      // Expand all nodes in the path (from root to target)
+      path.reverse().forEach(node => {
+        node.collapsed = false;
+      });
     },
 
     setTab(tab) {
@@ -759,7 +924,11 @@ document.addEventListener('alpine:init', () => {
     // This will be handled with x-show directives in the template
 
     isNodeActive(node) {
-      return this.selectedClass && this.selectedClass.owlClass === node.owlClass;
+      if (!node || !this.selectedClass) return false;
+      
+      // Handle both node objects and direct owlClass strings
+      const nodeOwlClass = typeof node === 'string' ? node : node.owlClass;
+      return this.selectedClass.owlClass === nodeOwlClass;
     },
     
     // Toggle the collapsed state of a node
@@ -772,19 +941,52 @@ document.addEventListener('alpine:init', () => {
       // Toggle collapsed state
       node.collapsed = !node.collapsed;
       
-      // If we're expanding a node, make sure all its children are collapsed
-      if (!node.collapsed && node.children) {
-        node.children.forEach(child => {
-          if (child) child.collapsed = true;
-        });
+      // If expanding and node has children, make sure they're properly initialized
+      if (!node.collapsed && node.children && node.children.length > 0) {
+        // Keep children collapsed initially
+        this.processChildrenRecursively(node.children);
+      }
+      
+      // If expanding and node doesn't have children yet, load them
+      if (!node.collapsed && (!node.children || node.children.length === 0)) {
+        this.loadChildrenForClass(node.owlClass);
       }
     },
     
     handleNodeClick(event, owlClass) {
-      event.preventDefault();
+      if (event) event.preventDefault();
       
       const obj = this.classesMap.get(owlClass);
-      if (!obj) return;
+      if (!obj) {
+        // If the class is not in the map, fetch it from the backend
+        this.isLoading = true;
+        
+        fetch(`/api/ontology/${this.ontology.acronym}/root/${encodeURIComponent(owlClass)}`)
+          .then(response => {
+            if (!response.ok) {
+              throw new Error('Network response was not ok');
+            }
+            return response.json();
+          })
+          .then(data => {
+            // Process the class hierarchy and find the root
+            const state = this.findRoot(owlClass, data);
+            
+            // Set the current tab to Browse
+            this.currentTab = 'Browse';
+            Alpine.store('ontologyApp').currentTab = 'Browse';
+            
+            // Execute a DL query to get subclasses
+            this.executeBrowseDLQuery(owlClass);
+            
+            this.isLoading = false;
+          })
+          .catch(error => {
+            console.error('Error fetching class hierarchy:', error);
+            this.isLoading = false;
+          });
+        return;
+      }
       
       // Update URL hash
       window.location.hash = `/Browse/${encodeURIComponent(owlClass)}`;
@@ -796,15 +998,90 @@ document.addEventListener('alpine:init', () => {
       this.currentTab = 'Browse';
       Alpine.store('ontologyApp').currentTab = 'Browse';
       
-      // Expand the selected class to show its children
-      if (obj.children && obj.children.length > 0) {
-        obj.collapsed = false;
+      // Toggle the collapsed state to show/hide children
+      obj.collapsed = !obj.collapsed;
+      
+      // Process all children recursively
+      if (!obj.collapsed && obj.children && obj.children.length > 0) {
+        this.processChildrenRecursively(obj.children);
       }
+      
+      // If we need to load children from the backend
+      if (!obj.collapsed && (!obj.children || obj.children.length === 0)) {
+        this.loadChildrenForClass(owlClass);
+      }
+      
+      // Execute a DL query to get subclasses when a node is selected
+      this.executeBrowseDLQuery(owlClass);
       
       // Set DL query expression based on class label
       if (this.selectedClass) {
         let label = this.selectedClass.label.toLowerCase();
         this.dlQueryExp = label.includes(' ') ? `'${label}'` : label;
+      }
+    },
+    
+    // Load children for a class from the backend
+    loadChildrenForClass(owlClass) {
+      this.isLoading = true;
+      
+      fetch(`/api/dlquery?direct=true&axioms=true&query=${encodeURIComponent(owlClass)}&type=subclass&ontology=${this.ontology.acronym}`)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Network response was not ok');
+          }
+          return response.json();
+        })
+        .then(data => {
+          const obj = this.classesMap.get(owlClass);
+          if (obj && data.result) {
+            // Set children and ensure they're in the classesMap
+            obj.children = data.result;
+            
+            // Add each child to the classesMap
+            for (let i = 0; i < obj.children.length; i++) {
+              const child = obj.children[i];
+              if (child && child.owlClass) {
+                this.classesMap.set(child.owlClass, child);
+                
+                // Also update the parent dictionary
+                if (this.ontology.parentDict) {
+                  this.ontology.parentDict.set(child.owlClass, owlClass);
+                }
+              }
+            }
+            
+            // Process children recursively
+            this.processChildrenRecursively(obj.children);
+          }
+          this.isLoading = false;
+        })
+        .catch(error => {
+          console.error('Error loading children for class:', error);
+          this.isLoading = false;
+        });
+    },
+    
+    // Recursively process all children to ensure they're properly initialized
+    processChildrenRecursively(children) {
+      if (!children || children.length === 0) return;
+      
+      for (let i = 0; i < children.length; i++) {
+        const child = children[i];
+        if (!child) continue;
+        
+        // Ensure child is in the classesMap
+        if (!this.classesMap.has(child.owlClass)) {
+          this.classesMap.set(child.owlClass, child);
+        }
+        
+        // Set child to collapsed by default
+        child.collapsed = true;
+        
+        // Process this child's children recursively
+        if (child.children && child.children.length > 0) {
+          this.processChildrenRecursively(child.children);
+        }
       }
     },
 
@@ -826,10 +1103,16 @@ document.addEventListener('alpine:init', () => {
       
       // Toggle collapsed state
       node.collapsed = !node.collapsed;
+      
+      // If expanding and node has children, make sure they're properly initialized
+      if (!node.collapsed && node.children && node.children.length > 0) {
+        // Process children recursively
+        this.processChildrenRecursively(node.children);
+      }
     },
     
     handlePropertyClick(event, owlClass) {
-      event.preventDefault();
+      if (event) event.preventDefault();
       
       const obj = this.propsMap.get(owlClass);
       if (!obj) return;
@@ -843,6 +1126,14 @@ document.addEventListener('alpine:init', () => {
       
       this.currentTab = 'Property';
       Alpine.store('ontologyApp').currentTab = 'Property';
+      
+      // Toggle the collapsed state to show/hide children
+      obj.collapsed = !obj.collapsed;
+      
+      // Process all children recursively if expanding
+      if (!obj.collapsed && obj.children && obj.children.length > 0) {
+        this.processChildrenRecursively(obj.children);
+      }
     },
 
     // Already implemented above
@@ -1067,3 +1358,4 @@ document.addEventListener('alpine:init', () => {
 
   }));
 });
+
