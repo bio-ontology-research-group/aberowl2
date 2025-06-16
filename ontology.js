@@ -637,35 +637,6 @@ document.addEventListener('alpine:init', () => {
       
       this.query = query;
     },
-    
-    setDDIEMFilterExampleQuery(event) {
-      if (event) event.preventDefault();
-	const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
-	      "PREFIX owl: <http://www.w3.org/2002/07/owl#> \n" +
-              "SELECT DISTINCT ?class \n" + 
-	      " WHERE { ?class rdf:type owl:Class . } \n" +
-	      "ORDER BY ?class \n" +
-	      "LIMIT 10";
-
-      // const query2 = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
-      // "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>   \n" +
-      // "PREFIX obo: <http://purl.obolibrary.org/obo/>   \n" +   
-      // "SELECT ?procedure ?evidenceCode ?phenotypeCorrected   \n" +   
-      // "FROM <http://ddiem.phenomebrowser.net>    \n" +  
-      // "WHERE {    \n" +     
-      // "	?procedure rdf:type ?procedureType .    \n" +  
-      // "	?procedure obo:RO_0002558 ?evidenceCode .     \n" + 
-      // "	?procedure obo:RO_0002212 ?phenotypes .      \n" +
-      // "	?phenotypes rdfs:label ?phenotypeCorrected .      \n" +
-      // "	FILTER ( ?procedureType in (    \n" +
-      // "		OWL equivalent <http://ddiem.phenomebrowser.net/sparql> <DDIEM> {     \n" +   
-      // "			'metabolite replacement'       \n" +
-      // "		}        \n" +
-      // "	) ).     \n" +
-      // "}";
-      
-      this.query = query;
-    },
 
       // Parse the raw JSON string into a structured object
       parseSparqlResults(rawJsonString) {
@@ -719,7 +690,7 @@ document.addEventListener('alpine:init', () => {
 	  if (event) event.preventDefault();
 	  this.isLoading = true;
   
-	  const sparqlUrl = 'http://localhost:88/api/api/sparql.groovy';
+	  const sparqlUrl = '/api/api/sparql.groovy';
 	  const formData = new URLSearchParams();
 	  formData.append('query', this.query.trim());
   
@@ -1204,7 +1175,7 @@ document.addEventListener('alpine:init', () => {
 	    // Return a promise to allow async processing
 	    return new Promise((resolve, reject) => {
 	        // Call the query parser API
-	        fetch('http://localhost:8000/process', {
+	        fetch('/llm', {
 	            method: 'POST',
 	            headers: {
 	                'Content-Type': 'application/json',
@@ -1261,7 +1232,7 @@ document.addEventListener('alpine:init', () => {
 	    }
 	    
 	    this.isLoading = true;
-	    const dlQueryUrl = "http://localhost:88/api/api/runQuery.groovy";
+	    const dlQueryUrl = "/api/api/runQuery.groovy";
 
 	    // First detect parameters from natural language
 	    this.detectNLParams()
