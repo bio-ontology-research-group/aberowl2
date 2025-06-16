@@ -39,6 +39,7 @@ We use NGINX to map the endpoints to:
 - `http://localhost:8890/sparql` --> `http://localhost:88/virtuoso/`
 - `http://localhost:8080/api/` --> `http://localhost:88/api/`
 - `http://localhost:9200` --> `http://localhost:88/elastic/`
+- `http://localhost:8000/process` --> `http://localhost:88/llm`
 
 ### Tests
 - Test SPARQL Queries
@@ -70,5 +71,34 @@ We use NGINX to map the endpoints to:
     ```
     *(You should see `ontology_index` and `owl_class_index` among others)*
 
+- Test LLM Query Parser:
+  ```bash
+  curl -X POST http://localhost:8000/process -H "Content-Type: application/json" -d '{"input": "What are the superclasses of cheesypizza?"}'
+  ```
+  *(You should receive a JSON response with the parsed query and type)*
+
+### LLM Query Parser Service
+
+The project includes an LLM-powered query parser service that can interpret natural language queries about ontologies. This service:
+
+- Uses the CAMEL framework with LLaMA 3.3 (via OpenRouter) to parse natural language queries
+- Extracts the entity and query type (superclass, subclass, equivalent) from natural language
+- Provides a REST API endpoint for integration with other services
+
+#### Requirements
+
+To use the LLM service, you need to:
+
+1. Set the `OPENROUTER_API_KEY` environment variable with your OpenRouter API key
+   ```bash
+   export OPENROUTER_API_KEY=your_api_key_here
+   ```
+   
+   Or add it to your `.env` file:
+   ```
+   OPENROUTER_API_KEY=your_api_key_here
+   ```
+
+2. The service will be available at `http://localhost:8000` when running with Docker Compose
 
 

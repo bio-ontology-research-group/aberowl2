@@ -3,9 +3,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.virtuoso
-    ports:
-      - "8890:8890"  # SPARQL and HTTP
-      - "1111:1111"  # SQL port
+    # Ports commented out as they'll be accessed through nginx
+    # Uncomment for direct access during development if needed
+    # ports:
+    #   - "127.0.0.1:8890:8890"  # SPARQL and HTTP
+    #   - "127.0.0.1:1111:1111"  # SQL port
     environment:
       # ONTOLOGY_FILE is the path *inside* the container where load_ontology.sh expects it
       - ONTOLOGY_FILE=${ONTOLOGY_FILE} # Default to pizza.owl if not set
@@ -19,8 +21,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
-    ports:
-      - "8080:8080" # API port
+    # Ports commented out as they'll be accessed through nginx
+    # Uncomment for direct access during development if needed
+    # ports:
+    #   - "127.0.0.1:8080:8080" # API port
     # environment:
       # ONTOLOGY_FILE is the path *inside* the container
       # - ONTOLOGY_FILE=${ONTOLOGY_FILE:-/data/pizza.owl} # Default to pizza.owl if not set
@@ -40,9 +44,11 @@ services:
     environment:
       - discovery.type=single-node
       - ES_JAVA_OPTS=-Xms512m -Xmx512m # Adjust memory as needed
-    ports:
-      - "9200:9200" # HTTP port
-      - "9300:9300" # Transport port
+    # Ports commented out as they'll be accessed through nginx
+    # Uncomment for direct access during development if needed
+    # ports:
+    #   - "127.0.0.1:9200:9200" # HTTP port
+    #   - "127.0.0.1:9300:9300" # Transport port
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     restart: unless-stopped
@@ -79,16 +85,34 @@ services:
     restart: 'no'
 
 
-  # nginx:     
-    # build:
-      # context: .
-      # dockerfile: Dockerfile.nginx
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+    ports:
+      - "88:88"  # Expose only nginx port to the outside world
+    depends_on:
+      - virtuoso
+      - ontology-api
+      - elasticsearch
+      - llm
+    volumes:
+      # Optional: Mount the frontend files if you're serving them via nginx
+      - ./:/usr/share/nginx/html
+
+  llm:
+    build:
+      context: .
+      dockerfile: Dockerfile.llm
+    # Ports commented out as they'll be accessed through nginx
+    # Uncomment for direct access during development if needed
     # ports:
-      # - "88:80"
-    # depends_on:
-      # - virtuoso
-      # - ontology-api
-      # - elasticsearch
+    #   - "127.0.0.1:8000:8000"  # FastAPI port
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    restart: unless-stopped
+    depends_on:
+      - ontology-api
 
 volumes:
   virtuoso_data:
