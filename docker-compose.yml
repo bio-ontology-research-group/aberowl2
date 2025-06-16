@@ -90,7 +90,7 @@ services:
       context: .
       dockerfile: Dockerfile.nginx
     ports:
-      - "88:88"  # Expose only nginx port to the outside world
+      - "${NGINX_PORT}:80"  # Expose configurable nginx port to the outside world
     depends_on:
       - virtuoso
       - ontology-api
