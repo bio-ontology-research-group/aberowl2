@@ -8,8 +8,6 @@ if(!application) {
 }
 
 def params = Util.extractParams(request);
-print(params)
-def ontology = params.ontology;
 def property = params.property;
 def manager = application.manager;
 
@@ -21,7 +19,7 @@ if(manager) {
         print(new JsonBuilder(objectProperties))
     } else {
         property = URLDecoder.decode(property, "UTF-8")
-        def objectProperties = managers[ontology].getObjectProperties(property)
+        def objectProperties = manager.getObjectProperties(property)
         print(new JsonBuilder(objectProperties))
     }
 } else {

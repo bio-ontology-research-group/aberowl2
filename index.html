@@ -83,43 +83,15 @@
                 </div>
                 <div class="panel-body">
                   <div class="tree">
-                    <template x-if="ontology && ontology.classes">
+                    <div x-show="ontology.classes">
                       <ul>
-                        <template x-for="root in ontology.classes" :key="root.owlClass">
-                          <div
-                            x-data="treeNodeComponent({ node: root })"
-                            x-init="init()"
-                            x-template="tree-node">
+                        <template x-for="item in ontology.classes" :key="item.owlClass">
+                          <div x-html="renderNode(item, 0)">
                           </div>
                         </template>
                       </ul>
-                    </template>
+                    </div>
                   </div>
-
-                  <!-- Tree Node Template -->
-                  <template id="tree-node">
-                    <li :class="{ 'active': isNodeActive(node) }">
-                      <span @click.prevent="toggle()">
-                        <i :class="'glyphicon ' + (collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"></i>
-                      </span>
-                      <a href="#"
-                         @click.prevent="handleNodeClick(node.owlClass)"
-                         x-text="node.label">
-                      </a>
-
-                      <template x-if="node.children.length && !collapsed">
-                        <ul>
-                          <template x-for="child in node.children" :key="child.owlClass">
-                            <div
-                              x-data="treeNodeComponent({ node: child })"
-                              x-init="init()"
-                              x-template="tree-node">
-                            </div>
-                          </template>
-                        </ul>
-                      </template>
-                    </li>
-                  </template>
                 </div>
               </div>
 
@@ -130,44 +102,17 @@
                 </div>
                 <div class="panel-body">
                   <div class="tree properties">
-                    <ul>
-                      <template x-for="root in ontology?.properties" :key="root.owlClass">
-                        <div 
-                          x-data="propertyNodeComponent({ node: root })" 
-                          x-init="init()" 
-                          x-bind:key="root.owlClass"
-                          x-template="property-node">
-                        </div>
-                      </template>
-                    </ul>
+                    <div x-show="ontology.properties">
+                      <ul>
+                        <template x-for="item in ontology.properties" :key="item.owlClass">
+                          <div x-html="renderProperty(item, 0)">
+                          </div>
+                        </template>
+                      </ul>
+                    </div>
                   </div>
                 </div>
               </div>
-
-              <!-- Property Node Template -->
-              <template id="property-node">
-                <li :class="{ 'active': isPropertyActive(node) }">
-                  <span @click.prevent="toggle()">
-                    <i :class="'glyphicon ' + (collapsed ? 'glyphicon-plus' : 'glyphicon-minus')"></i>
-                  </span>
-                  <a href="#"
-                     @click.prevent="$root.handlePropertyClick($event, node.owlClass)"
-                     x-text="node.label"></a>
-
-                  <!-- Render children if not collapsed -->
-                  <template x-if="node.children && node.children.length && !collapsed">
-                    <ul>
-                      <template x-for="child in node.children" :key="child.owlClass">
-                        <div 
-                          x-data="propertyNodeComponent({ node: child })" 
-                          x-init="init()" 
-                          x-template="property-node">
-                        </div>
-                      </template>
-                    </ul>
-                  </template>
-                </li>
-              </template>
             </div>
 
             <div class="col-sm-8 col-md-9 main">

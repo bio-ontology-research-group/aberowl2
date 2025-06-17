@@ -45,7 +45,7 @@ ES_DATA_VOLUME="${PROJECT_NAME}_elasticsearch_data"
 # --- Stop and Clean Up ---
 echo "Stopping and removing existing containers and networks (including anonymous volumes)..."
 # -v removes anonymous volumes attached to containers
-docker compose down -v --remove-orphans
+docker-compose down -v --remove-orphans
 
 echo "Attempting to remove existing named volumes ($VIRTUOSO_DATA_VOLUME, $VIRTUOSO_LOGS_VOLUME, $ES_DATA_VOLUME)..."
 docker volume rm "$VIRTUOSO_DATA_VOLUME" 2>/dev/null || true # Ignore error if not found
@@ -73,7 +73,7 @@ chmod +x "$HOST_INDEXER_SCRIPT_PATH"
 
 # Run docker compose up
 # We use -d for detached mode. The indexer service will run, index, and then exit.
-docker compose up --build -d
+docker-compose up --build -d
 
 # --- Output Information ---
 echo "Services are starting/restarting."
