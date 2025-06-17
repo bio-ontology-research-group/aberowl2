@@ -7,3 +7,5 @@ rdflib>=6.0.0
 gevent
 camel-ai
 fastapi
+pillow
+unstructured

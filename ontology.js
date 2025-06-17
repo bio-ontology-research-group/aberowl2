@@ -1187,77 +1187,77 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
     this.searchResultsShow = false;
   },
 
-detectNLParams() {
-    console.log('Detecting parameters from natural language query:', this.llmQuery);
-    
-    // Default values in case the API call fails
-    let query = "pizza";
-    let type = "superclass";
-    const direct = "false";
-    const labels = "true";
-    const axioms = "false";
-    
-    // Return a promise to allow async processing
-    return new Promise((resolve, reject) => {
-        // Call the query parser API
-        fetch('http://localhost:8000/process', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ input: this.llmQuery })
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-            return response.json();
-        })
-        .then(data => {
-            console.log('Query parser response:', data);
-            
-            // The response should already be a parsed JSON object
-            // Extract query and type from the data
-            if (data && typeof data === 'object') {
-                if (data.query && data.query !== 'unknown') {
-                    query = data.query;
-                }
-                if (data.type && data.type !== 'unknown') {
-                    type = data.type;
-                }
-            }
-            
-            // Resolve with the parameters
-            resolve({
-                "query": query,
-                "type": type,
-                "direct": direct,
-                "labels": labels,
-                "axioms": axioms
-            });
-        })
-        .catch(error => {
-            console.error('Error calling query parser API:', error);
-            // Resolve with default values in case of error
-            resolve({
-                "query": query,
-                "type": type,
-                "direct": direct,
-                "labels": labels,
-                "axioms": axioms
-            });
-        });
-    });
-},
-  // Process natural language query and convert to SPARQL
-processLLMQuery() {
-    if (!this.llmQuery) {
-  alert('Please enter a natural language query');
-  return;
-    }
-    
-    this.isLoading = true;
-    const dlQueryUrl = "http://localhost:88/api/api/runQuery.groovy";
+	detectNLParams() {
+	    console.log('Detecting parameters from natural language query:', this.llmQuery);
+	    
+	    // Default values in case the API call fails
+	    let query = "pizza";
+	    let type = "superclass";
+	    const direct = "false";
+	    const labels = "true";
+	    const axioms = "false";
+	    
+	    // Return a promise to allow async processing
+	    return new Promise((resolve, reject) => {
+	        // Call the query parser API
+	        fetch('/llm', {
+	            method: 'POST',
+	            headers: {
+	                'Content-Type': 'application/json',
+	            },
+	            body: JSON.stringify({ input: this.llmQuery })
+	        })
+	        .then(response => {
+	            if (!response.ok) {
+	                throw new Error('Network response was not ok');
+	            }
+	            return response.json();
+	        })
+	        .then(data => {
+	            console.log('Query parser response:', data);
+	            
+	            // The response should already be a parsed JSON object
+	            // Extract query and type from the data
+	            if (data && typeof data === 'object') {
+	                if (data.query && data.query !== 'unknown') {
+	                    query = data.query;
+	                }
+	                if (data.type && data.type !== 'unknown') {
+	                    type = data.type;
+	                }
+	            }
+	            
+	            // Resolve with the parameters
+	            resolve({
+	                "query": query,
+	                "type": type,
+	                "direct": direct,
+	                "labels": labels,
+	                "axioms": axioms
+	            });
+	        })
+	        .catch(error => {
+	            console.error('Error calling query parser API:', error);
+	            // Resolve with default values in case of error
+	            resolve({
+	                "query": query,
+	                "type": type,
+	                "direct": direct,
+	                "labels": labels,
+	                "axioms": axioms
+	            });
+	        });
+	    });
+	},
+    // Process natural language query and convert to SPARQL
+	processLLMQuery() {
+	    if (!this.llmQuery) {
+		alert('Please enter a natural language query');
+		return;
+	    }
+	    
+	    this.isLoading = true;
+	    const dlQueryUrl = "/api/api/runQuery.groovy";
 
     // First detect parameters from natural language
     this.detectNLParams()
