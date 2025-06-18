@@ -284,8 +284,8 @@ Alpine.data('ontologyApp', () => ({
       }
       
       if (query) {
-        this.dlQuery = query;
-        this.executeDLQuery(owlClass, query);
+          this.dlQuery = query;
+          this.executeDLQuery(owlClass, query);
       }
     } else if (tab === 'Property' && owlClass) {
       if (this.propsMap.has(owlClass)) {
@@ -295,8 +295,14 @@ Alpine.data('ontologyApp', () => ({
   },
   
   executeDLQuery(owlClass, queryType, labels = true) {
-    this.isLoading = true;
-    
+      this.isLoading = true;
+      if (this.classesMap.has(owlClass)) {
+	  owlClass = this.classesMap.get(owlClass).label.toLowerCase();
+      }
+
+      owlClass = owlClass.replace(/['\s]/g, '');
+      
+      console.log('Executing DL query for class:', owlClass, 'with type:', queryType, 'and labels:', labels);
     // Make a real API call to the backend
     fetch(`/api/api/runQuery.groovy?query=${encodeURIComponent(owlClass)}&type=${queryType}&labels=${labels}`)
       .then(response => {
@@ -1146,8 +1152,13 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
   },
   
   executeSearch(search) {
+    // Get the port number from the URL
+    const port = window.location.port;
+    // Use the port number to construct the correct index name
+    const indexName = `class_index_${port}`;
+    
     // Direct Elasticsearch query for label matches
-    fetch('/elastic/owl_class_index/_search', {
+    fetch(`/elastic/${indexName}/_search`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -25,16 +25,15 @@ echo "Using custom nginx port: $NGINX_PORT"
 PROJECT_NAME="aberowl_${NGINX_PORT}"
 echo "Using project name: $PROJECT_NAME"
 
-# Set unique container names based on port to avoid conflicts
-export ELASTICSEARCH_CONTAINER_NAME="elasticsearch_${NGINX_PORT}"
-export INDEXER_CONTAINER_NAME="indexer_${NGINX_PORT}"
-echo "Using container names: $ELASTICSEARCH_CONTAINER_NAME, $INDEXER_CONTAINER_NAME"
+# Using project name to ensure unique container names
+echo "Using project name: $PROJECT_NAME (this will prefix all container names)"
 
 # Elasticsearch settings (can be overridden by environment variables)
 # Use port-specific index names to avoid conflicts between instances
-export ELASTICSEARCH_URL=${ELASTICSEARCH_URL:-"http://elasticsearch:9200"}
-export ONTOLOGY_INDEX_NAME=${ONTOLOGY_INDEX_NAME:-"ontology_index_${NGINX_PORT}"}
-export CLASS_INDEX_NAME=${CLASS_INDEX_NAME:-"class_index_${NGINX_PORT}"}
+# We're hardcoding the Elasticsearch URL to ensure internal Docker network communication
+export ELASTICSEARCH_URL="http://elasticsearch:9200"
+export ONTOLOGY_INDEX_NAME="ontology_index_${NGINX_PORT}"
+export CLASS_INDEX_NAME="class_index_${NGINX_PORT}"
 export SKIP_EMBEDDING=${SKIP_EMBEDDING:-"True"} # Set to "False" to attempt embedding loading
 
 # Check if the ontology file exists on the host
@@ -66,20 +65,8 @@ chmod +x "$HOST_INDEXER_SCRIPT_PATH"
 
 # Run docker compose up
 # We use -d for detached mode. The indexer service will run, index, and then exit.
-# Create a temporary docker-compose override file to set unique container names
-cat > docker-compose.override.yml <<EOL
-services:
-  elasticsearch:
-    container_name: ${ELASTICSEARCH_CONTAINER_NAME}
-  indexer:
-    container_name: ${INDEXER_CONTAINER_NAME}
-EOL
-
 # Use the -p flag to specify a unique project name
 docker compose -p "$PROJECT_NAME" up --build -d
-
-# Clean up the temporary override file
-rm docker-compose.override.yml
 
 # --- Output Information ---
 echo "Services are starting/restarting."

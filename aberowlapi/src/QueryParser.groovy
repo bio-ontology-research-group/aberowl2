@@ -67,7 +67,7 @@ public class QueryParser {
 
         result = parser.parse(mOwl);
       } catch(Exception e) {
-	    throw new RuntimeException("QueryParser.groovy: Error parsing Manchester OWL Syntax query: " + mOwl+ " || " + e.getMessage())
+            throw new RuntimeException("QueryParser.groovy: Error parsing Manchester OWL Syntax query: " + mOwl+ " || " + e.getMessage())
 	                
 	    result = null
 	}  

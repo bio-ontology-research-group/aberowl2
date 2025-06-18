@@ -23,7 +23,8 @@ export NGINX_PORT=$2
 echo "Using custom nginx port: $NGINX_PORT"
 
 # Elasticsearch settings (can be overridden by environment variables)
-export ELASTICSEARCH_URL=${ELASTICSEARCH_URL:-"http://elasticsearch:9200"}
+# We're hardcoding the Elasticsearch URL to ensure internal Docker network communication
+export ELASTICSEARCH_URL="http://elasticsearch:9200"
 export ONTOLOGY_INDEX_NAME=${ONTOLOGY_INDEX_NAME:-"ontology_index"}
 export CLASS_INDEX_NAME=${CLASS_INDEX_NAME:-"owl_class_index"}
 export SKIP_EMBEDDING=${SKIP_EMBEDDING:-"True"} # Set to "False" to attempt embedding loading
