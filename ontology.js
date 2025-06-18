@@ -279,8 +279,9 @@ Alpine.data('ontologyApp', () => ({
           });
       }
     } else if (tab === 'DLQuery' && owlClass) {
-      if (this.classesMap.has(owlClass)) {
-        this.selectedClass = this.classesMap.get(owlClass);
+	if (this.classesMap.has(owlClass)) {
+	    //replace spaces by underscores
+        this.selectedClass = this.classesMap.get(owlClass)
       }
       
       if (query) {
@@ -296,11 +297,6 @@ Alpine.data('ontologyApp', () => ({
   
   executeDLQuery(owlClass, queryType, labels = true) {
       this.isLoading = true;
-      if (this.classesMap.has(owlClass)) {
-	  owlClass = this.classesMap.get(owlClass).label.toLowerCase();
-      }
-
-      owlClass = owlClass.replace(/['\s]/g, '');
       
       console.log('Executing DL query for class:', owlClass, 'with type:', queryType, 'and labels:', labels);
     // Make a real API call to the backend
@@ -1018,8 +1014,8 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
     
     // Set DL query expression based on class label
     if (this.selectedClass) {
-      let label = this.selectedClass.label.toLowerCase();
-      this.dlQueryExp = label.includes(' ') ? `'${label}'` : label;
+      let label = this.selectedClass.label.toLowerCase().replace(/ /g, '_');
+      this.dlQueryExp = label.includes(' ') ? `${label}` : label;
     }
   },
   

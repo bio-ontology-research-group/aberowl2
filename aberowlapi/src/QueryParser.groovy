@@ -47,30 +47,57 @@ public class QueryParser {
     }
     
     /**
-     * Convert a Manchester OWL Syntax query into a generalised class description.
+     * Convert a IRI string or a Manchester OWL Syntax query into a generalised class description.
      * 
-     * @param mOwl String containing a class expression in Manchester OWL Syntax.
+     * @param mOwl String containing a class expression in Manchester OWL Syntax or IRI format
      * @return An OWLClassExpression generated from mOwl
      */
     public OWLClassExpression parse(String mOwl, boolean labels) {
-      def result = null
+	def result = null
 
-      try {
-        OWLDataFactory dFactory = this.ontology.getOWLOntologyManager().getOWLDataFactory();
-        def eChecker = new BasicEntityChecker(dFactory, ontology)
-        def parser = new ManchesterOWLSyntaxClassExpressionParser(dFactory, eChecker);
+	if (mOwl.startsWith("<") && mOwl.endsWith(">")) {
+		mOwl = mOwl.substring(1, mOwl.length() - 1).trim();
+	        def iri = IRI.create(mOwl);
+	        result = this.ontology.getOWLOntologyManager().getOWLDataFactory().getOWLClass(iri);
+        }else{
+     try {
+                OWLDataFactory dFactory = this.ontology.getOWLOntologyManager().getOWLDataFactory();
+  def eChecker = new BasicEntityChecker(dFactory, ontology)
+  def parser = new ManchesterOWLSyntaxClassExpressionParser(dFactory, eChecker);
 
-        if(labels) {
-          eChecker = new ShortFormEntityChecker(biSFormProvider)
-          parser = new ManchesterOWLSyntaxClassExpressionParser(dFactory, eChecker);
-        }
+  if(labels) {
+      // Always use BasicEntityChecker to ensure consistent handling of underscores
+      eChecker = new BasicEntityChecker(dFactory, ontology)
+      parser = new ManchesterOWLSyntaxClassExpressionParser(dFactory, eChecker);
+  }
 
-        result = parser.parse(mOwl);
-      } catch(Exception e) {
-            throw new RuntimeException("QueryParser.groovy: Error parsing Manchester OWL Syntax query: " + mOwl+ " || " + e.getMessage())
-	                
-	    result = null
-	}  
+                // Try to parse the input directly
+                try {
+                    result = parser.parse(mOwl);
+                } catch(Exception firstTryException) {
+                    // If parsing fails and the input doesn't contain spaces,
+                    // try to find a matching class with spaces in its label
+                    if (!mOwl.contains(" ")) {
+                        // First try with our enhanced BasicEntityChecker
+                        def basicChecker = new BasicEntityChecker(dFactory, ontology)
+                        def basicParser = new ManchesterOWLSyntaxClassExpressionParser(dFactory, basicChecker);
+                        
+                        try {
+                            result = basicParser.parse(mOwl);
+                        } catch(Exception secondTryException) {
+                            // If that fails too, rethrow the original exception
+                            throw firstTryException;
+                        }
+                    } else {
+                        // If the input already contains spaces, just rethrow the exception
+                        throw firstTryException;
+                    }
+                }
+     } catch(Exception e) {
+  throw new RuntimeException("QueryParser.groovy: Error parsing Manchester OWL Syntax query: " + mOwl+ " || " + e.getMessage())
+         result = null
+     }
+	}
 
       return result
     }

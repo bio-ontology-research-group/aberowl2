@@ -79,12 +79,13 @@ public class RequestManager {
 	df.getOWLAnnotationProperty(IRI.create('http://www.geneontology.org/formats/oboInOwl#hasDefinition'))
     ];
 
-    ShortFormProvider shortFormProvider;
+    NewShortFormProvider shortFormProvider;
 
     public RequestManager(String ont, String ontIRI) {
 	this.ont = ont;
 	this.ontIRI = ontIRI;
-	this.shortFormProvider = new SimpleShortFormProvider();
+	// Initialize with null, will be set in createReasoner()
+	this.shortFormProvider = null;
     } 
     
     public static RequestManager create(String ont, String ontIRI) {
@@ -174,7 +175,7 @@ public class RequestManager {
 	StructuralReasonerFactory sReasonerFactory = new StructuralReasonerFactory()
 	this.structReasoner = sReasonerFactory.createReasoner(ontology)
 	
-	def sForm = new NewShortFormProvider(
+	this.shortFormProvider = new NewShortFormProvider(
 	    this.aProperties, preferredLanguageMap, manager);
 
 	// dispose of old reasoners, close the threadpool
@@ -184,10 +185,10 @@ public class RequestManager {
 	if (this.oReasoner.getEquivalentClasses(df.getOWLNothing()).getEntitiesMinusBottom().size() >= MAX_UNSATISFIABLE_CLASSES) {
 	    this.oReasoner.dispose()
 	    this.oReasoner = this.structReasoner;
-	    queryEngine = new QueryEngine(this.oReasoner, sForm)
+	    queryEngine = new QueryEngine(this.oReasoner, this.shortFormProvider)
 	    println "Successfully classified $ont but switched to structural reasoner"
 	} else {
-	    this.queryEngine = new QueryEngine(this.oReasoner, sForm)
+	    this.queryEngine = new QueryEngine(this.oReasoner, this.shortFormProvider)
 	    println "Successfully classified $ont"
 	}
 
@@ -213,16 +214,17 @@ public class RequestManager {
 	    if (annot.isDeprecatedIRIAnnotation()) {
 		info["deprecated"] = true
 	    } else if (aProp in this.identifiers) {
-		if (annot.getValue() instanceof OWLLiteral) {
-		    def aVal = annot.getValue().getLiteral()
-		    info['identifier'] << aVal
-		}
+	 if (annot.getValue() instanceof OWLLiteral) {
+	     def aVal = annot.getValue().getLiteral()
+	     info['identifier'] << aVal
+	 }
 	    } else if (aProp in this.labels) {
-		if (annot.getValue() instanceof OWLLiteral) {
-		    def aVal = annot.getValue().getLiteral()
-		    info['label'] = aVal
-		    hasLabel = true
-		}
+	 if (annot.getValue() instanceof OWLLiteral) {
+	     def aVal = annot.getValue().getLiteral()
+	            // Apply camel case splitting to label values
+	            info['label'] = addSpacesToCamelCase(aVal)
+	     hasLabel = true
+	 }
 	    } else if (aProp in this.definitions) {
 		if (annot.getValue() instanceof OWLLiteral) {
 		    def aVal = annot.getValue().getLiteral()
@@ -257,6 +259,7 @@ public class RequestManager {
 	}
 
 	if (!hasLabel) {
+	    // The shortFormProvider already applies camel case splitting
 	    info["label"] = this.shortFormProvider.getShortForm(c);
 	}
 
@@ -266,12 +269,9 @@ public class RequestManager {
 
 	if (axioms) {
 	    // set up the renderer for the axioms
-	    def sProvider = new AnnotationValueShortFormProvider(
-		Collections.singletonList(df.getRDFSLabel()),
-		Collections.<OWLAnnotationProperty, List<String>> emptyMap(),
-		this.oManager);
+	    // Use the same ShortFormProvider that's used elsewhere to ensure consistent rendering
 	    def manSyntaxRenderer = new AberOWLSyntaxRendererImpl()
-	    manSyntaxRenderer.setShortFormProvider(sProvider)
+	    manSyntaxRenderer.setShortFormProvider(this.shortFormProvider)
 
 	    /* get the axioms */
 	    EntitySearcher.getSuperClasses(c, o).each {
@@ -421,8 +421,47 @@ public class RequestManager {
 	    }
 	}
 	return ["result": result.sort {x, y -> x["label"].compareTo(y["label"])}];
-    }
-
-    
+	   }
+	   
+	   /**
+	    * Adds spaces to camel case text.
+	    * For example: "PizzaVegetarianaEquivalente2" becomes "Pizza Vegetariana Equivalente 2"
+	    *
+	    * @param text The text to process
+	    * @return The text with spaces added between camel case words
+	    */
+	   private String addSpacesToCamelCase(String text) {
+	       if (text == null || text.isEmpty()) {
+	           return text;
+	       }
+	       
+	       // If text already contains spaces or underscores, return it as is
+	       if (text.contains(" ") || text.contains("_")) {
+	           return text;
+	       }
+	       
+	       // Simple character-by-character approach to avoid regex issues
+	       StringBuilder result = new StringBuilder();
+	       result.append(text.charAt(0));
+	       
+	       for (int i = 1; i < text.length(); i++) {
+	           char current = text.charAt(i);
+	           char previous = text.charAt(i - 1);
+	           
+	           // Add space before uppercase letter if previous char is lowercase
+	           if (Character.isUpperCase(current) && Character.isLowerCase(previous)) {
+	               result.append(' ');
+	           }
+	           // Add space before digit if previous char is a letter
+	           else if (Character.isDigit(current) && Character.isLetter(previous)) {
+	               result.append(' ');
+	           }
+	           
+	           result.append(current);
+	       }
+	       
+	       return result.toString();
+	   }
+	   
 }
 

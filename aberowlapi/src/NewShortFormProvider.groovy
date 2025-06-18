@@ -203,14 +203,55 @@ public class NewShortFormProvider implements ShortFormProvider {
                 }
             }
             if(checker.getMatch() != null) {
-		String res = getRendering(checker.getMatch());
-		if (res.indexOf(" ")>-1) {
-		    res = "'"+res+"'" ;
-		}
-                return res.toLowerCase() ;
+                String res = getRendering(checker.getMatch());
+                // We still need to handle spaces for the Manchester syntax parser,
+                // but we don't want to display quotes in the frontend
+                // The parser will handle this internally now
+                // Replace spaces with underscores for display
+                return addSpacesToCamelCase(res).toLowerCase().replace(" ", "_");
             }
         }
-        return alternateShortFormProvider.getShortForm(entity).toLowerCase();
+        return addSpacesToCamelCase(alternateShortFormProvider.getShortForm(entity)).toLowerCase().replace(" ", "_");
+    }
+    
+    /**
+     * Adds spaces to camel case text.
+     * For example: "PizzaVegetarianaEquivalente2" becomes "Pizza Vegetariana Equivalente 2"
+     *
+     * @param text The text to process
+     * @return The text with spaces added between camel case words
+     */
+    private String addSpacesToCamelCase(String text) {
+        if (text == null || text.isEmpty()) {
+            return text;
+        }
+        
+        // If text already contains spaces or underscores, return it as is
+        if (text.contains(" ") || text.contains("_")) {
+            return text;
+        }
+        
+        // Simple character-by-character approach to avoid regex issues
+        StringBuilder result = new StringBuilder();
+        result.append(text.charAt(0));
+        
+        for (int i = 1; i < text.length(); i++) {
+            char current = text.charAt(i);
+            char previous = text.charAt(i - 1);
+            
+            // Add space before uppercase letter if previous char is lowercase
+            if (Character.isUpperCase(current) && Character.isLowerCase(previous)) {
+                result.append(' ');
+            }
+            // Add space before digit if previous char is a letter
+            else if (Character.isDigit(current) && Character.isLetter(previous)) {
+                result.append(' ');
+            }
+            
+            result.append(current);
+        }
+        
+        return result.toString();
     }
 
     /** Obtains the rendering of the specified object. If the object is a
