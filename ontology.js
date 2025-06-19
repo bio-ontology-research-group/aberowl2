@@ -619,7 +619,7 @@ Alpine.data('ontologyApp', () => ({
     "PREFIX owl: <http://www.w3.org/2002/07/owl#> \n" +
     "SELECT DISTINCT ?class \n" +
     "WHERE { \n" +
-    "VALUES ?class {OWL superclass <> <> { cheesypizza } } . } \n" +
+    "VALUES ?class {OWL superclass <> <> { cheesy_pizza } } . } \n" +
     "ORDER BY ?class \n"
   this.query = query
     },
@@ -1245,14 +1245,8 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
 	        })
 	        .catch(error => {
 	            console.error('Error calling query parser API:', error);
-	            // Resolve with default values in case of error
-	            resolve({
-	                "query": query,
-	                "type": type,
-	                "direct": direct,
-	                "labels": labels,
-	                "axioms": axioms
-	            });
+	            // Reject with error instead of using default values
+	            reject(error);
 	        });
 	    });
 	},
@@ -1339,7 +1333,16 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
   .catch(error => {
       console.error('Error processing LLM query:', error);
       this.isLoading = false;
-      this.dlResults = [{label: 'Error: ' + error.message}];
+      
+      // Display a more specific error message if it's from the NL params detection
+      if (error.message && error.message.includes('query parser API')) {
+          this.dlResults = [{label: 'Error detecting parameters: ' + error.message}];
+      } else {
+          this.dlResults = [{label: 'Error: ' + error.message}];
+      }
+      
+      // Set detectedParams to show the error
+      this.detectedParams = JSON.stringify({error: error.message}, null, 2);
   });
 },
   
@@ -1351,12 +1354,12 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
   // Example queries for LLMQuery tab
   setSuperclassesCheesyPizzaExample(event) {
     if (event) event.preventDefault();
-    this.llmQuery = "What are the superclasses of cheesypizza?";
+    this.llmQuery = "What are the superclasses of cheesy_pizza?";
   },
   
   setSubclassesCheesyPizzaExample(event) {
     if (event) event.preventDefault();
-    this.llmQuery = "What are the subclasses of cheesypizza?";
+    this.llmQuery = "What are the subclasses of cheesy_pizza?";
   },
 
 }));
