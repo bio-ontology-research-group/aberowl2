@@ -438,13 +438,13 @@ Alpine.data('ontologyApp', () => ({
       ['Description', submission.description],
       ['Version', submission.version],
       ['Release date', submission.date_released],
-      ['Homepage', `<a href="${submission.home_page}" target="_blank">${submission.home_page}</a>`],
-      ['Documentation', `<a href="${submission.documentation}" target="_blank">${submission.documentation}</a>`],
-      ['Publication', submission.publication],
+      // ['Homepage', `<a href="${submission.home_page}" target="_blank">${submission.home_page}</a>`],
+      // ['Documentation', `<a href="${submission.documentation}" target="_blank">${submission.documentation}</a>`],
+      // ['Publication', submission.publication],
       ['Ontology language', submission.has_ontology_language],
-      ['License', 'CC-BY 4.0'],
-      ['Authors', 'The Pizza Ontology Working Group'],
-      ['Contact', '<a href="mailto:pizza@example.org">pizza@example.org</a>']
+      // ['License', 'CC-BY 4.0'],
+      // ['Authors', 'The Pizza Ontology Working Group'],
+      // ['Contact', '<a href="mailto:pizza@example.org">pizza@example.org</a>']
     ];
   },
 
