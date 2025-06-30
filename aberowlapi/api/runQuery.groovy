@@ -22,7 +22,7 @@ if (type == null) {
     type = "all"
 }
 
-direct = (direct.equals("true")) ? true : false;
+direct = true; //(direct.equals("true")) ? true : false;
 labels = (labels.equals("true")) ? true : false;
 axioms = (axioms.equals("true")) ? true : false;
 

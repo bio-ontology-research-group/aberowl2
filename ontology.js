@@ -298,9 +298,52 @@ Alpine.data('ontologyApp', () => ({
   executeDLQuery(owlClass, queryType, labels = true) {
       this.isLoading = true;
       
-      console.log('Executing DL query for class:', owlClass, 'with type:', queryType, 'and labels:', labels);
+      // Check if the query is a class label and format it properly for the Manchester OWL Syntax parser
+      let formattedQuery = owlClass;
+      
+      if (owlClass && typeof owlClass === 'string' && !owlClass.startsWith('<')) {
+          // Try to find an exact match in our class map
+          let foundClass = null;
+          
+          // Search through all classes to find a match by label
+          for (const [iri, classObj] of this.classesMap.entries()) {
+              if (classObj.label) {
+                  // Try different variations of the label for matching
+                  const labelLower = classObj.label.toLowerCase();
+                  const queryLower = owlClass.toLowerCase();
+                  
+                  if (labelLower === queryLower ||
+                      labelLower.replace(/ /g, '_') === queryLower ||
+                      queryLower.replace(/ /g, '_') === labelLower ||
+                      labelLower.replace(/_/g, ' ') === queryLower ||
+                      queryLower.replace(/_/g, ' ') === labelLower) {
+                      foundClass = classObj;
+                      break;
+                  }
+              }
+          }
+          
+          // If we found a matching class, use its IRI
+          if (foundClass) {
+              formattedQuery = foundClass.owlClass;
+              console.log(`Converted class label "${owlClass}" to IRI: ${formattedQuery}`);
+          } else {
+              // If we didn't find a match and the query contains spaces, wrap it in quotes
+              if (owlClass.includes(' ')) {
+                  formattedQuery = `"${owlClass}"`;
+                  console.log(`Added quotes around multi-word query: ${formattedQuery}`);
+              }
+              // If it doesn't contain spaces but isn't a recognized class, try angle brackets
+              else if (!owlClass.startsWith('"')) {
+                  formattedQuery = `<${owlClass}>`;
+                  console.log(`Added angle brackets around query: ${formattedQuery}`);
+              }
+          }
+      }
+      
+      console.log('Executing DL query for class:', formattedQuery, 'with type:', queryType, 'and labels:', labels);
     // Make a real API call to the backend
-    fetch(`/api/api/runQuery.groovy?query=${encodeURIComponent(owlClass)}&type=${queryType}&labels=${labels}`)
+    fetch(`/api/api/runQuery.groovy?query=${encodeURIComponent(formattedQuery)}&type=${queryType}&labels=${labels}`)
       .then(response => {
         if (!response.ok) {
           throw new Error('Network response was not ok');
@@ -574,8 +617,14 @@ Alpine.data('ontologyApp', () => ({
   
   setDLQuery(owlClass, queryType) {
     this.dlQuery = queryType;
+    
+    // Store the original query for display purposes
+    this.dlQueryExp = owlClass;
+    
     // Update URL hash
     window.location.hash = `/DLQuery/${encodeURIComponent(owlClass)}/${queryType}`;
+    
+    // Execute the query with the potentially formatted class
     this.executeDLQuery(owlClass, queryType);
   },
   
@@ -1014,8 +1063,9 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
     
     // Set DL query expression based on class label
     if (this.selectedClass) {
-      let label = this.selectedClass.label.toLowerCase().replace(/ /g, '_');
-      this.dlQueryExp = label.includes(' ') ? `${label}` : label;
+      // Use the class label directly without modification
+      // Our improved executeDLQuery will handle the conversion
+      this.dlQueryExp = this.selectedClass.label;
     }
   },
   
