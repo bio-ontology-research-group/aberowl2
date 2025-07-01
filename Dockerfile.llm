@@ -24,4 +24,4 @@ COPY agents/query_parser.py /app/query_parser.py
 EXPOSE 8000
 
 # Command to run the application
-CMD ["python", "query_parser.py"]
+CMD ["python", "/app/query_parser.py"]
