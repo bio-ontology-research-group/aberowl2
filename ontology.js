@@ -1248,9 +1248,9 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
 	    console.log('Detecting parameters from natural language query:', this.llmQuery);
 	    
 	    // Default values in case the API call fails
-	    let query = "pizza";
-	    let type = "superclass";
-	    const direct = "false";
+	    let query = "";
+	    let type = "";
+	    const direct = "true";
 	    const labels = "true";
 	    const axioms = "false";
 	    
