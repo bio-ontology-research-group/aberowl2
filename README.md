@@ -23,13 +23,15 @@ To use Aber-OWL 2, take the following steps:
 
 ---
 1. Cloning the repository
+   
    ```
    git clone https://github.com/bio-ontology-research-group/aberowl2.git
-	cd aberowl2
-	conda env create -f environment.yml
-```
+   cd aberowl2
+   conda env create -f environment.yml
+   ```
 
 2. To use the LLM service, you need to set  the `OPENROUTER_API_KEY` environment variable with your OpenRouter API key
+   
    ```bash
    export OPENROUTER_API_KEY=your_api_key_here
    ```
@@ -54,7 +56,8 @@ To use Aber-OWL 2, take the following steps:
 	
 ## Developing mode
 
-If you wish to rebuild the docker: change the following lines in `start_docker.sh`
+Dockers are available at DockerHub.  If you wish to rebuild the
+docker: change the following lines in `start_docker.sh`
 
 ```
 # docker compose -p "$PROJECT_NAME" up --build -d
@@ -79,4 +82,5 @@ The project includes an LLM-powered query parser service that can interpret natu
   OpenRouter) to parse natural language queries
 - Extracts the entity and query type (superclass, subclass, equivalent) from natural language
 - Provides a REST API endpoint for integration with other services
+
 
