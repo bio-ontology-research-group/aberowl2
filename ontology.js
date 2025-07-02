@@ -294,12 +294,10 @@ Alpine.data('ontologyApp', () => ({
       }
     }
   },
-  
-  executeDLQuery(owlClass, queryType, labels = true) {
-      this.isLoading = true;
-      
-      // Check if the query is a class label and format it properly for the Manchester OWL Syntax parser
-      let formattedQuery = owlClass;
+
+
+    getFormattedClass(owlClass) {
+	  let formattedQuery = owlClass;
       
       if (owlClass && typeof owlClass === 'string' && !owlClass.startsWith('<')) {
           // Try to find an exact match in our class map
@@ -340,6 +338,14 @@ Alpine.data('ontologyApp', () => ({
               }
           }
       }
+	return formattedQuery;
+    },
+    
+  executeDLQuery(owlClass, queryType, labels = true) {
+      this.isLoading = true;
+
+      formattedQuery = this.getFormattedClass(owlClass);
+      // Check if the query is a class label and format it properly for the Manchester OWL Syntax parser
       
       console.log('Executing DL query for class:', formattedQuery, 'with type:', queryType, 'and labels:', labels);
     // Make a real API call to the backend
@@ -1197,7 +1203,7 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
     }
   },
   
-  executeSearch(search) {
+    executeSearch(search, callback = null) {
     // Get the port number from the URL
     const port = window.location.port;
     // Use the port number to construct the correct index name
@@ -1211,10 +1217,14 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
       },
       body: JSON.stringify({
         query: {
-          bool: {
-            must: [
-              {match_bool_prefix: {label: search.toLowerCase()}},
-            ]
+            bool: {
+		should: [
+		    {match: {label: {query: search.toLowerCase(), boost: 2}}},
+		    {match_bool_prefix: {label: search.toLowerCase()}}
+		]
+            // must: [	    
+              // {match_bool_prefix: {label: search.toLowerCase()}},
+            // ]
           }
         },
         _source: {excludes: ['embedding_vector',]},
@@ -1232,10 +1242,17 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
         label: hit._source.label,
         score: hit._score
       })) || [];
+
+	if (callback) {
+	    callback(this.searchResults);
+	}
     })
     .catch(error => {
       console.error('Elasticsearch error:', error);
-      this.searchResults = [];
+	this.searchResults = [];
+	if (callback) {
+	    callback([]);
+	}
     });
   },
 
@@ -1248,9 +1265,9 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
 	    console.log('Detecting parameters from natural language query:', this.llmQuery);
 	    
 	    // Default values in case the API call fails
-	    let query = "pizza";
-	    let type = "superclass";
-	    const direct = "false";
+	    let query = "";
+	    let type = "";
+	    const direct = "true";
 	    const labels = "true";
 	    const axioms = "false";
 	    
@@ -1300,16 +1317,17 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
 	        });
 	    });
 	},
-    // Process natural language query and convert to SPARQL
-	processLLMQuery() {
-	    if (!this.llmQuery) {
-		alert('Please enter a natural language query');
-		return;
-	    }
-	    
-	    this.isLoading = true;
-	    const dlQueryUrl = "/api/api/runQuery.groovy";
 
+
+    processLLMQuery() {
+    if (!this.llmQuery) {
+        alert('Please enter a natural language query');
+        return;
+    }
+    
+    this.isLoading = true;
+    const dlQueryUrl = "/api/api/runQuery.groovy";
+    
     // First detect parameters from natural language
     this.detectNLParams()
         .then(all_params => {
@@ -1320,81 +1338,105 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
             const axioms = all_params.axioms;
             
             // Display the detected parameters
-            this.detectedParams = JSON.stringify(all_params, null, 2);
+
             
-            // Build the query URL with parameters
-            const params = `query=${query}&type=${type}&direct=${direct}&labels=${labels}&axioms=${axioms}`;
-            const queryUrl = `${dlQueryUrl}?${params}`;
-  
-            // Execute the query with detected parameters
-            return fetch(queryUrl, {
-        method: 'GET',
-        headers: {
-            'Accept': 'application/json,*/*;q=0.9'
-        }
-            })
-    .then(response => {
-        if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return response.json();
-    });
+            // Use callback to wait for search completion
+            this.executeSearch(query, (searchResults) => {
+                console.log("Elasticsearch query response:", searchResults);
+                
+                if (searchResults.length === 0) {
+                    console.error("No search results found");
+                    this.dlResults = [{label: "No search results found"}];
+                    this.isLoading = false;
+                    return;
+                }
+                
+                const top_result = searchResults[0].owlClass;
+                console.log("Top result from Elasticsearch:", top_result);
+                const formattedQuery = encodeURIComponent(this.getFormattedClass(top_result));
+
+		all_params.query = searchResults[0].label[0];
+		this.detectedParams = JSON.stringify(all_params, null, 2);
+                
+                // Build the query URL with parameters
+                const params = `query=${formattedQuery}&type=${type}&direct=${direct}&labels=${labels}&axioms=${axioms}`;
+                const queryUrl = `${dlQueryUrl}?${params}`;
+
+                // Execute the query with detected parameters
+                fetch(queryUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json,*/*;q=0.9'
+                    }
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log("LLM query response:", data);
+                    
+                    // Clear any previous results
+                    this.dlResults = [];
+                    
+                    // Process the results for display
+                    if (data && data.result) {
+                        // Format the results similar to SPARQL tab
+                        this.dlResults = data.result.map(item => {
+                            // If item is a string, use it directly
+                            if (typeof item === 'string') {
+                                return { label: item };
+                            }
+                            
+                            // If item is an object with owlClass, use that
+                            if (item.owlClass) {
+                                const displayValue = item.label ?
+                                    item.label :
+                                    item.owlClass.includes('#') ?
+                                        item.owlClass.split('#').pop() :
+                                        item.owlClass.split('/').pop();
+                                        
+                                return {
+                                    label: `<a href="#/Browse/${encodeURIComponent(item.owlClass)}">${displayValue}</a>`
+                                };
+                            }
+                            
+                            // Fallback for other formats
+                            return {
+                                label: item.label || item.value || JSON.stringify(item)
+                            };
+                        });
+                    } else {
+                        // Handle empty or unexpected response
+                        this.dlResults = [{label: "No results found"}];
+                    }
+                    
+                    this.isLoading = false;
+                })
+                .catch(error => {
+                    console.error('Error processing LLM query:', error);
+                    this.isLoading = false;
+                    this.dlResults = [{label: 'Error: ' + error.message}];
+                });
+            });
         })
-  .then(data => {
-      console.log("LLM query response:", data);
-      
-      // Clear any previous results
-      this.dlResults = [];
-      
-      // Process the results for display
-      if (data && data.result) {
-          // Format the results similar to SPARQL tab
-          this.dlResults = data.result.map(item => {
-              // If item is a string, use it directly
-              if (typeof item === 'string') {
-                  return { label: item };
-              }
-              
-              // If item is an object with owlClass, use that
-              if (item.owlClass) {
-                  const displayValue = item.label ?
-                      item.label :
-                      item.owlClass.includes('#') ?
-                          item.owlClass.split('#').pop() :
-                          item.owlClass.split('/').pop();
-                          
-                  return {
-                      label: `<a href="#/Browse/${encodeURIComponent(item.owlClass)}">${displayValue}</a>`
-                  };
-              }
-              
-              // Fallback for other formats
-              return {
-                  label: item.label || item.value || JSON.stringify(item)
-              };
-          });
-      } else {
-          // Handle empty or unexpected response
-          this.dlResults = [{label: "No results found"}];
-      }
-      
-      this.isLoading = false;
-  })
-  .catch(error => {
-      console.error('Error processing LLM query:', error);
-      this.isLoading = false;
-      
-      // Display a more specific error message if it's from the NL params detection
-      if (error.message && error.message.includes('query parser API')) {
-          this.dlResults = [{label: 'Error detecting parameters: ' + error.message}];
-      } else {
-          this.dlResults = [{label: 'Error: ' + error.message}];
-      }
-      
-      // Set detectedParams to show the error
-      this.detectedParams = JSON.stringify({error: error.message}, null, 2);
-  });
-},
+        .catch(error => {
+            console.error('Error processing LLM query:', error);
+            this.isLoading = false;
+            
+            // Display a more specific error message if it's from the NL params detection
+            if (error.message && error.message.includes('query parser API')) {
+                this.dlResults = [{label: 'Error detecting parameters: ' + error.message}];
+            } else {
+                this.dlResults = [{label: 'Error: ' + error.message}];
+            }
+            
+            // Set detectedParams to show the error
+            this.detectedParams = JSON.stringify({error: error.message}, null, 2);
+        });
+    },
   
   // Handle LLM query input change
   onLLMQueryChange(event) {
@@ -1404,12 +1446,12 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
   // Example queries for LLMQuery tab
   setSuperclassesCheesyPizzaExample(event) {
     if (event) event.preventDefault();
-    this.llmQuery = "What are the superclasses of cheesy_pizza?";
+    this.llmQuery = "What are the superclasses of cheesy pizza?";
   },
   
   setSubclassesCheesyPizzaExample(event) {
     if (event) event.preventDefault();
-    this.llmQuery = "What are the subclasses of cheesy_pizza?";
+    this.llmQuery = "What are the subclasses of cheesy pizza?";
   },
 
 }));
