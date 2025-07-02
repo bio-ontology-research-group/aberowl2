@@ -66,7 +66,9 @@ chmod +x "$HOST_INDEXER_SCRIPT_PATH"
 # Run docker compose up
 # We use -d for detached mode. The indexer service will run, index, and then exit.
 # Use the -p flag to specify a unique project name
-docker compose -p "$PROJECT_NAME" up --build -d
+# docker compose -p "$PROJECT_NAME" up --build -d
+docker compose -f dockerhub-compose.yml -p "$PROJECT_NAME" up -d
+
 
 # --- Output Information ---
 echo "Services are starting/restarting."
