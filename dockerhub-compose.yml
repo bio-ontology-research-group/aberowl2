@@ -1,0 +1,83 @@
+services:
+  virtuoso:
+    image: ferzcam/aberowl-virtuoso:latest
+    environment:
+      - ONTOLOGY_FILE=${ONTOLOGY_FILE}
+    volumes:
+      - ./data:/data # Mount local data dir into container's /data
+      - virtuoso_data:/opt/virtuoso-opensource/database/data
+      - virtuoso_logs:/opt/virtuoso-opensource/database/logs
+    restart: unless-stopped
+
+  ontology-api:
+    image: ferzcam/aberowl-ontology-api:latest
+    volumes:
+      - ./data:/data
+      - ./aberowlapi:/app/aberowlapi
+    command: python3 /app/api_server.py ${ONTOLOGY_FILE}
+    depends_on:
+      - virtuoso
+    restart: unless-stopped
+
+  elasticsearch:
+    image: elasticsearch:7.17.10 # Use a 7.x version compatible with the groovy script client
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m # Adjust memory as needed
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    restart: unless-stopped
+    healthcheck:
+        test: ["CMD-SHELL", "curl -s --fail http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s || exit 1"]
+        interval: 10s
+        timeout: 10s
+        retries: 5
+
+  indexer:
+    image: ferzcam/aberowl-indexer:latest
+    environment:
+      - ONTOLOGY_FILE_PATH=${ONTOLOGY_FILE}
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - ONTOLOGY_INDEX_NAME=${ONTOLOGY_INDEX_NAME:-ontology_index}
+      - CLASS_INDEX_NAME=${CLASS_INDEX_NAME:-owl_class_index}
+      - SKIP_EMBEDDING=${SKIP_EMBEDDING:-True}
+      - ES_USERNAME=${ES_USERNAME:-} # Add username if needed
+      - ES_PASSWORD=${ES_PASSWORD:-} # Add password if needed
+    volumes:
+      - ./data:/data # Mount ontology data
+      - ./docker/scripts:/scripts # Mount scripts including IndexElastic.groovy and run_indexer.sh
+    depends_on:
+      elasticsearch:
+        condition: service_healthy # Wait for elasticsearch to be healthy
+    command: /scripts/run_indexer.sh # This script will execute the groovy script
+    # This service should run once to index, then stop.
+    # Use 'profiles' if you only want to run it explicitly: docker compose --profile indexer up
+    # Or let it run on 'up', and it will exit after indexing. 'restart: no' ensures it doesn't restart.
+    restart: 'no'
+
+  nginx:
+    image: ferzcam/aberowl-nginx:latest
+    ports:
+      - "${NGINX_PORT}:80"  # Expose configurable nginx port to the outside world
+    depends_on:
+      - virtuoso
+      - ontology-api
+      - elasticsearch
+      - llm
+    volumes:
+      # Optional: Mount the frontend files if you're serving them via nginx
+      - ./:/usr/share/nginx/html
+
+  llm:
+    image: ferzcam/aberowl-llm:v3
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    restart: unless-stopped
+    depends_on:
+      - ontology-api
+
+volumes:
+  virtuoso_data:
+  virtuoso_logs:
+  elasticsearch_data:
+
