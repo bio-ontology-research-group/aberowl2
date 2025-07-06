@@ -1,5 +1,11 @@
 package src
 
+import org.semanticweb.owlapi.manchestersyntax.parser.ManchesterOWLSyntaxParserImpl
+import org.semanticweb.owlapi.model.OWLClassExpression
+import org.semanticweb.owlapi.model.OWLDataFactory
+import org.semanticweb.owlapi.model.OWLOntology
+import org.semanticweb.owlapi.util.ShortFormProvider
+
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -17,7 +23,19 @@ public class AberowlManchesterOwlParser {
 
     private static final String VARIABLE_REGEX = "\\?[A-Za-z0-9]+"
 
-    public AberowlManchesterOwlQuery parse(final String manchesterOwlQuery) {
+    private final ManchesterOWLSyntaxParserImpl delegate;
+
+    public AberowlManchesterOwlParser(OWLOntology ontology, ShortFormProvider shortFormProvider) {
+        OWLDataFactory dataFactory = ontology.getOWLOntologyManager().getOWLDataFactory();
+        this.delegate = new ManchesterOWLSyntaxParserImpl(dataFactory, shortFormProvider);
+        delegate.setDefaultOntology(ontology);
+    }
+
+    public OWLClassExpression parse(final String manchesterOwlQuery) {
+        return delegate.parse(manchesterOwlQuery);
+    }
+
+    public AberowlManchesterOwlQuery parseForSparql(final String manchesterOwlQuery) {
         Pattern pattern = Pattern.compile(QUERY_REGEX);
         Matcher matcher = pattern.matcher(manchesterOwlQuery);
         if (matcher.find()) {
@@ -39,13 +57,13 @@ public class AberowlManchesterOwlParser {
     public AberowlManchesterOwlQuery parseSparql(final String sparqlQuery) {
         String manchesterOwlQuery = matchManchesterOwlValueFrame(sparqlQuery);
         if (!manchesterOwlQuery.trim().isEmpty()) {
-            def query = parse(manchesterOwlQuery);
+            def query = parseForSparql(manchesterOwlQuery);
             query.setInValueFrame(true);
             return query;
         } else {
             manchesterOwlQuery = matchManchesterOwlFilterFrame(sparqlQuery); 
             if (!manchesterOwlQuery.trim().isEmpty()) {
-                return parse(manchesterOwlQuery);
+                return parseForSparql(manchesterOwlQuery);
 	    }	    
             return null;
         }
