@@ -50,7 +50,7 @@ try {
 } catch(java.lang.IllegalArgumentException e) {
     response.setStatus(400)
     print new JsonBuilder([ 'error': true, 'message': 'Ontology not found.' ]).toString() 
-} catch(org.semanticweb.owlapi.manchestersyntax.renderer.ParserException e) {
+} catch(org.semanticweb.owlapi.manchestersyntax.parser.ManchesterOWLSyntaxParserException e) {
     response.setStatus(400)
     print new JsonBuilder([ 'error': true, 'message': 'Query parsing error: ' + e.getMessage() ]).toString() 
 } catch(Exception e) {
