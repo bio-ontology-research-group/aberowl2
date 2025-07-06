@@ -23,9 +23,9 @@ def params = Util.extractParams(request);
 
 if (params.stats) {
     response.contentType = 'application/json';
-    def manager = application.manager // This is the application's central manager
+    def ontManager = application.manager // This is the RequestManager
     def ontology = manager.getOntology()
-    def ontManager = manager.getOWLOntologyManager() // This must be the OWLAPI manager
+    def ontManager = manager.getOWLOntologyManager() 
 
     if (!ontology || !ontManager) {
         print(new JsonBuilder([status: "error", message: "Ontology not loaded!"]))
