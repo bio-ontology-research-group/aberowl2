@@ -230,15 +230,6 @@ public class NewShortFormProvider implements BidirectionalShortFormProvider {
         return Collections.emptySet();
     }
 
-    @Override
-    public void add(OWLEntity entity) {
-        // No-op
-    }
-
-    @Override
-    public void remove(OWLEntity entity) {
-        // No-op
-    }
 
     /** Obtains the rendering of the specified object. If the object is a
      * constant then the rendering is equal to the literal value, if the object
