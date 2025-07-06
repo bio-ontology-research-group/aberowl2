@@ -45,34 +45,6 @@ public class QueryEngine {
     public Set<OWLClass> getClasses(OWLClassExpression cExpression, RequestType requestType, boolean direct, boolean labels) {
         Set<OWLClass> classes = new HashSet<>();
         if(cExpression == null) {
-            return classes
-        }
-	
-        switch(requestType) {
-            case RequestType.SUPERCLASS:
-		classes.addAll(getSuperClasses(cExpression, direct)); break;
-            case RequestType.EQUIVALENT:
-		classes.addAll(getEquivalentClasses(cExpression)); break;
-            case RequestType.SUBCLASS:
-		classes.addAll(getSubClasses(cExpression, direct)); break;
-            case RequestType.REALIZE:
-		classes.addAll(getIndividuals(cExpression, direct)); break;
-            case RequestType.SUBEQ:
-		classes.addAll(getSubClasses(cExpression, direct));
-		classes.addAll(getEquivalentClasses(cExpression)); break;
-            case RequestType.SUPEQ:
-		classes.addAll(getSuperClasses(cExpression, direct));
-		classes.addAll(getEquivalentClasses(cExpression)); break;
-            default: // default is a subclass query
-		classes.addAll(getSubClasses(cExpression, direct));
-		break;
-        }
-        return classes;
-    }
-
-    public Set<OWLClass> getClasses(OWLClassExpression cExpression, RequestType requestType, boolean direct, boolean labels) {
-        Set<OWLClass> classes = new HashSet<>();
-        if(cExpression == null) {
             return classes;
         }
 	
@@ -129,11 +101,11 @@ public class QueryEngine {
     }
     
     public Set<OWLClass> getSubClasses(OWLClassExpression cExpression, boolean direct) {
-        return oReasoner.getSubClasses(cExpression, direct).getFlattened()
+        return oReasoner.getSubClasses(cExpression, direct).getFlattened();
     }
 
     public Set<OWLClass> getIndividuals(OWLClassExpression cExpression, boolean direct) {
-	return oReasoner.getInstances(cExpression, direct).getFlattened()
+	return oReasoner.getInstances(cExpression, direct).getFlattened();
     }
 
     /**
