@@ -12,6 +12,7 @@ import org.semanticweb.owlapi.reasoner.*
 import org.semanticweb.owlapi.reasoner.structural.StructuralReasoner
 import org.semanticweb.owlapi.vocab.OWLRDFVocabulary;
 import org.semanticweb.owlapi.model.*;
+import org.semanticweb.owlapi.util.ShortFormEntityChecker;
 import org.semanticweb.owlapi.io.*;
 import org.semanticweb.owlapi.owllink.*;
 import org.semanticweb.owlapi.util.*;
