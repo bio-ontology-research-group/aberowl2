@@ -88,7 +88,7 @@ try {
 } catch(java.lang.IllegalArgumentException e) {
     response.setStatus(400)
     print new JsonBuilder([ 'error': true, 'message': 'sparql.groovy: Invalid Sparql query' ]).toString() 
-} catch(org.semanticweb.owlapi.manchestersyntax.renderer.ParserException e) {
+} catch(org.semanticweb.owlapi.manchestersyntax.parser.ManchesterOWLSyntaxParserException e) {
     response.setStatus(400)
     print new JsonBuilder([ 'error': true, 'message': 'Query parsing error: ' + e.getMessage() ]).toString() 
 } catch(RuntimeException e) {
