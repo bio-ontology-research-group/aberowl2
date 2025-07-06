@@ -872,19 +872,20 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
   this.isLoading = true;
 
   const sparqlUrl = '/api/api/sparql.groovy';
-  const formData = new URLSearchParams();
-  formData.append('query', this.query.trim());
+  const bodyData = {
+      query: this.query.trim()
+  };
   if (this.sparqlEndpoint) {
-    formData.append('endpoint', this.sparqlEndpoint);
+    bodyData.endpoint = this.sparqlEndpoint;
   }
 
   fetch(sparqlUrl, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/json',
         'Accept': 'application/sparql-results+json,*/*;q=0.9'
       },
-      body: formData
+      body: JSON.stringify(bodyData)
   })
       .then(response => {
     if (!response.ok) {
