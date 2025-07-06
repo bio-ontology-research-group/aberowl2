@@ -862,6 +862,13 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
   console.log('executeSparql type:', typeof this.executeSparql);
 
   if (event) event.preventDefault();
+
+  if (!this.query || this.query.trim() === '') {
+      this.dlResults = [{label: 'SPARQL query cannot be empty.'}];
+      this.rawSparqlResults = { results: { bindings: [{ error: { type: "literal", value: 'SPARQL query cannot be empty.' } }] } };
+      return;
+  }
+
   this.isLoading = true;
 
   const sparqlUrl = '/api/api/sparql.groovy';

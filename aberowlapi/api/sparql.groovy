@@ -20,6 +20,11 @@ def userEndpoint = params.endpoint
 def manager = application.manager
 
 try {
+    if (query == null || query.trim().isEmpty()) {
+        response.setStatus(400)
+        print new JsonBuilder([ 'error': true, 'message': 'Query parameter is missing or empty.' ]).toString()
+        return
+    }
     def expandedQuery = query
     def owlPattern = /(?s)OWL\s+([a-zA-Z_]+)\s*(?:<[^>]*>)?\s*(?:<[^>]*>)?\s*\{(.*?)\}/
     def matcher = query =~ owlPattern
