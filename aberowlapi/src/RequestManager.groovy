@@ -322,7 +322,22 @@ public class RequestManager {
             default: requestType = RequestType.SUBEQ; break;
         }
 
-        Set resultSet = Sets.newHashSet(Iterables.limit(queryEngine.getClasses(mOwlQuery, requestType, direct, labels), MAX_REASONER_RESULTS))
+        Set resultSet = new HashSet()
+        if (requestType == RequestType.SUBCLASS) {
+            resultSet = Sets.newHashSet(Iterables.limit(queryEngine.getSubClasses(mOwlQuery, direct, labels), MAX_REASONER_RESULTS))
+        } else if (requestType == RequestType.SUPERCLASS) {
+            resultSet = Sets.newHashSet(Iterables.limit(queryEngine.getSuperClasses(mOwlQuery, direct, labels), MAX_REASONER_RESULTS))
+        } else if (requestType == RequestType.EQUIVALENT) {
+            resultSet = Sets.newHashSet(Iterables.limit(queryEngine.getEquivalentClasses(mOwlQuery, labels), MAX_REASONER_RESULTS))
+        } else if (requestType == RequestType.SUBEQ) {
+            def subClasses = Sets.newHashSet(Iterables.limit(queryEngine.getSubClasses(mOwlQuery, direct, labels), MAX_REASONER_RESULTS))
+            def eqClasses = Sets.newHashSet(Iterables.limit(queryEngine.getEquivalentClasses(mOwlQuery, labels), MAX_REASONER_RESULTS))
+            resultSet = subClasses + eqClasses
+        } else if (requestType == RequestType.SUPEQ) {
+            def superClasses = Sets.newHashSet(Iterables.limit(queryEngine.getSuperClasses(mOwlQuery, direct, labels), MAX_REASONER_RESULTS))
+            def eqClasses = Sets.newHashSet(Iterables.limit(queryEngine.getEquivalentClasses(mOwlQuery, labels), MAX_REASONER_RESULTS))
+            resultSet = superClasses + eqClasses
+        }
         resultSet.remove(df.getOWLNothing())
         resultSet.remove(df.getOWLThing())
         def classes = classes2info(resultSet, axioms);
