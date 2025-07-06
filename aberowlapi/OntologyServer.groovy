@@ -74,6 +74,7 @@ def startServer(def ontologyFilePath, def port) {
     context.addServlet(GroovyServlet, '/api/getObjectProperties.groovy')
     context.addServlet(GroovyServlet, '/api/retrieveRSuccessors.groovy')
     context.addServlet(GroovyServlet, '/api/retrieveAllLabels.groovy')
+    context.addServlet(GroovyServlet, '/api/getStatistics.groovy')
     context.addServlet(GroovyServlet, '/api/sparql.groovy')
 
     context.setAttribute('port', port)
