@@ -25,9 +25,9 @@ services:
     # Uncomment for direct access during development if needed
     # ports:
     #   - "127.0.0.1:8080:8080" # API port
-    # environment:
-      # ONTOLOGY_FILE is the path *inside* the container
-      # - ONTOLOGY_FILE=${ONTOLOGY_FILE:-/data/pizza.owl} # Default to pizza.owl if not set
+    environment:
+      # This is a dummy variable to force a rebuild when scripts change.
+      - DUMMY_RELOAD_VAR=1
     volumes:
       # Mount the data directory containing ontologies
       - ./data:/data

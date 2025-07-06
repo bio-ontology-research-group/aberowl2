@@ -167,7 +167,7 @@ Alpine.data('ontologyApp', () => ({
     this.isLoading = true;
 
     // Fetch ontology stats and metadata from the new endpoint
-    fetch('/api/getOntologyStats.groovy')
+    fetch('/api/api/getOntologyStats.groovy')
       .then(response => {
         if (!response.ok) {
           throw new Error('Network response was not ok for getOntologyStats');
