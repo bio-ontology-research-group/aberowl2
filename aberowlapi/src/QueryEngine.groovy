@@ -24,6 +24,7 @@ import org.semanticweb.owlapi.model.OWLClassExpression;
 import org.semanticweb.owlapi.reasoner.Node;
 import org.semanticweb.owlapi.reasoner.NodeSet;
 import org.semanticweb.owlapi.reasoner.OWLReasoner;
+import org.semanticweb.owlapi.util.ShortFormProvider;
 import org.semanticweb.owlapi.util.* ;
 
 /**
@@ -34,9 +35,9 @@ import org.semanticweb.owlapi.util.* ;
 public class QueryEngine {
     private OWLReasoner oReasoner;
     private QueryParser parser;
-    private sProvider;
+    private ShortFormProvider sProvider;
     
-    QueryEngine(oReasoner, sProvider) {
+    QueryEngine(OWLReasoner oReasoner, ShortFormProvider sProvider) {
         this.oReasoner = oReasoner;
         this.sProvider = sProvider;
         this.parser = new QueryParser(oReasoner.getRootOntology(), sProvider);
@@ -125,7 +126,7 @@ public class QueryEngine {
     /**
      * @return the sProvider
      */
-    public getsProvider() {
+    public ShortFormProvider getsProvider() {
         return sProvider;
     }
 }
