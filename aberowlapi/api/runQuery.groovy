@@ -46,8 +46,8 @@ try {
         def bidiSfp = new BidirectionalShortFormProviderAdapter(ont.getImportsClosure(), sfp)
         def checker = new ShortFormEntityChecker(bidiSfp)
         def df = ont.getOWLOntologyManager().getOWLDataFactory()
-        def config = ont.getOWLOntologyManager().getOntologyLoaderConfiguration()
-        def parser = new org.semanticweb.owlapi.manchestersyntax.parser.ManchesterOWLSyntaxParserImpl(config, df)
+        def configSupplier = { -> ont.getOWLOntologyManager().getOntologyLoaderConfiguration() }
+        def parser = new org.semanticweb.owlapi.manchestersyntax.parser.ManchesterOWLSyntaxParserImpl(configSupplier, df)
         parser.setStringToParse(query)
         parser.setOWLEntityChecker(checker)
         def expression = parser.parseClassExpression()
