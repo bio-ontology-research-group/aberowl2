@@ -46,7 +46,7 @@ def rboxAxiomsCount = ontology.getRBoxAxioms(Imports.INCLUDED).size()
 def declarationAxiomsCount = ontology.getAxioms(AxiomType.DECLARATION, true).size()
 
 def checker = new DLExpressivityChecker(Collections.singleton(ontology))
-def dlExpressivity = checker.getDLName()
+def dlExpressivity = checker.getDescriptionLogicName()
 
 def version = ""
 def releaseDate = ""
