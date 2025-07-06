@@ -20,7 +20,7 @@
     </div>
 
     <!-- <div x-show="error" class="error-message"> -->
-      <!-- <div class="alert alert-danger" x-text="error"></div> -->
+    <!-- <div class="alert alert-danger" x-text="error"></div> -->
     <!-- </div> -->
 
     <div x-show="!isLoading || $store.ontologyApp.ontology">
@@ -258,7 +258,7 @@
                       </tbody>
                     </table>
 
-                    <div class="margin-top-15">
+                    <!-- <div class="margin-top-15">
                       <h4>Hierarchy</h4>
                       <ul class="nav nav-pills">
                         <li role="presentation" class="active">
@@ -267,9 +267,9 @@
                         <li role="presentation">
                           <a href="#" @click.prevent="setDLQuery(selectedClass.owlClass, 'superclass')">Superclasses</a>
                         </li>
-                      </ul>
+                      </ul> -->
 
-                      <div class="margin-top-15" x-show="dlResults.length > 0">
+                    <!-- <div class="margin-top-15" x-show="dlResults.length > 0">
                         <table class="table table-hover">
                           <thead>
                             <tr>
@@ -288,238 +288,241 @@
                             </template>
                           </tbody>
                         </table>
-                      </div>
-                    </div>
+                      </div> -->
                   </div>
-                </template>
+              </div>
+              </template>
+            </div>
+
+            <!-- DLQuery Tab -->
+            <div x-show="currentTab === 'DLQuery'">
+              <div layout="row">
+                <form>
+                  <div class="form-group margin-top-15">
+                    <input class="form-control" type="text" id="dlquery" placeholder="Query" x-model="dlQueryExp"
+                      @input="onDlQueryChange($event)" />
+                  </div>
+                </form>
               </div>
 
-              <!-- DLQuery Tab -->
-              <div x-show="currentTab === 'DLQuery'">
+              <ul class="nav nav-pills">
+                <template x-for="button in getDLQueryButtons()" :key="button[0]">
+                  <li role="presentation" :class="{ 'active': isDLQueryActive(button[0]) }">
+                    <a :href="'#/DLQuery/' + encodeURIComponent(dlQueryExp) + '/' + button[0]"
+                      @click.prevent="setDLQuery(dlQueryExp, button[0])" x-text="button[1]"></a>
+                  </li>
+                </template>
+              </ul>
+
+              <table class="table table-hover">
+                <thead>
+                  <tr>
+                    <th>OWLClass</th>
+                    <th>Label</th>
+                    <th>Definition</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="(item, index) in dlResults" :key="index">
+                    <tr>
+                      <td>
+                        <a :href="'#/Browse/' + encodeURIComponent(item.owlClass)"
+                          @click.prevent="handleNodeClick($event, item.owlClass)" x-text="item.owlClass"></a>
+                      </td>
+                      <td x-text="item.label"></td>
+                      <td x-text="item.definition"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- SPARQL Tab -->
+            <div x-show="currentTab === 'SPARQL'">
+              <form @submit.prevent="executeSparql">
                 <div layout="row">
-                  <form>
-                    <div class="form-group margin-top-15">
-                      <input class="form-control" type="text" id="dlquery" placeholder="Query" x-model="dlQueryExp"
-                        @input="onDlQueryChange($event)" />
-                    </div>
-                  </form>
+                  <div class="form-group margin-top-15">
+                    <textarea class="form-control" id="sparql" x-model="query" @input="onSparqlChange($event)"
+                      placeholder="SPARQL Query" rows="10"></textarea>
+                  </div>
                 </div>
 
-                <ul class="nav nav-pills">
-                  <template x-for="button in getDLQueryButtons()" :key="button[0]">
-                    <li role="presentation" :class="{ 'active': isDLQueryActive(button[0]) }">
-                      <a :href="'#/DLQuery/' + encodeURIComponent(dlQueryExp) + '/' + button[0]"
-                        @click.prevent="setDLQuery(dlQueryExp, button[0])" x-text="button[1]"></a>
-                    </li>
-                  </template>
-                </ul>
+                <div layout="row" class="margin-top-15">
+                  <button type="submit" class="btn btn-primary">Execute</button>
+                </div>
 
+              </form>
+
+              <div layout="row" class="margin-top-15">
+                <ul>
+                  <li>List of superclasses of CheesyPizza <a href="#" @click="setCheesyPizzaExampleQuery($event)">Get
+                      superclasses</a>
+                  </li>
+                  <li>List of classes of the loaded ontology <a href="#"
+                      @click="setQueryClassesExampleQuery($event)">List classes</a>
+                  </li>
+                </ul>
+              </div>
+
+              <!-- Results Format and Download -->
+              <div layout="row" class="margin-top-15" x-show="dlResults.length > 0">
+                <div class="col-md-6">
+                  <label for="format">Results Format</label>
+                  <select class="form-control" @change="onFormatChange($event)" x-model="format">
+                    <template x-for="item in getSparqlFormats()" :key="item.format">
+                      <option :value="item.format" x-text="item.name"></option>
+                    </template>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label for="download">Download Results</label>
+                  <form @submit.prevent="downloadResults($event)">
+                    <button type="submit" id="download" class="btn btn-success form-control">Download</button>
+                  </form>
+                </div>
+              </div>
+
+              <!-- Display SPARQL Results -->
+              <div class="margin-top-15" x-show="dlResults.length > 0">
                 <table class="table table-hover">
                   <thead>
                     <tr>
-                      <th>OWLClass</th>
-                      <th>Label</th>
-                      <th>Definition</th>
+                      <th>Result</th>
                     </tr>
                   </thead>
                   <tbody>
                     <template x-for="(item, index) in dlResults" :key="index">
                       <tr>
-                        <td>
-                          <a :href="'#/Browse/' + encodeURIComponent(item.owlClass)" @click.prevent="handleNodeClick($event, item.owlClass)" x-text="item.owlClass"></a>
-                        </td>
-                        <td x-text="item.label"></td>
-                        <td x-text="item.definition"></td>
+                        <td x-html="item.label"></td>
                       </tr>
                     </template>
                   </tbody>
                 </table>
               </div>
 
-              <!-- SPARQL Tab -->
-              <div x-show="currentTab === 'SPARQL'">
-                <form @submit.prevent="executeSparql">
-                  <div layout="row">
-                    <div class="form-group margin-top-15">
-                      <textarea class="form-control" id="sparql" x-model="query" @input="onSparqlChange($event)" placeholder="SPARQL Query"
-                        rows="10"></textarea>
-                    </div>
-                  </div>
 
-                  <div layout="row" class="margin-top-15">
-                    <button type="submit" class="btn btn-primary">Execute</button>
-                  </div>
 
-                </form>
-
-                <div layout="row" class="margin-top-15">
-                  <ul>
-                    <li>List of superclasses of CheesyPizza <a href="#"
-                        @click="setCheesyPizzaExampleQuery($event)">Get superclasses</a>
-                    </li>
-                    <li>List of classes of the loaded ontology <a href="#"
-                        @click="setQueryClassesExampleQuery($event)">List classes</a>
-                    </li>
-                  </ul>
+            </div>
+            <!-- LLM query Tab -->
+            <div x-show="currentTab === 'LLMQuery'">
+              <div layout="row">
+                <div class="form-group margin-top-15">
+                  <label for="llmquery-input">Natural Language Query:</label>
+                  <textarea class="form-control" id="llmquery-input" x-model="llmQuery"
+                    @input="onLLMQueryChange($event)" placeholder="Enter your query in natural language"
+                    rows="5"></textarea>
                 </div>
+              </div>
 
-                <!-- Results Format and Download -->
-                <div layout="row" class="margin-top-15" x-show="dlResults.length > 0">
-                  <div class="col-md-6">
-                    <label for="format">Results Format</label>
-                    <select class="form-control" @change="onFormatChange($event)" x-model="format">
-                      <template x-for="item in getSparqlFormats()" :key="item.format">
-                        <option :value="item.format" x-text="item.name"></option>
-                      </template>
-                    </select>
-                  </div>
-                  <div class="col-md-6">
-                    <label for="download">Download Results</label>
-                    <form @submit.prevent="downloadResults($event)">
-                      <button type="submit" id="download" class="btn btn-success form-control">Download</button>
-                    </form>
-                  </div>
+              <div layout="row" class="margin-top-15">
+                <button type="button" class="btn btn-primary" @click="processLLMQuery">Run Query</button>
+              </div>
+
+              <div layout="row" class="margin-top-15">
+                <div class="alert alert-info">
+                  <p>Enter your query in natural language and click "Run Query" to execute it.</p>
+                  <p>Examples:
+                    <a href="#" @click="setSuperclassesCheesyPizzaExample">What are the superclasses of cheesy
+                      pizza?</a> |
+                    <a href="#" @click="setSubclassesCheesyPizzaExample">What are the subclasses of cheesy pizza?</a>
+                  </p>
                 </div>
-                
-                <!-- Display SPARQL Results -->
-                <div class="margin-top-15" x-show="dlResults.length > 0">
+              </div>
+
+              <!-- Display Detected Parameters -->
+              <div class="margin-top-15" x-show="detectedParams">
+                <h4>Detected Parameters</h4>
+                <pre class="code-block"><code x-text="detectedParams"></code></pre>
+              </div>
+
+              <!-- Results Format and Download -->
+              <div layout="row" class="margin-top-15" x-show="dlResults.length > 0">
+                <div class="col-md-6">
+                  <label for="format">Results Format</label>
+                  <select class="form-control" @change="onFormatChange($event)" x-model="format">
+                    <template x-for="item in getSparqlFormats()" :key="item.format">
+                      <option :value="item.format" x-text="item.name"></option>
+                    </template>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label for="download">Download Results</label>
+                  <form @submit.prevent="downloadResults($event)">
+                    <button type="submit" id="download" class="btn btn-success form-control">Download</button>
+                  </form>
+                </div>
+              </div>
+
+              <!-- Display SPARQL Results -->
+              <div class="margin-top-15" x-show="dlResults.length > 0">
+                <table class="table table-hover">
+                  <thead>
+                    <tr>
+                      <th>Result</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template x-for="(item, index) in dlResults" :key="index">
+                      <tr>
+                        <td x-html="item.label"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Download Tab -->
+            <div x-show="currentTab === 'Download'">
+              <table class="table table-hover">
+                <thead>
+                  <tr>
+                    <template x-for="field in getDownloadFields()" :key="field">
+                      <th x-text="field"></th>
+                    </template>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="(item, index) in ontology?.downloads" :key="index">
+                    <tr>
+                      <td x-text="item[0]"></td>
+                      <td x-text="item[1]"></td>
+                      <td><a :href="'/' + item[2]">Download</a></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Property Tab -->
+
+            <div x-show="currentTab === 'Property'">
+              <template x-if="selectedProp === null">
+                <h2>Please select an object property!</h2>
+              </template>
+
+              <template x-if="selectedProp !== null">
+                <div>
                   <table class="table table-hover">
                     <thead>
                       <tr>
-                        <th>Result</th>
+                        <th>Property</th>
+                        <th>Value</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <template x-for="(item, index) in dlResults" :key="index">
+                      <template x-for="(data, index) in getPropertyData()" :key="index">
                         <tr>
-                            <td x-html="item.label"></td>
+                          <td x-text="data[0]"></td>
+                          <td x-html="data[1]"></td>
                         </tr>
                       </template>
                     </tbody>
                   </table>
                 </div>
-
-
-		
-              </div>
-              <!-- LLM query Tab -->
-              <div x-show="currentTab === 'LLMQuery'">
-                  <div layout="row">
-                      <div class="form-group margin-top-15">
-                          <label for="llmquery-input">Natural Language Query:</label>
-                          <textarea class="form-control" id="llmquery-input" x-model="llmQuery" @input="onLLMQueryChange($event)"
-                              placeholder="Enter your query in natural language" rows="5"></textarea>
-                      </div>
-                  </div>
-
-                  <div layout="row" class="margin-top-15">
-                      <button type="button" class="btn btn-primary" @click="processLLMQuery">Run Query</button>
-                  </div>
-
-                  <div layout="row" class="margin-top-15">
-                      <div class="alert alert-info">
-                          <p>Enter your query in natural language and click "Run Query" to execute it.</p>
-                          <p>Examples:
-                             <a href="#" @click="setSuperclassesCheesyPizzaExample">What are the superclasses of cheesy pizza?</a> |
-                             <a href="#" @click="setSubclassesCheesyPizzaExample">What are the subclasses of cheesy pizza?</a>
-                          </p>
-                      </div>
-                  </div>
-                  
-                  <!-- Display Detected Parameters -->
-                  <div class="margin-top-15" x-show="detectedParams">
-                      <h4>Detected Parameters</h4>
-                      <pre class="code-block"><code x-text="detectedParams"></code></pre>
-                  </div>
-                  
-                  <!-- Results Format and Download -->
-                  <div layout="row" class="margin-top-15" x-show="dlResults.length > 0">
-                      <div class="col-md-6">
-			  <label for="format">Results Format</label>
-			  <select class="form-control" @change="onFormatChange($event)" x-model="format">
-			      <template x-for="item in getSparqlFormats()" :key="item.format">
-				  <option :value="item.format" x-text="item.name"></option>
-			      </template>
-			  </select>
-                      </div>
-                      <div class="col-md-6">
-			  <label for="download">Download Results</label>
-			  <form @submit.prevent="downloadResults($event)">
-			      <button type="submit" id="download" class="btn btn-success form-control">Download</button>
-			  </form>
-                      </div>
-                  </div>
-                  
-                  <!-- Display SPARQL Results -->
-                  <div class="margin-top-15" x-show="dlResults.length > 0">
-                    <table class="table table-hover">
-		      <thead>
-			<tr>
-			  <th>Result</th>
-			</tr>
-		      </thead>
-		      <tbody>
-			<template x-for="(item, index) in dlResults" :key="index">
-			  <tr>
-			    <td x-html="item.label"></td>
-			  </tr>
-			</template>
-		      </tbody>
-                    </table>
-                  </div>
-              </div>
-	      
-	      <!-- Download Tab -->
-              <div x-show="currentTab === 'Download'">
-                  <table class="table table-hover">
-                      <thead>
-			  <tr>
-			      <template x-for="field in getDownloadFields()" :key="field">
-				  <th x-text="field"></th>
-			      </template>
-			  </tr>
-                      </thead>
-                      <tbody>
-			  <template x-for="(item, index) in ontology?.downloads" :key="index">
-			      <tr>
-				  <td x-text="item[0]"></td>
-				  <td x-text="item[1]"></td>
-				  <td><a :href="'/' + item[2]">Download</a></td>
-			      </tr>
-			  </template>
-                      </tbody>
-                  </table>
-              </div>
-
-              <!-- Property Tab -->
-
-	      <div x-show="currentTab === 'Property'">
-                <template x-if="selectedProp === null">
-                  <h2>Please select an object property!</h2>
-                </template>
-
-                <template x-if="selectedProp !== null">
-                  <div>
-                    <table class="table table-hover">
-                      <thead>
-                        <tr>
-                          <th>Property</th>
-                          <th>Value</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <template x-for="(data, index) in getPropertyData()" :key="index">
-                          <tr>
-                            <td x-text="data[0]"></td>
-                            <td x-html="data[1]"></td>
-                          </tr>
-                        </template>
-                      </tbody>
-                    </table>
-                  </div>
-                </template>
-			    </div>
+              </template>
             </div>
+          </div>
         </div>
       </main>
 
@@ -539,4 +542,3 @@
 </body>
 
 </html>
-
