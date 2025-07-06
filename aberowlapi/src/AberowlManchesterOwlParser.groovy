@@ -1,6 +1,7 @@
 package src
 
-import org.semanticweb.owlapi.manchestersyntax.parser.ManchesterOWLSyntaxParserImpl
+import uk.ac.manchester.cs.owl.parser.ManchesterOWLSyntaxParserImpl
+import uk.ac.manchester.cs.owl.parser.ShortFormEntityChecker
 import org.semanticweb.owlapi.model.OWLClassExpression
 import org.semanticweb.owlapi.model.OWLDataFactory
 import org.semanticweb.owlapi.model.OWLOntology
@@ -27,7 +28,8 @@ public class AberowlManchesterOwlParser {
 
     public AberowlManchesterOwlParser(OWLOntology ontology, ShortFormProvider shortFormProvider) {
         OWLDataFactory dataFactory = ontology.getOWLOntologyManager().getOWLDataFactory();
-        this.delegate = new ManchesterOWLSyntaxParserImpl(dataFactory, shortFormProvider);
+        def entityChecker = new ShortFormEntityChecker(shortFormProvider)
+        this.delegate = new ManchesterOWLSyntaxParserImpl(dataFactory, entityChecker);
         delegate.setDefaultOntology(ontology);
     }
 
