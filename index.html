@@ -326,6 +326,13 @@
                     </div>
                   </div>
 
+                  <div layout="row">
+                    <div class="form-group margin-top-15">
+                      <label for="sparql_endpoint">SPARQL Endpoint</label>
+                      <input id="sparql_endpoint" type="text" class="form-control" x-model="sparqlEndpoint" @input="onSparqlEndpointChange($event)" placeholder="Enter SPARQL endpoint URL">
+                    </div>
+                  </div>
+
                   <div layout="row" class="margin-top-15">
                     <button type="submit" class="btn btn-primary">Execute</button>
                   </div>
