@@ -31,6 +31,7 @@ import org.semanticweb.owlapi.model.OWLLiteral;
 import org.semanticweb.owlapi.model.OWLObject;
 import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.model.OWLOntologySetProvider;
+import org.semanticweb.owlapi.util.BidirectionalShortFormProvider;
 import org.semanticweb.owlapi.util.* ;
 import org.semanticweb.owlapi.search.*;
 import org.semanticweb.owlapi.vocab.OWLRDFVocabulary;
@@ -42,7 +43,7 @@ import org.semanticweb.owlapi.vocab.OWLRDFVocabulary;
  * @see ShortFormProvider
  * @author OWLAPI, Robert Hoehndorf (leechuck@leechuck.de)
  */
-public class NewShortFormProvider implements ShortFormProvider {
+public class NewShortFormProvider implements BidirectionalShortFormProvider {
     private final OWLOntologySetProvider ontologySetProvider;
     private final ShortFormProvider alternateShortFormProvider;
     private IRIShortFormProvider alternateIRIShortFormProvider;
@@ -217,6 +218,26 @@ public class NewShortFormProvider implements ShortFormProvider {
             }
         }
         return alternateShortFormProvider.getShortForm(entity);
+    }
+
+    @Override
+    public Set<OWLEntity> getEntities(String shortForm) {
+        return Collections.emptySet();
+    }
+
+    @Override
+    public Set<String> getShortForms() {
+        return Collections.emptySet();
+    }
+
+    @Override
+    public void add(OWLEntity entity) {
+        // No-op
+    }
+
+    @Override
+    public void remove(OWLEntity entity) {
+        // No-op
     }
 
     /** Obtains the rendering of the specified object. If the object is a
