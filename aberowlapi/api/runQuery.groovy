@@ -34,7 +34,15 @@ response.contentType = 'application/json'
 try {
     def results = new HashMap()
     def start = System.currentTimeMillis()
-    def out = manager.runQuery(query, type, direct, labels, axioms)
+    def out
+    if (query.startsWith("http") || query.startsWith("<")) {
+        out = manager.runQuery(query, type, direct, labels, axioms)
+    } else {
+        def sfp = new NewShortFormProvider(manager.getOntology())
+        def parser = new AberowlManchesterOwlParser(manager.getOntology(), sfp)
+        def expression = parser.parse(query)
+        out = manager.runQuery(expression, type, direct, labels, axioms)
+    }
     def end = System.currentTimeMillis()
     results.put('time', (end - start))
     results.put('result', out)
