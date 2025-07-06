@@ -50,8 +50,8 @@ try {
     }
     
     def endpoint = userEndpoint
-    if (endpoint == null || endpoint.isEmpty() || endpoint == '/virtuoso/sparql'){
-	    endpoint = "http://virtuoso:8890/sparql/" // NOTE: internal docker endpoint
+    if (endpoint == null || endpoint.isEmpty() || endpoint.startsWith('/virtuoso/sparql')){
+	    endpoint = "http://localhost:8890/sparql"
     }
     def response
     def connection = new URL(endpoint).openConnection() as HttpURLConnection
