@@ -50,8 +50,10 @@ try {
     }
     
     def endpoint = userEndpoint
-    if (endpoint == null || endpoint.isEmpty() || endpoint.startsWith('/virtuoso/sparql')){
+    if (endpoint == null || endpoint.isEmpty() || endpoint == "local"){
 	    endpoint = "http://localhost:8890/sparql"
+    } else if (endpoint.startsWith('/virtuoso/sparql')) {
+        endpoint = "http://localhost:8890/sparql"
     }
     def response
     def connection = new URL(endpoint).openConnection() as HttpURLConnection
