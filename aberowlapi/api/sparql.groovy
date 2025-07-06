@@ -50,10 +50,8 @@ try {
     }
     
     def endpoint = userEndpoint
-    if (endpoint == null || endpoint.isEmpty() || endpoint == "local"){
+    if (endpoint == null || endpoint.isEmpty() || endpoint == "local" || endpoint.startsWith('/virtuoso/sparql')){
 	    endpoint = "http://localhost:8890/sparql"
-    } else if (endpoint.startsWith('/virtuoso/sparql')) {
-        endpoint = "http://localhost:8890/sparql"
     }
     def response
     def connection = new URL(endpoint).openConnection() as HttpURLConnection
@@ -68,18 +66,26 @@ try {
 
     def responseCode = connection.getResponseCode()
     if (responseCode == HttpURLConnection.HTTP_OK) {
-	def reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))
-	def responseBody = reader.text
-    
-	// Parse the JSON response
-	def jsonSlurper = new JsonSlurper()
-	response = jsonSlurper.parseText(responseBody)
+        def reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))
+        def responseBody = reader.text
+        
+        if (responseBody) {
+            // Parse the JSON response
+            def jsonSlurper = new JsonSlurper()
+            response = jsonSlurper.parseText(responseBody)
+        } else {
+            response = [
+                error: true,
+                statusCode: responseCode,
+                message: "Empty response body"
+            ]
+        }
     } else {
-	response = [
+        response = [
             error: true,
             statusCode: responseCode,
             message: connection.getResponseMessage()
-	]
+        ]
     }
 
     // Disconnect

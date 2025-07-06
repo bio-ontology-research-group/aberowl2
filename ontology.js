@@ -58,7 +58,7 @@ Alpine.data('ontologyApp', () => ({
   format: 'text/html',
   query: '',
   llmQuery: '',
-  sparqlEndpoint: 'local',
+  sparqlEndpoint: 'http://localhost:8890/sparql',
   detectedParams: null,
   isLoading: false,
     
