@@ -410,10 +410,10 @@ Alpine.data('ontologyApp', () => ({
               formattedQuery = foundClass.owlClass;
               console.log(`Converted class label "${owlClass}" to IRI: ${formattedQuery}`);
           } else {
-              // If we didn't find a match and the query contains spaces, wrap it in quotes
+              // If we didn't find a match and the query contains spaces, it is likely a complex query
               if (owlClass.includes(' ')) {
-                  formattedQuery = `"${owlClass}"`;
-                  console.log(`Added quotes around multi-word query: ${formattedQuery}`);
+                  // It's a complex query, send as is.
+                  formattedQuery = owlClass;
               }
               // If it doesn't contain spaces but isn't a recognized class, try angle brackets
               else if (!owlClass.startsWith('"')) {

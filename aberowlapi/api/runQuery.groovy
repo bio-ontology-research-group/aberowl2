@@ -3,6 +3,9 @@
 import groovy.json.*
 import src.util.Util
 import groovyx.gpars.GParsPool
+import src.AberowlManchesterOwlParser
+import src.NewShortFormProvider
+import org.semanticweb.owlapi.model.OWLClassExpression
 
 if(!application) {
     application = request.getApplication(true)
