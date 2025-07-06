@@ -64,10 +64,11 @@ echo "Setting execute permissions on host script: $HOST_INDEXER_SCRIPT_PATH"
 chmod +x "$HOST_INDEXER_SCRIPT_PATH"
 
 # Run docker compose up
-# We use --build to ensure images are rebuilt, re-downloading dependencies.
+# This will build images on the first run and use cached images on subsequent runs.
+# To force a rebuild, run 'docker compose build' or 'docker compose up --build'.
 # We run in the foreground (no -d) to see all service logs.
 # This uses the default docker-compose.yml to build images locally.
-docker compose -p "$PROJECT_NAME" up --build
+docker compose -p "$PROJECT_NAME" up
 
 
 # --- Output Information ---
