@@ -16,7 +16,7 @@ println "--- OntologyServer.groovy execution started ---"
     @Grab(group='net.sourceforge.owlapi', module='owlapi-apibinding', version='4.5.26'),
     @Grab(group='net.sourceforge.owlapi', module='owlapi-impl', version='4.5.26'),
     @Grab(group='net.sourceforge.owlapi', module='owlapi-parsers', version='4.5.26'),
-//    @Grab(group='net.sourceforge.owlapi', module='owlapi-util', version='4.5.26'),
+    @Grab(group='net.sourceforge.owlapi', module='owlapi-util', version='4.5.26'),
     @Grab(group='org.codehaus.gpars', module='gpars', version='1.1.0'),
     @Grab(group='com.google.guava', module='guava', version='19.0'),
     @Grab(group='ch.qos.reload4j', module='reload4j', version='1.2.18.5'),
