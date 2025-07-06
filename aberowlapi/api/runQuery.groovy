@@ -38,7 +38,7 @@ try {
     if (query.startsWith("http") || query.startsWith("<")) {
         out = manager.runQuery(query, type, direct, labels, axioms)
     } else {
-        def sfp = new NewShortFormProvider(manager.getOntology())
+        def sfp = new NewShortFormProvider(manager.getOntology().getImportsClosure())
         def parser = new AberowlManchesterOwlParser(manager.getOntology(), sfp)
         def expression = parser.parse(query)
         out = manager.runQuery(expression, type, direct, labels, axioms)
