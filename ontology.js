@@ -166,79 +166,46 @@ Alpine.data('ontologyApp', () => ({
   fetchOntologyData() {
     this.isLoading = true;
 
-    // Fetch ontology metadata
-    const sparqlQuery = `
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX dc: <http://purl.org/dc/elements/1.1/>
-        PREFIX dcterms: <http://purl.org/dc/terms/>
-        PREFIX vann: <http://purl.org/vocab/vann/>
-        SELECT ?p ?o
-        WHERE {
-          ?s a owl:Ontology .
-          ?s ?p ?o .
-          FILTER(isLiteral(?o))
+    // Fetch ontology stats and metadata from the new endpoint
+    fetch('/api/api/getOntologyStats.groovy')
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Network response was not ok for getOntologyStats');
         }
-    `;
-    const sparqlUrl = `/api/api/sparql.groovy?query=${encodeURIComponent(sparqlQuery)}`;
-    fetch(sparqlUrl, { headers: { 'Accept': 'application/sparql-results+json' } })
-        .then(response => response.json())
-        .then(data => {
-            const metadata = {};
-            data.results.bindings.forEach(binding => {
-                const prop = binding.p.value.split('#').pop().split('/').pop();
-                const value = binding.o.value;
-                if (!metadata[prop]) {
-                    metadata[prop] = [];
-                }
-                metadata[prop].push(value);
-            });
+        return response.json();
+      })
+      .then(data => {
+        console.log('Fetched ontology stats:', data);
+        const first = (arr) => arr && arr.length > 0 ? arr[0] : undefined;
+        const metadata = data.metadata || {};
 
-            const first = (arr) => arr && arr.length > 0 ? arr[0] : undefined;
+        this.ontology.name = first(metadata.title) || 'Ontology';
+        this.ontology.acronym = first(metadata.preferredNamespacePrefix) || '';
+        this.ontology.submission.description = first(metadata.description) || first(metadata.comment) || '';
+        this.ontology.submission.version = first(metadata.versionInfo) || first(metadata.versionIRI) || '';
+        this.ontology.submission.date_released = first(metadata.date) || '';
+        this.ontology.submission.home_page = first(metadata.homepage) || '';
 
-            this.ontology.name = first(metadata.title) || 'Ontology';
-            this.ontology.acronym = first(metadata.preferredNamespacePrefix) || '';
-            this.ontology.submission.description = first(metadata.description) || first(metadata.comment) || '';
-            this.ontology.submission.version = first(metadata.versionInfo) || '';
-            this.ontology.submission.date_released = first(metadata.date) || '';
-            this.ontology.submission.home_page = first(metadata.homepage) || '';
-        })
-        .catch(error => {
-            console.error('Error fetching ontology metadata:', error);
-        });
-
-    // Fetch ontology statistics
-    const fetchStat = (query) => {
-        const url = `/api/api/sparql.groovy?query=${encodeURIComponent(query)}`;
-        return fetch(url, { headers: { 'Accept': 'application/sparql-results+json' } })
-            .then(res => res.json())
-            .then(data => parseInt(data.results.bindings[0].count.value, 10))
-            .catch(() => 'N/A');
-    };
-
-    const queries = {
-        nb_classes: `SELECT (COUNT(DISTINCT ?s) as ?count) WHERE { ?s a owl:Class . FILTER(!isBlank(?s)) }`,
-        nb_object_properties: `SELECT (COUNT(DISTINCT ?s) as ?count) WHERE { ?s a owl:ObjectProperty }`,
-        nb_data_properties: `SELECT (COUNT(DISTINCT ?s) as ?count) WHERE { ?s a owl:DatatypeProperty }`,
-        nb_annotation_properties: `SELECT (COUNT(DISTINCT ?s) as ?count) WHERE { ?s a owl:AnnotationProperty }`,
-        nb_individuals: `SELECT (COUNT(DISTINCT ?s) as ?count) WHERE { ?s a owl:NamedIndividual }`,
-    };
-
-    Promise.all([
-        fetchStat(queries.nb_classes),
-        fetchStat(queries.nb_object_properties),
-        fetchStat(queries.nb_data_properties),
-        fetchStat(queries.nb_annotation_properties),
-        fetchStat(queries.nb_individuals),
-    ]).then(([classCount, objPropCount, dataPropCount, annoPropCount, indCount]) => {
-        this.ontology.submission.nb_classes = classCount;
-        this.ontology.submission.nb_object_properties = objPropCount;
-        this.ontology.submission.nb_data_properties = dataPropCount;
-        this.ontology.submission.nb_annotation_properties = annoPropCount;
-        this.ontology.submission.nb_individuals = indCount;
-        const totalProps = [objPropCount, dataPropCount, annoPropCount].filter(c => typeof c === 'number').reduce((a, b) => a + b, 0);
+        // Update stats
+        this.ontology.submission.nb_classes = data.class_count ?? 'N/A';
+        this.ontology.submission.nb_object_properties = data.object_property_count ?? 'N/A';
+        this.ontology.submission.nb_data_properties = data.data_property_count ?? 'N/A';
+        this.ontology.submission.nb_annotation_properties = data.annotation_property_count ?? 'N/A';
+        this.ontology.submission.nb_individuals = data.individual_count ?? 'N/A';
+        const totalProps = [data.object_property_count, data.data_property_count, data.annotation_property_count].filter(c => typeof c === 'number').reduce((a, b) => a + b, 0);
         this.ontology.submission.nb_properties = totalProps > 0 ? totalProps : 'N/A';
-    });
+
+        this.ontology.submission.max_children = data.max_children ?? 'N/A';
+        this.ontology.submission.avg_children = data.avg_children ? data.avg_children.toFixed(2) : 'N/A';
+        this.ontology.submission.max_depth = data.max_depth ?? 'N/A';
+        this.ontology.submission.dl_expressivity = data.dl_expressivity ?? 'N/A';
+        this.ontology.submission.axiom_count = data.axiom_count ?? 'N/A';
+        this.ontology.submission.logical_axiom_count = data.logical_axiom_count ?? 'N/A';
+        this.ontology.submission.declaration_axiom_count = data.declaration_axiom_count ?? 'N/A';
+      })
+      .catch(error => {
+        console.error('Error fetching ontology stats:', error);
+      });
     
     // Fetch the ontology classes and properties from the backend
     fetch('/api/api/runQuery.groovy?type=subclass&direct=true&query=<http://www.w3.org/2002/07/owl%23Thing>')
