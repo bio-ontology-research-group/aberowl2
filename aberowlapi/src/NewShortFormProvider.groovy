@@ -230,6 +230,10 @@ public class NewShortFormProvider implements BidirectionalShortFormProvider {
         return Collections.emptySet();
     }
 
+    public OWLEntity getEntity(String shortForm) {
+        return null;
+    }
+
 
     /** Obtains the rendering of the specified object. If the object is a
      * constant then the rendering is equal to the literal value, if the object
