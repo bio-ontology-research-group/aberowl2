@@ -861,7 +861,7 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
   if (event) event.preventDefault();
   this.isLoading = true;
 
-  const sparqlUrl = 'http://localhost:88/api/api/sparql.groovy';
+  const sparqlUrl = '/api/api/sparql.groovy';
   const formData = new URLSearchParams();
   formData.append('query', this.query.trim());
   if (this.sparqlEndpoint) {
