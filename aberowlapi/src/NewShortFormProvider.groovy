@@ -16,8 +16,11 @@
 
 package src;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import org.semanticweb.owlapi.apibinding.OWLManager;
 import org.semanticweb.owlapi.model.IRI;
 import org.semanticweb.owlapi.model.OWLAnnotationAssertionAxiom;
 import org.semanticweb.owlapi.model.OWLAnnotationProperty;
@@ -30,6 +33,7 @@ import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.model.OWLOntologySetProvider;
 import org.semanticweb.owlapi.util.* ;
 import org.semanticweb.owlapi.search.*;
+import org.semanticweb.owlapi.vocab.OWLRDFVocabulary;
 
 /**
  * Modified version of the standard short form provider to add quotations around
@@ -65,6 +69,12 @@ public class NewShortFormProvider implements ShortFormProvider {
      *            An {@code OWLOntologySetProvider} which provides a set of
      *            ontology from which candidate annotation axioms should be
      *            taken. For a given entity, all ontologies are examined. */
+    public NewShortFormProvider(Set<OWLOntology> ontologies) {
+        this(Collections.singletonList(OWLManager.getOWLDataFactory().getOWLAnnotationProperty(OWLRDFVocabulary.RDFS_LABEL.getIRI())),
+                Collections.emptyMap(),
+                new SimpleOntologySetProvider(ontologies));
+    }
+
     public NewShortFormProvider(
             List<OWLAnnotationProperty> annotationProperties,
             Map<OWLAnnotationProperty, List<String>> preferredLanguageMap,
