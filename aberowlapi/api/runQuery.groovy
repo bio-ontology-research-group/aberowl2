@@ -5,6 +5,8 @@ import src.util.Util
 import groovyx.gpars.GParsPool
 import src.AberowlManchesterOwlParser
 import src.NewShortFormProvider
+import org.semanticweb.owlapi.expression.ShortFormEntityChecker
+import org.semanticweb.owlapi.util.BidirectionalShortFormProviderAdapter
 import org.semanticweb.owlapi.model.OWLClassExpression
 
 if(!application) {
@@ -40,9 +42,10 @@ try {
     } else {
         def ont = manager.getOntology()
         def sfp = new NewShortFormProvider(ont.getImportsClosure())
+        def bidiSfp = new BidirectionalShortFormProviderAdapter(ont.getImportsClosure(), sfp)
+        def checker = new ShortFormEntityChecker(bidiSfp)
         def df = ont.getOWLOntologyManager().getOWLDataFactory()
         def parser = new org.semanticweb.owlapi.manchestersyntax.parser.ManchesterOWLSyntaxParserImpl(df, new java.io.StringReader(query))
-        def checker = new org.semanticweb.owlapi.util.mansyntax.ShortFormEntityChecker(sfp)
         parser.setOWLEntityChecker(checker)
         def expression = parser.parseClassExpression()
         out = manager.runQuery(expression, type, direct, labels, axioms)
