@@ -8,6 +8,8 @@ import org.semanticweb.owlapi.model.parameters.Imports
 import org.semanticweb.owlapi.model.OWLAnnotation
 import org.semanticweb.owlapi.model.OWLLiteral
 import org.semanticweb.owlapi.vocab.OWLRDFVocabulary
+import org.semanticweb.owlapi.util.DLExpressivityChecker
+import java.util.Collections
 
 response.setContentType("application/json")
 
@@ -43,6 +45,9 @@ def rboxAxiomsCount = ontology.getRBoxAxioms(Imports.INCLUDED).size()
 
 def declarationAxiomsCount = ontology.getAxioms(AxiomType.DECLARATION, true).size()
 
+def checker = new DLExpressivityChecker(Collections.singleton(ontology))
+def dlExpressivity = checker.getDLName()
+
 def version = ""
 def releaseDate = ""
 
@@ -61,6 +66,7 @@ ontology.getAnnotations().each { OWLAnnotation annotation ->
 }
 
 def result = [
+    "dl_expressivity": dlExpressivity,
     "version": version,
     "release_date": releaseDate,
     "class_count": classCount,

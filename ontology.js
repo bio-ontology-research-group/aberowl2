@@ -199,8 +199,6 @@ Alpine.data('ontologyApp', () => ({
             this.ontology.name = first(metadata.title) || 'Ontology';
             this.ontology.acronym = first(metadata.preferredNamespacePrefix) || '';
             this.ontology.submission.description = first(metadata.description) || first(metadata.comment) || '';
-            this.ontology.submission.version = first(metadata.versionInfo) || '';
-            this.ontology.submission.date_released = first(metadata.date) || '';
             this.ontology.submission.home_page = first(metadata.homepage) || '';
         })
         .catch(error => {
@@ -220,6 +218,7 @@ Alpine.data('ontologyApp', () => ({
             this.ontology.submission.axiom_count = stats.axiom_count ?? 'N/A';
             this.ontology.submission.logical_axiom_count = stats.logical_axiom_count ?? 'N/A';
             this.ontology.submission.declaration_axiom_count = stats.declaration_axiom_count ?? 'N/A';
+            this.ontology.submission.dl_expressivity = stats.dl_expressivity ?? 'N/A';
             if (stats.version) {
                 this.ontology.submission.version = stats.version;
             }
@@ -239,6 +238,7 @@ Alpine.data('ontologyApp', () => ({
             this.ontology.submission.axiom_count = 'N/A';
             this.ontology.submission.logical_axiom_count = 'N/A';
             this.ontology.submission.declaration_axiom_count = 'N/A';
+            this.ontology.submission.dl_expressivity = 'N/A';
         });
     
     // Fetch the ontology classes and properties from the backend
