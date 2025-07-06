@@ -381,48 +381,48 @@ Alpine.data('ontologyApp', () => ({
 
 
     getFormattedClass(owlClass) {
-	  let formattedQuery = owlClass;
-      
-      if (owlClass && typeof owlClass === 'string' && !owlClass.startsWith('<')) {
-          // Try to find an exact match in our class map
-          let foundClass = null;
-          
-          // Search through all classes to find a match by label
-          for (const [iri, classObj] of this.classesMap.entries()) {
-              if (classObj.label) {
-                  // Try different variations of the label for matching
-                  const labelLower = classObj.label.toLowerCase();
-                  const queryLower = owlClass.toLowerCase();
-                  
-                  if (labelLower === queryLower ||
-                      labelLower.replace(/ /g, '_') === queryLower ||
-                      queryLower.replace(/ /g, '_') === labelLower ||
-                      labelLower.replace(/_/g, ' ') === queryLower ||
-                      queryLower.replace(/_/g, ' ') === labelLower) {
-                      foundClass = classObj;
-                      break;
-                  }
-              }
-          }
-          
-          // If we found a matching class, use its IRI
-          if (foundClass) {
-              formattedQuery = foundClass.owlClass;
-              console.log(`Converted class label "${owlClass}" to IRI: ${formattedQuery}`);
-          } else {
-              // If we didn't find a match and the query contains spaces, it is likely a complex query
-              if (owlClass.includes(' ')) {
-                  // It's a complex query, send as is.
-                  formattedQuery = owlClass;
-              }
-              // If it doesn't contain spaces but isn't a recognized class, try angle brackets
-              else if (!owlClass.startsWith('"')) {
-                  formattedQuery = `<${owlClass}>`;
-                  console.log(`Added angle brackets around query: ${formattedQuery}`);
-              }
-          }
-      }
-	return formattedQuery;
+        if (!owlClass || typeof owlClass !== 'string') {
+            return owlClass;
+        }
+
+        const manchesterKeywords = new Set(['and', 'or', 'not', 'some', 'only', 'value', 'min', 'max', 'exactly', 'that', 'inverse', 'self']);
+
+        // Get all labels from classesMap and propsMap
+        const allLabels = new Map();
+        for (const classObj of this.classesMap.values()) {
+            if (classObj.label) {
+                allLabels.set(classObj.label.toLowerCase(), classObj.label);
+            }
+        }
+        for (const propObj of this.propsMap.values()) {
+            if (propObj.label) {
+                allLabels.set(propObj.label.toLowerCase(), propObj.label);
+            }
+        }
+
+        // Sort labels by length, descending, to match longer labels first
+        const sortedLabels = Array.from(allLabels.keys()).sort((a, b) => b.length - a.length);
+
+        let processedQuery = owlClass;
+
+        for (const label of sortedLabels) {
+            if (manchesterKeywords.has(label)) {
+                continue;
+            }
+
+            // Case-insensitive replacement of whole words
+            const regex = new RegExp(`\\b${label.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'gi');
+            
+            const originalLabel = allLabels.get(label);
+            let replacement = originalLabel;
+            if (originalLabel.includes(' ')) {
+                replacement = `'${originalLabel}'`;
+            }
+            
+            processedQuery = processedQuery.replace(regex, replacement);
+        }
+
+        return processedQuery;
     },
     
   executeDLQuery(owlClass, queryType, labels = true) {
