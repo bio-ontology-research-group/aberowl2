@@ -58,7 +58,7 @@ Alpine.data('ontologyApp', () => ({
   format: 'text/html',
   query: '',
   llmQuery: '',
-  sparqlEndpoint: '',
+  sparqlEndpoint: '/virtuoso/sparql',
   detectedParams: null,
   isLoading: false,
     
@@ -766,6 +766,7 @@ Alpine.data('ontologyApp', () => ({
     "VALUES ?class {OWL superclass { cheesy_pizza } } . } \n" +
     "ORDER BY ?class \n"
   this.query = query
+  this.sparqlEndpoint = '/virtuoso/sparql';
     },
     
   setQueryClassesExampleQuery(event) {
@@ -778,6 +779,7 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
       "LIMIT 10";
     
     this.query = query;
+    this.sparqlEndpoint = '/virtuoso/sparql';
   },
   
   setDDIEMFilterExampleQuery(event) {
@@ -807,6 +809,7 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
     // "}";
     
     this.query = query;
+    this.sparqlEndpoint = '/virtuoso/sparql';
   },
 
     // Parse the raw JSON string into a structured object
