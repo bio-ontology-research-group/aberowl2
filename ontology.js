@@ -763,7 +763,7 @@ Alpine.data('ontologyApp', () => ({
     "PREFIX owl: <http://www.w3.org/2002/07/owl#> \n" +
     "SELECT DISTINCT ?class \n" +
     "WHERE { \n" +
-    "VALUES ?class {OWL superclass <> <> { cheesy_pizza } } . } \n" +
+    "VALUES ?class {OWL superclass { cheesy_pizza } } . } \n" +
     "ORDER BY ?class \n"
   this.query = query
     },
@@ -1059,8 +1059,7 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
     "SELECT DISTINCT ?pname ?protein ?label ?ontid WHERE { \n" +
     "  # binds ?ontid to the results of the OWL query \n" +
     "  VALUES ?ontid { \n" +
-    "    OWL subclass <http://aber-owl.net/aber-owl/service/> <>\n" +
-    "      { part_of some 'apoptotic process' }\n" +
+    "    OWL subclass { part_of some 'apoptotic process' }\n" +
     "  } . \n" +
     "  # ?ontid is now bound to the set of class IRIs \n" +
     "  ?protein a up:Protein .\n" +
@@ -1083,9 +1082,7 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
     "{   \n" +
     "    ?interacting_protein <http://purl.obolibrary.org/obo/RO_0002331> ?gene .   \n" +
     "    VALUES ?gene {    \n" +
-    "          OWL equivalent <https://biogw-db.nt.ntnu.no:4333/sparql> <GO> {    \n" +
-    "             'response to hypoxia'   \n" +
-    "          }    \n" +
+    "          OWL equivalent { 'response to hypoxia' }    \n" +
     "    } .  \n" +  
     "}";
     

@@ -3,14 +3,16 @@
 import groovy.json.*
 import src.util.Util
 import groovyx.gpars.GParsPool
-import src.AberowlManchesterOwlQueryEngine;
+import src.NewShortFormProvider
+import org.semanticweb.owlapi.expression.ShortFormEntityChecker
+import org.semanticweb.owlapi.util.BidirectionalShortFormProviderAdapter
+import org.semanticweb.owlapi.model.OWLClassExpression
 
 
 if(!application) {
     application = request.getApplication(true)
 }
 
-def queryEngine = new AberowlManchesterOwlQueryEngine();
 def params = Util.extractParams(request)
 // print(params)
 def query = params.query
@@ -18,14 +20,37 @@ def userEndpoint = params.endpoint
 def manager = application.manager
 
 try {
-    def data = queryEngine.expandAndExecQuery(manager, query)
-    def expandedQuery = data.query
-    
-    def endpoint = data.endpoint
+    def expandedQuery = query
+    def owlPattern = /(?s)OWL\s+([a-zA-Z_]+)\s*(?:<[^>]*>)?\s*(?:<[^>]*>)?\s*\{(.*?)\}/
+    def matcher = query =~ owlPattern
 
-    if (userEndpoint != null && !userEndpoint.isEmpty()) {
-        endpoint = userEndpoint
-    } else if (endpoint == null || endpoint.isEmpty()){
+    if (matcher) {
+        def fullMatch = matcher[0][0]
+        def type = matcher[0][1]
+        def dlQuery = matcher[0][2].trim()
+
+        def ont = manager.getOntology()
+        def sfp = new NewShortFormProvider(ont.getImportsClosure())
+        def bidiSfp = new BidirectionalShortFormProviderAdapter(ont.getImportsClosure(), sfp)
+        def checker = new ShortFormEntityChecker(bidiSfp)
+        def df = ont.getOWLOntologyManager().getOWLDataFactory()
+        def configSupplier = { -> ont.getOWLOntologyManager().getOntologyLoaderConfiguration() }
+        def parser = new org.semanticweb.owlapi.manchestersyntax.parser.ManchesterOWLSyntaxParserImpl(configSupplier, df)
+        parser.setStringToParse(dlQuery)
+        parser.setOWLEntityChecker(checker)
+        def expression = parser.parseClassExpression()
+        
+        def direct = true
+        def labels = false
+        def axioms = false
+        def out = manager.runQuery(expression, type, direct, labels, axioms)
+
+        def iris = out.collect { "<${it.owlClass}>" }.join("\n    ")
+        expandedQuery = query.replace(fullMatch, iris)
+    }
+    
+    def endpoint = userEndpoint
+    if (endpoint == null || endpoint.isEmpty()){
 	endpoint = "http://virtuoso:8890/sparql/" // NOTE: internal docker endpoint
     }
     def response
