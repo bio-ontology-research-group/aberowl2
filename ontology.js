@@ -207,47 +207,35 @@ Alpine.data('ontologyApp', () => ({
             console.error('Error fetching ontology metadata:', error);
         });
 
-    // Fetch ontology statistics via SPARQL
-    const fetchStat = (query) => {
-        const url = `/api/api/sparql.groovy?query=${encodeURIComponent(query)}`;
-        return fetch(url, { headers: { 'Accept': 'application/sparql-results+json' } })
-            .then(res => res.json())
-            .then(data => {
-                const countVal = data?.results?.bindings?.[0]?.count?.value;
-                if (countVal !== undefined) {
-                    return parseInt(countVal, 10);
-                }
-                return 'N/A';
-            })
-            .catch(() => 'N/A');
-    };
+    // Fetch ontology statistics via OWLAPI
+    fetch('/api/api/getObjectProperties.groovy?stats=true')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'error') {
+                console.error('Error fetching ontology stats:', data.message);
+                return;
+            }
+            const s = this.ontology.submission;
+            
+            // Entity counts
+            s.nb_classes = data.class_count ?? 'N/A';
+            s.nb_object_properties = data.object_property_count ?? 'N/A';
+            s.nb_data_properties = data.data_property_count ?? 'N/A';
+            s.nb_annotation_properties = data.annotation_property_count ?? 'N/A';
+            s.nb_individuals = data.individual_count ?? 'N/A';
+            const totalProps = [s.nb_object_properties, s.nb_data_properties, s.nb_annotation_properties]
+                .filter(c => typeof c === 'number').reduce((a, b) => a + b, 0);
+            s.nb_properties = totalProps > 0 ? totalProps : 'N/A';
 
-    const queries = {
-        nb_classes: `SELECT (COUNT(DISTINCT ?s) as ?count) WHERE { ?s a owl:Class . FILTER(!isBlank(?s)) }`,
-        nb_object_properties: `SELECT (COUNT(DISTINCT ?s) as ?count) WHERE { ?s a owl:ObjectProperty }`,
-        nb_data_properties: `SELECT (COUNT(DISTINCT ?s) as ?count) WHERE { ?s a owl:DatatypeProperty }`,
-        nb_annotation_properties: `SELECT (COUNT(DISTINCT ?s) as ?count) WHERE { ?s a owl:AnnotationProperty }`,
-        nb_individuals: `SELECT (COUNT(DISTINCT ?s) as ?count) WHERE { ?s a owl:NamedIndividual }`,
-        axiom_count: `SELECT (COUNT(*) as ?count) WHERE { ?s ?p ?o }`,
-    };
-
-    Promise.all([
-        fetchStat(queries.nb_classes),
-        fetchStat(queries.nb_object_properties),
-        fetchStat(queries.nb_data_properties),
-        fetchStat(queries.nb_annotation_properties),
-        fetchStat(queries.nb_individuals),
-        fetchStat(queries.axiom_count),
-    ]).then(([classCount, objPropCount, dataPropCount, annoPropCount, indCount, axiomCount]) => {
-        this.ontology.submission.nb_classes = classCount;
-        this.ontology.submission.nb_object_properties = objPropCount;
-        this.ontology.submission.nb_data_properties = dataPropCount;
-        this.ontology.submission.nb_annotation_properties = annoPropCount;
-        this.ontology.submission.nb_individuals = indCount;
-        const totalProps = [objPropCount, dataPropCount, annoPropCount].filter(c => typeof c === 'number').reduce((a, b) => a + b, 0);
-        this.ontology.submission.nb_properties = totalProps > 0 ? totalProps : 'N/A';
-        this.ontology.submission.axiom_count = axiomCount;
-    });
+            // Advanced stats
+            s.dl_expressivity = data.dl_expressivity ?? 'N/A';
+            s.axiom_count = data.axiom_count ?? 'N/A';
+            s.logical_axiom_count = data.logical_axiom_count ?? 'N/A';
+            s.max_depth = data.max_depth ?? 'N/A';
+            s.max_children = data.max_children ?? 'N/A';
+            s.avg_children = data.avg_children ? data.avg_children.toFixed(2) : 'N/A';
+        })
+        .catch(error => console.error('Error fetching ontology stats:', error));
     
     // Fetch the ontology classes and properties from the backend
     fetch('/api/api/runQuery.groovy?type=subclass&direct=true&query=<http://www.w3.org/2002/07/owl%23Thing>')
