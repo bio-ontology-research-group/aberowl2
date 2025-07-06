@@ -15,7 +15,18 @@ import java.util.LinkedList
 import java.util.Queue
 import java.util.Set
 
-// This script assumes 'ontology' and 'manager' are available in the binding.
+if(!application) {
+    application = request.getApplication(true);
+}
+
+def manager = application.manager
+def ontology = application.ontology
+
+if(!ontology || !manager) {
+    response.setContentType("application/json")
+    out << JsonOutput.toJson([status: "error", message: "Ontology or manager not loaded."])
+    return
+}
 
 def stats = [:]
 
