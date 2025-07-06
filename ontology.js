@@ -206,66 +206,9 @@ Alpine.data('ontologyApp', () => ({
         .catch(error => {
             console.error('Error fetching ontology metadata:', error);
         });
-
-    // Fetch ontology statistics via OWLAPI
-    fetch('/api/api/getObjectProperties.groovy?stats=true')
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'error') {
-                console.error('Error fetching ontology stats:', data.message);
-                return;
-            }
-            const s = this.ontology.submission;
-            
-            // Entity counts
-            s.nb_classes = data.class_count ?? 'N/A';
-            s.nb_object_properties = data.object_property_count ?? 'N/A';
-            s.nb_data_properties = data.data_property_count ?? 'N/A';
-            s.nb_annotation_properties = data.annotation_property_count ?? 'N/A';
-            s.nb_individuals = data.individual_count ?? 'N/A';
-            const totalProps = [s.nb_object_properties, s.nb_data_properties, s.nb_annotation_properties]
-                .filter(c => typeof c === 'number').reduce((a, b) => a + b, 0);
-            s.nb_properties = totalProps > 0 ? totalProps : 'N/A';
-
-            // Advanced stats
-            s.dl_expressivity = data.dl_expressivity ?? 'N/A';
-            s.axiom_count = data.axiom_count ?? 'N/A';
-            s.logical_axiom_count = data.logical_axiom_count ?? 'N/A';
-            s.max_depth = data.max_depth ?? 'N/A';
-            s.max_children = data.max_children ?? 'N/A';
-            s.avg_children = data.avg_children ? data.avg_children.toFixed(2) : 'N/A';
-        })
-        .catch(error => console.error('Error fetching ontology stats:', error));
     
-    // Fetch the ontology classes and properties from the backend
-    fetch('/api/api/runQuery.groovy?type=subclass&direct=true&query=<http://www.w3.org/2002/07/owl%23Thing>')
-      .then(response => {
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
-        }
-        return response.json();
-      })
-      .then(data => {
-        console.log('Fetched ontology data:', data);
-        // 1. Index classes and re-initialize children arrays
-        this.ontology.classes = data.result || [];
-        if (this.ontology.classes.length > 0 && this.ontology.name === 'Ontology') {
-          this.ontology.name = this.ontology.classes[0].ontology;
-        }
-        this.ensureCollapsedState(this.ontology.classes);
-        for (let i = 0; i < this.ontology.classes.length; i++) {
-          this.classesMap.set(this.ontology.classes[i].owlClass, this.ontology.classes[i]);
-        }
-        this.isLoading = false;
-      })
-      .catch(error => {
-        console.error('Error fetching ontology data:', error);
-        this.isLoading = false;
-        window.dispatchEvent(new CustomEvent('ontology:error', { 
-          detail: { message: 'Failed to load ontology data: ' + error.message }
-        }));
-      });
-    // Fetch the ontology properties
+    // Chain API calls to avoid race conditions on server startup
+    // Start with property hierarchy, then fetch stats and class hierarchy.
     fetch('/api/api/getObjectProperties.groovy')
       .then(response => {
         if (!response.ok) {
@@ -275,22 +218,66 @@ Alpine.data('ontologyApp', () => ({
       })
       .then(data => {
         console.log('Fetched properties:', data);
-        // 1. Index properties and re-initialize children arrays
         this.ontology.properties = data.result || [];
-        // Build the properties map
         for (let i = 0; i < this.ontology.properties.length; i++) {
           this.propsMap.set(this.ontology.properties[i].owlClass, this.ontology.properties[i]);
         }
-        // Ensure all properties are collapsed by default
         this.ensureCollapsedState(this.ontology.properties);
-        this.isLoading = false;
+
+        // Fetch ontology statistics via OWLAPI
+        fetch('/api/api/getObjectProperties.groovy?stats=true')
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'error') {
+                    console.error('Error fetching ontology stats:', data.message);
+                    return;
+                }
+                const s = this.ontology.submission;
+                s.nb_classes = data.class_count ?? 'N/A';
+                s.nb_object_properties = data.object_property_count ?? 'N/A';
+                s.nb_data_properties = data.data_property_count ?? 'N/A';
+                s.nb_annotation_properties = data.annotation_property_count ?? 'N/A';
+                s.nb_individuals = data.individual_count ?? 'N/A';
+                const totalProps = [s.nb_object_properties, s.nb_data_properties, s.nb_annotation_properties]
+                    .filter(c => typeof c === 'number').reduce((a, b) => a + b, 0);
+                s.nb_properties = totalProps > 0 ? totalProps : 'N/A';
+                s.dl_expressivity = data.dl_expressivity ?? 'N/A';
+                s.axiom_count = data.axiom_count ?? 'N/A';
+                s.logical_axiom_count = data.logical_axiom_count ?? 'N/A';
+                s.max_depth = data.max_depth ?? 'N/A';
+                s.max_children = data.max_children ?? 'N/A';
+                s.avg_children = data.avg_children ? data.avg_children.toFixed(2) : 'N/A';
+            })
+            .catch(error => console.error('Error fetching ontology stats:', error));
+
+        // Fetch the ontology classes from the backend
+        fetch('/api/api/runQuery.groovy?type=subclass&direct=true&query=<http://www.w3.org/2002/07/owl%23Thing>')
+          .then(response => {
+            if (!response.ok) {
+              throw new Error('Network response was not ok');
+            }
+            return response.json();
+          })
+          .then(data => {
+            console.log('Fetched ontology data:', data);
+            this.ontology.classes = data.result || [];
+            if (this.ontology.classes.length > 0 && this.ontology.name === 'Ontology') {
+              this.ontology.name = this.ontology.classes[0].ontology;
+            }
+            this.ensureCollapsedState(this.ontology.classes);
+            for (let i = 0; i < this.ontology.classes.length; i++) {
+              this.classesMap.set(this.ontology.classes[i].owlClass, this.ontology.classes[i]);
+            }
+            this.isLoading = false;
+          })
+          .catch(error => {
+            console.error('Error fetching ontology classes data:', error);
+            this.isLoading = false;
+          });
       })
       .catch(error => {
-        console.error('Error fetching ontology data:', error);
+        console.error('Error fetching ontology properties data:', error);
         this.isLoading = false;
-        window.dispatchEvent(new CustomEvent('ontology:error', { 
-          detail: { message: 'Failed to load ontology data: ' + error.message }
-        }));
       });
   },
   
