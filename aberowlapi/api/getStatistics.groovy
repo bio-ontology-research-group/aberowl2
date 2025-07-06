@@ -1,8 +1,13 @@
 import groovy.json.JsonOutput
 import src.RequestManager
+import groovy.json.JsonOutput
+import src.RequestManager
 import org.semanticweb.owlapi.model.OWLOntology
 import org.semanticweb.owlapi.model.AxiomType
 import org.semanticweb.owlapi.model.parameters.Imports
+import org.semanticweb.owlapi.model.OWLAnnotation
+import org.semanticweb.owlapi.model.OWLLiteral
+import org.semanticweb.owlapi.vocab.OWLRDFVocabulary
 
 response.setContentType("application/json")
 
@@ -38,7 +43,26 @@ def rboxAxiomsCount = ontology.getRBoxAxioms(Imports.INCLUDED).size()
 
 def declarationAxiomsCount = ontology.getAxioms(AxiomType.DECLARATION, true).size()
 
+def version = ""
+def releaseDate = ""
+
+ontology.getAnnotations().each { OWLAnnotation annotation ->
+    if (annotation.getProperty().isBuiltIn() && annotation.getProperty().getIRI().equals(OWLRDFVocabulary.OWL_VERSION_INFO.getIRI())) {
+        if (annotation.getValue() instanceof OWLLiteral) {
+            version = annotation.getValue().getLiteral()
+        }
+    }
+    def propertyIRI = annotation.getProperty().getIRI().toString()
+    if (propertyIRI == "http://purl.org/dc/elements/1.1/date" || propertyIRI == "http://purl.org/dc/terms/date") {
+        if (annotation.getValue() instanceof OWLLiteral) {
+            releaseDate = annotation.getValue().getLiteral()
+        }
+    }
+}
+
 def result = [
+    "version": version,
+    "release_date": releaseDate,
     "class_count": classCount,
     "property_count": propertyCount,
     "object_property_count": objectPropertyCount,

@@ -220,6 +220,12 @@ Alpine.data('ontologyApp', () => ({
             this.ontology.submission.axiom_count = stats.axiom_count ?? 'N/A';
             this.ontology.submission.logical_axiom_count = stats.logical_axiom_count ?? 'N/A';
             this.ontology.submission.declaration_axiom_count = stats.declaration_axiom_count ?? 'N/A';
+            if (stats.version) {
+                this.ontology.submission.version = stats.version;
+            }
+            if (stats.release_date) {
+                this.ontology.submission.date_released = stats.release_date;
+            }
         })
         .catch(error => {
             console.error('Error fetching ontology statistics:', error);
