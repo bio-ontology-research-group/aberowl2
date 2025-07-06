@@ -50,7 +50,7 @@ try {
         def axioms = false
         def out = manager.runQuery(expression, type, direct, labels, axioms)
 
-        def iris = out.collect { "<${it.owlClass}>" }.join("\n    ")
+        def iris = out.findAll{ it.owlClass }.collect { "<${it.owlClass}>" }.join("\n    ")
         expandedQuery = query.replace(fullMatch, iris)
     }
     
