@@ -326,7 +326,14 @@ public class RequestManager {
         if (requestType == RequestType.SUBCLASS) {
             resultSet = Sets.newHashSet(Iterables.limit(queryEngine.getSubClasses(mOwlQuery, direct, labels), MAX_REASONER_RESULTS))
         } else if (requestType == RequestType.SUPERCLASS) {
-            resultSet = Sets.newHashSet(Iterables.limit(queryEngine.getSuperClasses(mOwlQuery, direct, labels), MAX_REASONER_RESULTS))
+            def parser = new org.semanticweb.owlapi.manchestersyntax.parser.ManchesterOWLSyntaxParserImpl(
+                { -> ontology.getOWLOntologyManager().getOntologyLoaderConfiguration() },
+                df
+            )
+            parser.setStringToParse(mOwlQuery)
+            parser.setOWLEntityChecker(new ShortFormEntityChecker(new BidirectionalShortFormProviderAdapter(ontology.getImportsClosure(), shortFormProvider)))
+            def expression = parser.parseClassExpression()
+            resultSet = Sets.newHashSet(Iterables.limit(queryEngine.getSuperClasses(expression, direct, labels), MAX_REASONER_RESULTS))
         } else if (requestType == RequestType.EQUIVALENT) {
             resultSet = Sets.newHashSet(Iterables.limit(queryEngine.getEquivalentClasses(mOwlQuery, labels), MAX_REASONER_RESULTS))
         } else if (requestType == RequestType.SUBEQ) {
