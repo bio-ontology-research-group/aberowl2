@@ -42,22 +42,7 @@ public class QueryEngine {
         this.parser = new QueryParser(oReasoner.getRootOntology(), sProvider);
     }
     
-    /**
-     * Return a set of classes relevant to a class description represented by a
-     * Manchester OWL Syntax string. Returned classes can either be superclasses,
-     * subclasses, equivalent classes or a combination of all relevant classes.
-     * 
-     * @param mOwl Manchester OWL Syntax query (form of a raw class description)
-     * @param requestType Type of class to return.
-     * @see RequestType
-     * @return A HashSet of classes relevant to the given class description in 
-     * mOwl corresponding to the type of request.
-     */
-    public Set<OWLClass> getClasses(String mOwl, RequestType requestType, boolean direct, boolean labels) {
-        if(mOwl == null || mOwl.trim().length() == 0) {
-            return Collections.emptySet();
-        }
-        OWLClassExpression cExpression = parser.parse(mOwl, labels);
+    public Set<OWLClass> getClasses(OWLClassExpression cExpression, RequestType requestType, boolean direct, boolean labels) {
         Set<OWLClass> classes = new HashSet<>();
         if(cExpression == null) {
             return classes
@@ -83,6 +68,53 @@ public class QueryEngine {
 		break;
         }
         return classes;
+    }
+
+    public Set<OWLClass> getClasses(OWLClassExpression cExpression, RequestType requestType, boolean direct, boolean labels) {
+        Set<OWLClass> classes = new HashSet<>();
+        if(cExpression == null) {
+            return classes;
+        }
+	
+        switch(requestType) {
+            case RequestType.SUPERCLASS:
+		classes.addAll(getSuperClasses(cExpression, direct)); break;
+            case RequestType.EQUIVALENT:
+		classes.addAll(getEquivalentClasses(cExpression)); break;
+            case RequestType.SUBCLASS:
+		classes.addAll(getSubClasses(cExpression, direct)); break;
+            case RequestType.REALIZE:
+		classes.addAll(getIndividuals(cExpression, direct)); break;
+            case RequestType.SUBEQ:
+		classes.addAll(getSubClasses(cExpression, direct));
+		classes.addAll(getEquivalentClasses(cExpression)); break;
+            case RequestType.SUPEQ:
+		classes.addAll(getSuperClasses(cExpression, direct));
+		classes.addAll(getEquivalentClasses(cExpression)); break;
+            default: // default is a subclass query
+		classes.addAll(getSubClasses(cExpression, direct));
+		break;
+        }
+        return classes;
+    }
+
+    /**
+     * Return a set of classes relevant to a class description represented by a
+     * Manchester OWL Syntax string. Returned classes can either be superclasses,
+     * subclasses, equivalent classes or a combination of all relevant classes.
+     * 
+     * @param mOwl Manchester OWL Syntax query (form of a raw class description)
+     * @param requestType Type of class to return.
+     * @see RequestType
+     * @return A HashSet of classes relevant to the given class description in 
+     * mOwl corresponding to the type of request.
+     */
+    public Set<OWLClass> getClasses(String mOwl, RequestType requestType, boolean direct, boolean labels) {
+        if(mOwl == null || mOwl.trim().length() == 0) {
+            return Collections.emptySet();
+        }
+        OWLClassExpression cExpression = parser.parse(mOwl, labels);
+        return getClasses(cExpression, requestType, direct, labels);
     }
 
     public Set<OWLClass> getSuperClasses(OWLClassExpression cExpression, boolean direct) {
