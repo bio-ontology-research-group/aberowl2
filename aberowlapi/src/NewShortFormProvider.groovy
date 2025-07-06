@@ -72,7 +72,7 @@ public class NewShortFormProvider implements ShortFormProvider {
     public NewShortFormProvider(Set<OWLOntology> ontologies) {
         this(Collections.singletonList(OWLManager.getOWLDataFactory().getOWLAnnotationProperty(OWLRDFVocabulary.RDFS_LABEL.getIRI())),
                 Collections.emptyMap(),
-                new SimpleOntologySetProvider(ontologies));
+                new SimpleOntologySetProviderImpl(ontologies));
     }
 
     public NewShortFormProvider(
@@ -299,6 +299,19 @@ public class NewShortFormProvider implements ShortFormProvider {
         public void visit(IRI iri) {
             // No language
             candidateValue = iri;
+        }
+    }
+
+    private static class SimpleOntologySetProviderImpl implements OWLOntologySetProvider {
+        private final Set<OWLOntology> ontologies;
+
+        public SimpleOntologySetProviderImpl(Set<OWLOntology> ontologies) {
+            this.ontologies = ontologies;
+        }
+
+        @Override
+        public Set<OWLOntology> getOntologies() {
+            return ontologies;
         }
     }
 }
