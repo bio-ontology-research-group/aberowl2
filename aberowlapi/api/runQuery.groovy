@@ -38,9 +38,13 @@ try {
     if (query.startsWith("http") || query.startsWith("<")) {
         out = manager.runQuery(query, type, direct, labels, axioms)
     } else {
-        def sfp = new NewShortFormProvider(manager.getOntology().getImportsClosure())
-        def parser = new AberowlManchesterOwlParser(manager.getOntology(), sfp)
-        def expression = parser.parse(query)
+        def ont = manager.getOntology()
+        def sfp = new NewShortFormProvider(ont.getImportsClosure())
+        def df = ont.getOWLOntologyManager().getOWLDataFactory()
+        def parser = new org.semanticweb.owlapi.manchestersyntax.parser.ManchesterOWLSyntaxParserImpl(df, new java.io.StringReader(query))
+        def checker = new org.semanticweb.owlapi.util.mansyntax.ShortFormEntityChecker(sfp)
+        parser.setOWLEntityChecker(checker)
+        def expression = parser.parseClassExpression()
         out = manager.runQuery(expression, type, direct, labels, axioms)
     }
     def end = System.currentTimeMillis()
