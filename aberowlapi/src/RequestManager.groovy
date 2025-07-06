@@ -309,6 +309,26 @@ public class RequestManager {
      * @param requestType Type of class match to be performed. Valid values are: subclass, superclass, equivalent or all.
      * @return Set of OWL Classes.
      */
+    Set runQuery(OWLClassExpression mOwlQuery, String type, boolean direct, boolean labels, boolean axioms) {
+        type = type.toLowerCase()
+        def requestType
+        switch (type) {
+            case "superclass": requestType = RequestType.SUPERCLASS; break;
+            case "subclass": requestType = RequestType.SUBCLASS; break;
+            case "equivalent": requestType = RequestType.EQUIVALENT; break;
+            case "supeq": requestType = RequestType.SUPEQ; break;
+            case "subeq": requestType = RequestType.SUBEQ; break;
+            case "realize": requestType = RequestType.REALIZE; break;
+            default: requestType = RequestType.SUBEQ; break;
+        }
+
+        Set resultSet = Sets.newHashSet(Iterables.limit(queryEngine.getClasses(mOwlQuery, requestType, direct, labels), MAX_REASONER_RESULTS))
+        resultSet.remove(df.getOWLNothing())
+        resultSet.remove(df.getOWLThing())
+        def classes = classes2info(resultSet, axioms);
+        return classes.sort {x, y -> x["label"].compareTo(y["label"])};
+    }
+    
     Set runQuery(String mOwlQuery, String type, boolean direct, boolean labels, boolean axioms) {
         type = type.toLowerCase()
 	def requestType
