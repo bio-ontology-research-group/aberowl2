@@ -14,6 +14,7 @@ def queryEngine = new AberowlManchesterOwlQueryEngine();
 def params = Util.extractParams(request)
 // print(params)
 def query = params.query
+def userEndpoint = params.endpoint
 def manager = application.manager
 
 try {
@@ -22,7 +23,9 @@ try {
     
     def endpoint = data.endpoint
 
-    if (endpoint == null || endpoint.isEmpty()){
+    if (userEndpoint != null && !userEndpoint.isEmpty()) {
+        endpoint = userEndpoint
+    } else if (endpoint == null || endpoint.isEmpty()){
 	endpoint = "http://virtuoso:8890/sparql/" // NOTE: internal docker endpoint
     }
     def response

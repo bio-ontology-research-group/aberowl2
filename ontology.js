@@ -58,6 +58,7 @@ Alpine.data('ontologyApp', () => ({
   format: 'text/html',
   query: '',
   llmQuery: '',
+  sparqlEndpoint: '',
   detectedParams: null,
   isLoading: false,
     
@@ -747,6 +748,10 @@ Alpine.data('ontologyApp', () => ({
   onSparqlChange(event) {
     this.query = event.target.value;
   },
+
+  onSparqlEndpointChange(event) {
+    this.sparqlEndpoint = event.target.value;
+  },
   
   onFormatChange(event) {
     this.format = event.target.value;
@@ -859,6 +864,9 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
   const sparqlUrl = 'http://localhost:88/api/api/sparql.groovy';
   const formData = new URLSearchParams();
   formData.append('query', this.query.trim());
+  if (this.sparqlEndpoint) {
+    formData.append('endpoint', this.sparqlEndpoint);
+  }
 
   const queryUrl = `${sparqlUrl}?${formData.toString()}`;
   
@@ -1041,6 +1049,32 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
   },
 
 
+  setUniprotExampleQuery(event) {
+    if (event) event.preventDefault();
+    
+    const query = "PREFIX GO: <http://purl.uniprot.org/go/>\n" +
+    "PREFIX taxon:<http://purl.uniprot.org/taxonomy/>\n" +
+    "PREFIX up: <http://purl.uniprot.org/core/>\n" +
+    "PREFIX skos: <http://www.w3.org/2004/02/skos/core#>\n\n" +
+    "SELECT DISTINCT ?pname ?protein ?label ?ontid WHERE { \n" +
+    "  # binds ?ontid to the results of the OWL query \n" +
+    "  VALUES ?ontid { \n" +
+    "    OWL subclass <http://aber-owl.net/aber-owl/service/> <>\n" +
+    "      { part_of some 'apoptotic process' }\n" +
+    "  } . \n" +
+    "  # ?ontid is now bound to the set of class IRIs \n" +
+    "  ?protein a up:Protein .\n" +
+    "  ?protein up:organism taxon:9606 .\n" +
+    "  ?protein up:mnemonic ?pname .\n" +
+    "  ?protein up:classifiedWith ?ontid .\n" +
+    "  ?ontid skos:prefLabel ?label .\n" +
+    "}";
+    
+    this.query = query;
+    this.sparqlEndpoint = 'https://sparql.uniprot.org/sparql';
+  },
+
+
   setBioGatewayExampleQuery(event) {
     if (event) event.preventDefault();
     
@@ -1056,6 +1090,7 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
     "}";
     
     this.query = query;
+    this.sparqlEndpoint = 'https://biogw-db.nt.ntnu.no:4333/sparql';
   },
   
   // This will be handled with x-show directives in the template
