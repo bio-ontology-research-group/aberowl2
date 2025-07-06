@@ -871,13 +871,13 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
     formData.append('endpoint', this.sparqlEndpoint);
   }
 
-  const queryUrl = `${sparqlUrl}?${formData.toString()}`;
-  
-  fetch(queryUrl, {
-      method: 'GET',
+  fetch(sparqlUrl, {
+      method: 'POST',
       headers: {
-    'Accept': 'application/sparql-results+json,*/*;q=0.9'
-      }
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/sparql-results+json,*/*;q=0.9'
+      },
+      body: formData
   })
       .then(response => {
     if (!response.ok) {
