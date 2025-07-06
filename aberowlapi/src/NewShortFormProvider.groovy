@@ -348,7 +348,7 @@ public class NewShortFormProvider implements ShortFormProvider {
     }
 }
 
-public class OWLAnnotationValueVisitorsExNew implements OWLAnnotationValueVisitorEx {
+class OWLAnnotationValueVisitorsExNew implements OWLAnnotationValueVisitorEx {
                     @Override
                     public String visit(IRI iri) {
                         // TODO refactor the short form providers in here
