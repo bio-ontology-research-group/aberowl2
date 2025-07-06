@@ -212,7 +212,13 @@ Alpine.data('ontologyApp', () => ({
         const url = `/api/api/sparql.groovy?query=${encodeURIComponent(query)}`;
         return fetch(url, { headers: { 'Accept': 'application/sparql-results+json' } })
             .then(res => res.json())
-            .then(data => parseInt(data.results.bindings[0].count.value, 10))
+            .then(data => {
+                const countVal = data?.results?.bindings?.[0]?.count?.value;
+                if (countVal !== undefined) {
+                    return parseInt(countVal, 10);
+                }
+                return 'N/A';
+            })
             .catch(() => 'N/A');
     };
 
