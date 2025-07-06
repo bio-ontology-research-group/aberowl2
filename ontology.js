@@ -14,16 +14,29 @@ Alpine.data('ontologyApp', () => ({
   ontology: {
     classes: [],
     properties: [],
-    name: 'Ontology Name',
-    acronym: 'ONT',
+    name: 'Loading...',
+    acronym: '',
     submission: {
-      description: 'Ontology description',
-      version: '1.0',
-      date_released: '2023-10-01',
-      home_page: 'https://example.org',
-      documentation: 'https://example.org/docs',
-      publication: 'https://example.org/publication',
-      has_ontology_language: 'OWL'
+      description: '',
+      version: '',
+      date_released: '',
+      home_page: '',
+      documentation: '',
+      publication: '',
+      has_ontology_language: 'OWL',
+      nb_classes: 'N/A',
+      nb_properties: 'N/A',
+      nb_object_properties: 'N/A',
+      nb_data_properties: 'N/A',
+      nb_annotation_properties: 'N/A',
+      nb_individuals: 'N/A',
+      max_children: 'N/A',
+      avg_children: 'N/A',
+      max_depth: 'N/A',
+      dl_expressivity: 'N/A',
+      axiom_count: 'N/A',
+      logical_axiom_count: 'N/A',
+      declaration_axiom_count: 'N/A'
     }
   },
   classesMap: new Map(),
@@ -152,6 +165,80 @@ Alpine.data('ontologyApp', () => ({
   
   fetchOntologyData() {
     this.isLoading = true;
+
+    // Fetch ontology metadata
+    const sparqlQuery = `
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX dc: <http://purl.org/dc/elements/1.1/>
+        PREFIX dcterms: <http://purl.org/dc/terms/>
+        PREFIX vann: <http://purl.org/vocab/vann/>
+        SELECT ?p ?o
+        WHERE {
+          ?s a owl:Ontology .
+          ?s ?p ?o .
+          FILTER(isLiteral(?o))
+        }
+    `;
+    const sparqlUrl = `/api/api/sparql.groovy?query=${encodeURIComponent(sparqlQuery)}`;
+    fetch(sparqlUrl, { headers: { 'Accept': 'application/sparql-results+json' } })
+        .then(response => response.json())
+        .then(data => {
+            const metadata = {};
+            data.results.bindings.forEach(binding => {
+                const prop = binding.p.value.split('#').pop().split('/').pop();
+                const value = binding.o.value;
+                if (!metadata[prop]) {
+                    metadata[prop] = [];
+                }
+                metadata[prop].push(value);
+            });
+
+            const first = (arr) => arr && arr.length > 0 ? arr[0] : undefined;
+
+            this.ontology.name = first(metadata.title) || 'Ontology';
+            this.ontology.acronym = first(metadata.preferredNamespacePrefix) || '';
+            this.ontology.submission.description = first(metadata.description) || first(metadata.comment) || '';
+            this.ontology.submission.version = first(metadata.versionInfo) || '';
+            this.ontology.submission.date_released = first(metadata.date) || '';
+            this.ontology.submission.home_page = first(metadata.homepage) || '';
+        })
+        .catch(error => {
+            console.error('Error fetching ontology metadata:', error);
+        });
+
+    // Fetch ontology statistics
+    const fetchStat = (query) => {
+        const url = `/api/api/sparql.groovy?query=${encodeURIComponent(query)}`;
+        return fetch(url, { headers: { 'Accept': 'application/sparql-results+json' } })
+            .then(res => res.json())
+            .then(data => parseInt(data.results.bindings[0].count.value, 10))
+            .catch(() => 'N/A');
+    };
+
+    const queries = {
+        nb_classes: `SELECT (COUNT(DISTINCT ?s) as ?count) WHERE { ?s a owl:Class . FILTER(!isBlank(?s)) }`,
+        nb_object_properties: `SELECT (COUNT(DISTINCT ?s) as ?count) WHERE { ?s a owl:ObjectProperty }`,
+        nb_data_properties: `SELECT (COUNT(DISTINCT ?s) as ?count) WHERE { ?s a owl:DatatypeProperty }`,
+        nb_annotation_properties: `SELECT (COUNT(DISTINCT ?s) as ?count) WHERE { ?s a owl:AnnotationProperty }`,
+        nb_individuals: `SELECT (COUNT(DISTINCT ?s) as ?count) WHERE { ?s a owl:NamedIndividual }`,
+    };
+
+    Promise.all([
+        fetchStat(queries.nb_classes),
+        fetchStat(queries.nb_object_properties),
+        fetchStat(queries.nb_data_properties),
+        fetchStat(queries.nb_annotation_properties),
+        fetchStat(queries.nb_individuals),
+    ]).then(([classCount, objPropCount, dataPropCount, annoPropCount, indCount]) => {
+        this.ontology.submission.nb_classes = classCount;
+        this.ontology.submission.nb_object_properties = objPropCount;
+        this.ontology.submission.nb_data_properties = dataPropCount;
+        this.ontology.submission.nb_annotation_properties = annoPropCount;
+        this.ontology.submission.nb_individuals = indCount;
+        const totalProps = [objPropCount, dataPropCount, annoPropCount].filter(c => typeof c === 'number').reduce((a, b) => a + b, 0);
+        this.ontology.submission.nb_properties = totalProps > 0 ? totalProps : 'N/A';
+    });
     
     // Fetch the ontology classes and properties from the backend
     fetch('/api/api/runQuery.groovy?type=subclass&direct=true&query=<http://www.w3.org/2002/07/owl%23Thing>')
@@ -165,7 +252,7 @@ Alpine.data('ontologyApp', () => ({
         console.log('Fetched ontology data:', data);
         // 1. Index classes and re-initialize children arrays
         this.ontology.classes = data.result || [];
-        if (this.ontology.classes.length > 0) {
+        if (this.ontology.classes.length > 0 && this.ontology.name === 'Ontology') {
           this.ontology.name = this.ontology.classes[0].ontology;
         }
         this.ensureCollapsedState(this.ontology.classes);

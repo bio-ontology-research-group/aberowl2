@@ -150,27 +150,27 @@
                   <tbody>
                     <tr>
                       <td>Number of classes</td>
-                      <td x-text="ontology?.submission?.nb_classes || '100'"></td>
+                      <td x-text="ontology?.submission?.nb_classes || 'N/A'"></td>
                     </tr>
                     <tr>
                       <td>Number of properties</td>
-                      <td>25</td>
+                      <td x-text="ontology?.submission?.nb_properties || 'N/A'"></td>
                     </tr>
                     <tr>
                       <td>Number of individuals</td>
-                      <td>15</td>
+                      <td x-text="ontology?.submission?.nb_individuals || 'N/A'"></td>
                     </tr>
                     <tr>
                       <td>Maximum children</td>
-                      <td x-text="ontology?.submission?.max_children || '15'"></td>
+                      <td x-text="ontology?.submission?.max_children || 'N/A'"></td>
                     </tr>
                     <tr>
                       <td>Average children</td>
-                      <td x-text="ontology?.submission?.avg_children || '4.2'"></td>
+                      <td x-text="ontology?.submission?.avg_children || 'N/A'"></td>
                     </tr>
                     <tr>
                       <td>Maximum depth</td>
-                      <td x-text="ontology?.submission?.max_depth || '5'"></td>
+                      <td x-text="ontology?.submission?.max_depth || 'N/A'"></td>
                     </tr>
                   </tbody>
                 </table>
@@ -180,39 +180,39 @@
                   <tbody>
                     <tr>
                       <td>DL Expressivity</td>
-                      <td>ALCROIQ(D)</td>
+                      <td x-text="ontology?.submission?.dl_expressivity || 'N/A'"></td>
                     </tr>
                     <tr>
                       <td>Axioms</td>
-                      <td>940</td>
+                      <td x-text="ontology?.submission?.axiom_count || 'N/A'"></td>
                     </tr>
                     <tr>
                       <td>Logical axioms</td>
-                      <td>712</td>
+                      <td x-text="ontology?.submission?.logical_axiom_count || 'N/A'"></td>
                     </tr>
                     <tr>
                       <td>Declaration axioms</td>
-                      <td>228</td>
+                      <td x-text="ontology?.submission?.declaration_axiom_count || 'N/A'"></td>
                     </tr>
                     <tr>
                       <td>Class count</td>
-                      <td x-text="ontology?.submission?.nb_classes || '100'"></td>
+                      <td x-text="ontology?.submission?.nb_classes || 'N/A'"></td>
                     </tr>
                     <tr>
                       <td>Object property count</td>
-                      <td>8</td>
+                      <td x-text="ontology?.submission?.nb_object_properties || 'N/A'"></td>
                     </tr>
                     <tr>
                       <td>Data property count</td>
-                      <td>0</td>
+                      <td x-text="ontology?.submission?.nb_data_properties || 'N/A'"></td>
                     </tr>
                     <tr>
                       <td>Individual count</td>
-                      <td>15</td>
+                      <td x-text="ontology?.submission?.nb_individuals || 'N/A'"></td>
                     </tr>
                     <tr>
                       <td>Annotation property count</td>
-                      <td>17</td>
+                      <td x-text="ontology?.submission?.nb_annotation_properties || 'N/A'"></td>
                     </tr>
                   </tbody>
                 </table>
