@@ -1,10 +1,11 @@
 package src
 
-import uk.ac.manchester.cs.owl.parser.ManchesterOWLSyntaxParserImpl
-import uk.ac.manchester.cs.owl.parser.ShortFormEntityChecker
+import org.semanticweb.owlapi.manchestersyntax.parser.ManchesterOWLSyntaxParserImpl
+import org.semanticweb.owlapi.util.ShortFormEntityChecker
 import org.semanticweb.owlapi.model.OWLClassExpression
 import org.semanticweb.owlapi.model.OWLDataFactory
 import org.semanticweb.owlapi.model.OWLOntology
+import org.semanticweb.owlapi.model.OWLOntologyLoaderConfiguration
 import org.semanticweb.owlapi.util.ShortFormProvider
 
 import java.util.regex.Matcher;
@@ -27,14 +28,19 @@ public class AberowlManchesterOwlParser {
     private final ManchesterOWLSyntaxParserImpl delegate;
 
     public AberowlManchesterOwlParser(OWLOntology ontology, ShortFormProvider shortFormProvider) {
-        OWLDataFactory dataFactory = ontology.getOWLOntologyManager().getOWLDataFactory();
+        def manager = ontology.getOWLOntologyManager()
+        OWLDataFactory dataFactory = manager.getOWLDataFactory();
+        def configProvider = { -> manager.getOntologyLoaderConfiguration() }
+        this.delegate = new ManchesterOWLSyntaxParserImpl(configProvider, dataFactory)
+
         def entityChecker = new ShortFormEntityChecker(shortFormProvider)
-        this.delegate = new ManchesterOWLSyntaxParserImpl(dataFactory, entityChecker);
+        delegate.setOWLEntityChecker(entityChecker)
         delegate.setDefaultOntology(ontology);
     }
 
     public OWLClassExpression parse(final String manchesterOwlQuery) {
-        return delegate.parse(manchesterOwlQuery);
+        delegate.setStringToParse(manchesterOwlQuery);
+        return delegate.parseClassExpression();
     }
 
     public AberowlManchesterOwlQuery parseForSparql(final String manchesterOwlQuery) {
