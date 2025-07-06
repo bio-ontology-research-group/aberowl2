@@ -2,6 +2,7 @@ import groovy.json.JsonOutput
 import src.RequestManager
 import org.semanticweb.owlapi.model.OWLOntology
 import org.semanticweb.owlapi.model.AxiomType
+import org.semanticweb.owlapi.model.parameters.Imports
 
 response.setContentType("application/json")
 
@@ -31,9 +32,9 @@ def propertyCount = objectPropertyCount + dataPropertyCount + annotationProperty
 def axiomCount = ontology.getAxiomCount(true)
 def logicalAxiomCount = ontology.getLogicalAxiomCount(true)
 
-def tboxAxiomsCount = ontology.getTBoxAxioms(true).size()
-def aboxAxiomsCount = ontology.getABoxAxioms(true).size()
-def rboxAxiomsCount = ontology.getRBoxAxioms(true).size()
+def tboxAxiomsCount = ontology.getTBoxAxioms(Imports.INCLUDED).size()
+def aboxAxiomsCount = ontology.getABoxAxioms(Imports.INCLUDED).size()
+def rboxAxiomsCount = ontology.getRBoxAxioms(Imports.INCLUDED).size()
 
 def declarationAxiomsCount = ontology.getAxioms(AxiomType.DECLARATION, true).size()
 
