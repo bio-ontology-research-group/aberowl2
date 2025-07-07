@@ -35,19 +35,14 @@ try {
     // Use the provided endpoint or default to /virtuoso/ if not specified
     def endpointUrl = endpoint.startsWith("http") ? endpoint : request.getRequestURL().toString().replaceFirst(/\/api\/runSparqlQuery\.groovy$/, endpoint)
 
-    def http = new URL(endpointUrl).openConnection() as HttpURLConnection
-    http.setRequestMethod('POST')
-    http.setDoOutput(true)
-    http.setRequestProperty('Content-Type', 'application/x-www-form-urlencoded;charset=UTF-8')
-    http.setRequestProperty('Accept', 'application/sparql-results+json')
+    def queryParams = "query=" + URLEncoder.encode(rewrittenQuery, "UTF-8") + "&format=" + URLEncoder.encode("application/sparql-results+json", "UTF-8") + "&default-graph-uri="
+    def fullUrl = endpointUrl.contains("?") ? (endpointUrl + "&" + queryParams) : (endpointUrl + "?" + queryParams)
     
-    def postData = "query=" + URLEncoder.encode(rewrittenQuery, "UTF-8")
-    println "DEBUG: Sending SPARQL query to endpoint ${endpointUrl}:"
-    println postData
-    def writer = new OutputStreamWriter(http.getOutputStream())
-    writer.write(postData)
-    writer.flush()
-    writer.close()
+    println "DEBUG: Sending SPARQL query to endpoint ${fullUrl}"
+
+    def http = new URL(fullUrl).openConnection() as HttpURLConnection
+    http.setRequestMethod('GET')
+    http.setRequestProperty('Accept', 'application/sparql-results+json')
     http.connect()
 
     def responseCode = http.responseCode
