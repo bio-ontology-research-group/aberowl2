@@ -1,5 +1,6 @@
 import groovy.json.*
 import src.util.Util
+import java.net.URLEncoder
 
 if(!application) {
     application = request.getApplication(true)
@@ -32,11 +33,12 @@ try {
     def http = new URL(endpointUrl).openConnection() as HttpURLConnection
     http.setRequestMethod('POST')
     http.setDoOutput(true)
-    http.setRequestProperty('Content-Type', 'application/sparql-query')
+    http.setRequestProperty('Content-Type', 'application/x-www-form-urlencoded;charset=UTF-8')
     http.setRequestProperty('Accept', 'application/sparql-results+json')
     
+    def postData = "query=" + URLEncoder.encode(rewrittenQuery, "UTF-8")
     def writer = new OutputStreamWriter(http.getOutputStream())
-    writer.write(rewrittenQuery)
+    writer.write(postData)
     writer.flush()
     writer.close()
     http.connect()
@@ -44,7 +46,7 @@ try {
     def responseCode = http.responseCode
     if (responseCode >= 200 && responseCode < 300) {
         def responseText = http.inputStream.text
-        if (responseText.trim().isEmpty()) {
+        if (!responseText?.trim()) {
             // Handle empty response as empty result set
             print new JsonBuilder([head: [vars:[]], results: [bindings:[]]]).toString()
         } else {
