@@ -8,6 +8,7 @@ if(!application) {
 
 def params = [:]
 if (request != null) {
+    println "DEBUG: Extracted params: ${request}"
     params = Util.extractParams(request)
 }
 println "DEBUG: Extracted params: ${params}"
