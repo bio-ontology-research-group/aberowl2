@@ -6,7 +6,11 @@ if(!application) {
     application = request.getApplication(true)
 }
 
-def params = Util.extractParams(request)
+def params = [:]
+if (request != null) {
+    params = Util.extractParams(request)
+}
+println "DEBUG: Extracted params: ${params}"
 
 def query = params.query
 def endpoint = params.endpoint ?: "/virtuoso/"
