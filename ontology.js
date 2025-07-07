@@ -60,6 +60,7 @@ Alpine.data('ontologyApp', () => ({
   llmQuery: '',
   detectedParams: null,
   isLoading: false,
+  endpoint: '/virtuoso/',
     
   init() {
     
@@ -180,7 +181,7 @@ Alpine.data('ontologyApp', () => ({
           FILTER(isLiteral(?o))
         }
     `;
-    const sparqlUrl = `/api/api/sparql.groovy?query=${encodeURIComponent(sparqlQuery)}`;
+    const sparqlUrl = `/api/api/runSparqlQuery.groovy?query=${encodeURIComponent(sparqlQuery)}`;
     fetch(sparqlUrl, { headers: { 'Accept': 'application/sparql-results+json' } })
         .then(response => response.json())
         .then(data => {
@@ -845,7 +846,7 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
     if (event) event.preventDefault();
     this.isLoading = true;
 
-    const sparqlUrl = '/api/runSparqlQuery.groovy';
+    const sparqlUrl = '/api/api/runSparqlQuery.groovy';
     const formData = new URLSearchParams();
     formData.append('query', this.query.trim());
     formData.append('endpoint', this.endpoint);

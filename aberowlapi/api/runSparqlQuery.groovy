@@ -30,7 +30,7 @@ try {
     // Use the provided endpoint or default to /virtuoso/ if not specified
     def endpointUrl = endpoint.startsWith("http") ? endpoint : request.getRequestURL().toString().replaceFirst(/\/api\/runSparqlQuery\.groovy$/, endpoint)
 
-    def http = new URL(endpoint).openConnection() as HttpURLConnection
+    def http = new URL(endpointUrl).openConnection() as HttpURLConnection
     http.setRequestMethod('POST')
     http.setDoOutput(true)
     http.setRequestProperty('Content-Type', 'application/sparql-query')
