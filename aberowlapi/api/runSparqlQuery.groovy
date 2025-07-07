@@ -40,16 +40,17 @@ try {
     println "DEBUG: Sending SPARQL query to endpoint ${endpointUrl}"
 
     def http = new URL(endpointUrl).openConnection() as HttpURLConnection
-    http.setRequestMethod('GET')
     http.setDoOutput(true)
+    http.setRequestProperty('Accept', 'application/sparql-results+json')
     http.setRequestProperty('Content-Type', 'application/x-www-form-urlencoded')
+    http.connect()
+    
+    http.setRequestMethod('GET')
     
     def writer = new OutputStreamWriter(http.getOutputStream())
     writer.write(queryParams)
     writer.flush()
     writer.close()
-    http.setRequestProperty('Accept', 'application/sparql-results+json')
-    http.connect()
 
     def responseCode = http.responseCode
     println "DEBUG: SPARQL endpoint responded with HTTP ${responseCode}"
