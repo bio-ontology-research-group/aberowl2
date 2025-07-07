@@ -881,6 +881,10 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
       });
     },
     
+  onEndpointChange(event) {
+    this.endpoint = event.target.value;
+  },
+    
   downloadResults(event) {
     if (event) event.preventDefault();
       if (!this.rawSparqlResults || !this.rawSparqlResults.results || !this.rawSparqlResults.results.bindings || this.rawSparqlResults.results.bindings.length === 0) {
