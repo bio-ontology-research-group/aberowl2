@@ -14,16 +14,29 @@ Alpine.data('ontologyApp', () => ({
   ontology: {
     classes: [],
     properties: [],
-    name: 'Ontology Name',
-    acronym: 'ONT',
+    name: 'Loading...',
+    acronym: '',
     submission: {
-      description: 'Ontology description',
-      version: '1.0',
-      date_released: '2023-10-01',
-      home_page: 'https://example.org',
-      documentation: 'https://example.org/docs',
-      publication: 'https://example.org/publication',
-      has_ontology_language: 'OWL'
+      description: '',
+      version: '',
+      date_released: '',
+      home_page: '',
+      documentation: '',
+      publication: '',
+      has_ontology_language: 'OWL',
+      nb_classes: 'N/A',
+      nb_properties: 'N/A',
+      nb_object_properties: 'N/A',
+      nb_data_properties: 'N/A',
+      nb_annotation_properties: 'N/A',
+      nb_individuals: 'N/A',
+      max_children: 'N/A',
+      avg_children: 'N/A',
+      max_depth: 'N/A',
+      dl_expressivity: 'N/A',
+      axiom_count: 'N/A',
+      logical_axiom_count: 'N/A',
+      declaration_axiom_count: 'N/A'
     }
   },
   classesMap: new Map(),
@@ -152,6 +165,77 @@ Alpine.data('ontologyApp', () => ({
   
   fetchOntologyData() {
     this.isLoading = true;
+
+    // Fetch ontology metadata
+    const sparqlQuery = `
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX dc: <http://purl.org/dc/elements/1.1/>
+        PREFIX dcterms: <http://purl.org/dc/terms/>
+        PREFIX vann: <http://purl.org/vocab/vann/>
+        SELECT ?p ?o
+        WHERE {
+          ?s a owl:Ontology .
+          ?s ?p ?o .
+          FILTER(isLiteral(?o))
+        }
+    `;
+    const sparqlUrl = `/api/api/sparql.groovy?query=${encodeURIComponent(sparqlQuery)}`;
+    fetch(sparqlUrl, { headers: { 'Accept': 'application/sparql-results+json' } })
+        .then(response => response.json())
+        .then(data => {
+            const metadata = {};
+            data.results.bindings.forEach(binding => {
+                const prop = binding.p.value.split('#').pop().split('/').pop();
+                const value = binding.o.value;
+                if (!metadata[prop]) {
+                    metadata[prop] = [];
+                }
+                metadata[prop].push(value);
+            });
+
+            const first = (arr) => arr && arr.length > 0 ? arr[0] : undefined;
+
+            this.ontology.name = first(metadata.title) || 'Ontology';
+            this.ontology.acronym = first(metadata.preferredNamespacePrefix) || '';
+            this.ontology.submission.description = first(metadata.description) || first(metadata.comment) || '';
+            this.ontology.submission.version = first(metadata.versionInfo) || '';
+            this.ontology.submission.date_released = first(metadata.date) || '';
+            this.ontology.submission.home_page = first(metadata.homepage) || '';
+        })
+        .catch(error => {
+            console.error('Error fetching ontology metadata:', error);
+        });
+
+    // Fetch ontology statistics from the new endpoint
+    fetch('/api/api/getStatistics.groovy')
+        .then(response => response.json())
+        .then(stats => {
+            this.ontology.submission.nb_classes = stats.class_count ?? 'N/A';
+            this.ontology.submission.nb_properties = stats.property_count ?? 'N/A';
+            this.ontology.submission.nb_object_properties = stats.object_property_count ?? 'N/A';
+            this.ontology.submission.nb_data_properties = stats.data_property_count ?? 'N/A';
+            this.ontology.submission.nb_annotation_properties = stats.annotation_property_count ?? 'N/A';
+            this.ontology.submission.nb_individuals = stats.individual_count ?? 'N/A';
+            this.ontology.submission.axiom_count = stats.axiom_count ?? 'N/A';
+            this.ontology.submission.logical_axiom_count = stats.logical_axiom_count ?? 'N/A';
+            this.ontology.submission.declaration_axiom_count = stats.declaration_axiom_count ?? 'N/A';
+            this.ontology.submission.dl_expressivity = stats.dl_expressivity ?? 'N/A';
+        })
+        .catch(error => {
+            console.error('Error fetching ontology statistics:', error);
+            // Optionally set all stats to N/A on error
+            this.ontology.submission.nb_classes = 'N/A';
+            this.ontology.submission.nb_properties = 'N/A';
+            this.ontology.submission.nb_object_properties = 'N/A';
+            this.ontology.submission.nb_data_properties = 'N/A';
+            this.ontology.submission.nb_annotation_properties = 'N/A';
+            this.ontology.submission.nb_individuals = 'N/A';
+            this.ontology.submission.axiom_count = 'N/A';
+            this.ontology.submission.logical_axiom_count = 'N/A';
+            this.ontology.submission.declaration_axiom_count = 'N/A';
+            this.ontology.submission.dl_expressivity = 'N/A';
+        });
     
     // Fetch the ontology classes and properties from the backend
     fetch('/api/api/runQuery.groovy?type=subclass&direct=true&query=<http://www.w3.org/2002/07/owl%23Thing>')
@@ -165,7 +249,7 @@ Alpine.data('ontologyApp', () => ({
         console.log('Fetched ontology data:', data);
         // 1. Index classes and re-initialize children arrays
         this.ontology.classes = data.result || [];
-        if (this.ontology.classes.length > 0) {
+        if (this.ontology.classes.length > 0 && this.ontology.name === 'Ontology') {
           this.ontology.name = this.ontology.classes[0].ontology;
         }
         this.ensureCollapsedState(this.ontology.classes);
@@ -297,48 +381,48 @@ Alpine.data('ontologyApp', () => ({
 
 
     getFormattedClass(owlClass) {
-	  let formattedQuery = owlClass;
-      
-      if (owlClass && typeof owlClass === 'string' && !owlClass.startsWith('<')) {
-          // Try to find an exact match in our class map
-          let foundClass = null;
-          
-          // Search through all classes to find a match by label
-          for (const [iri, classObj] of this.classesMap.entries()) {
-              if (classObj.label) {
-                  // Try different variations of the label for matching
-                  const labelLower = classObj.label.toLowerCase();
-                  const queryLower = owlClass.toLowerCase();
-                  
-                  if (labelLower === queryLower ||
-                      labelLower.replace(/ /g, '_') === queryLower ||
-                      queryLower.replace(/ /g, '_') === labelLower ||
-                      labelLower.replace(/_/g, ' ') === queryLower ||
-                      queryLower.replace(/_/g, ' ') === labelLower) {
-                      foundClass = classObj;
-                      break;
-                  }
-              }
-          }
-          
-          // If we found a matching class, use its IRI
-          if (foundClass) {
-              formattedQuery = foundClass.owlClass;
-              console.log(`Converted class label "${owlClass}" to IRI: ${formattedQuery}`);
-          } else {
-              // If we didn't find a match and the query contains spaces, wrap it in quotes
-              if (owlClass.includes(' ')) {
-                  formattedQuery = `"${owlClass}"`;
-                  console.log(`Added quotes around multi-word query: ${formattedQuery}`);
-              }
-              // If it doesn't contain spaces but isn't a recognized class, try angle brackets
-              else if (!owlClass.startsWith('"')) {
-                  formattedQuery = `<${owlClass}>`;
-                  console.log(`Added angle brackets around query: ${formattedQuery}`);
-              }
-          }
-      }
-	return formattedQuery;
+        if (!owlClass || typeof owlClass !== 'string') {
+            return owlClass;
+        }
+
+        const manchesterKeywords = new Set(['and', 'or', 'not', 'some', 'only', 'value', 'min', 'max', 'exactly', 'that', 'inverse', 'self']);
+
+        // Get all labels from classesMap and propsMap
+        const allLabels = new Map();
+        for (const classObj of this.classesMap.values()) {
+            if (classObj.label) {
+                allLabels.set(classObj.label.toLowerCase(), classObj.label);
+            }
+        }
+        for (const propObj of this.propsMap.values()) {
+            if (propObj.label) {
+                allLabels.set(propObj.label.toLowerCase(), propObj.label);
+            }
+        }
+
+        // Sort labels by length, descending, to match longer labels first
+        const sortedLabels = Array.from(allLabels.keys()).sort((a, b) => b.length - a.length);
+
+        let processedQuery = owlClass;
+
+        for (const label of sortedLabels) {
+            if (manchesterKeywords.has(label)) {
+                continue;
+            }
+
+            // Case-insensitive replacement of whole words
+            const regex = new RegExp(`\\b${label.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'gi');
+            
+            const originalLabel = allLabels.get(label);
+            let replacement = originalLabel;
+            if (originalLabel.includes(' ')) {
+                replacement = `'${originalLabel}'`;
+            }
+            
+            processedQuery = processedQuery.replace(regex, replacement);
+        }
+
+        return processedQuery;
     },
     
   executeDLQuery(owlClass, queryType, labels = true) {

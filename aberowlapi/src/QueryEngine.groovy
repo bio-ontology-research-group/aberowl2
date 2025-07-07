@@ -24,6 +24,7 @@ import org.semanticweb.owlapi.model.OWLClassExpression;
 import org.semanticweb.owlapi.reasoner.Node;
 import org.semanticweb.owlapi.reasoner.NodeSet;
 import org.semanticweb.owlapi.reasoner.OWLReasoner;
+import org.semanticweb.owlapi.util.ShortFormProvider;
 import org.semanticweb.owlapi.util.* ;
 
 /**
@@ -34,33 +35,18 @@ import org.semanticweb.owlapi.util.* ;
 public class QueryEngine {
     private OWLReasoner oReasoner;
     private QueryParser parser;
-    private sProvider;
+    private ShortFormProvider sProvider;
     
-    QueryEngine(oReasoner, sProvider) {
+    QueryEngine(OWLReasoner oReasoner, ShortFormProvider sProvider) {
         this.oReasoner = oReasoner;
         this.sProvider = sProvider;
         this.parser = new QueryParser(oReasoner.getRootOntology(), sProvider);
     }
     
-    /**
-     * Return a set of classes relevant to a class description represented by a
-     * Manchester OWL Syntax string. Returned classes can either be superclasses,
-     * subclasses, equivalent classes or a combination of all relevant classes.
-     * 
-     * @param mOwl Manchester OWL Syntax query (form of a raw class description)
-     * @param requestType Type of class to return.
-     * @see RequestType
-     * @return A HashSet of classes relevant to the given class description in 
-     * mOwl corresponding to the type of request.
-     */
-    public Set<OWLClass> getClasses(String mOwl, RequestType requestType, boolean direct, boolean labels) {
-        if(mOwl == null || mOwl.trim().length() == 0) {
-            return Collections.emptySet();
-        }
-        OWLClassExpression cExpression = parser.parse(mOwl, labels);
+    public Set<OWLClass> getClasses(OWLClassExpression cExpression, RequestType requestType, boolean direct, boolean labels) {
         Set<OWLClass> classes = new HashSet<>();
         if(cExpression == null) {
-            return classes
+            return classes;
         }
 	
         switch(requestType) {
@@ -85,6 +71,25 @@ public class QueryEngine {
         return classes;
     }
 
+    /**
+     * Return a set of classes relevant to a class description represented by a
+     * Manchester OWL Syntax string. Returned classes can either be superclasses,
+     * subclasses, equivalent classes or a combination of all relevant classes.
+     * 
+     * @param mOwl Manchester OWL Syntax query (form of a raw class description)
+     * @param requestType Type of class to return.
+     * @see RequestType
+     * @return A HashSet of classes relevant to the given class description in 
+     * mOwl corresponding to the type of request.
+     */
+    public Set<OWLClass> getClasses(String mOwl, RequestType requestType, boolean direct, boolean labels) {
+        if(mOwl == null || mOwl.trim().length() == 0) {
+            return Collections.emptySet();
+        }
+        OWLClassExpression cExpression = parser.parse(mOwl, labels);
+        return getClasses(cExpression, requestType, direct, labels);
+    }
+
     public Set<OWLClass> getSuperClasses(OWLClassExpression cExpression, boolean direct) {
         return oReasoner.getSuperClasses(cExpression, direct).getFlattened();
     }
@@ -97,11 +102,11 @@ public class QueryEngine {
     }
     
     public Set<OWLClass> getSubClasses(OWLClassExpression cExpression, boolean direct) {
-        return oReasoner.getSubClasses(cExpression, direct).getFlattened()
+        return oReasoner.getSubClasses(cExpression, direct).getFlattened();
     }
 
     public Set<OWLClass> getIndividuals(OWLClassExpression cExpression, boolean direct) {
-	return oReasoner.getInstances(cExpression, direct).getFlattened()
+	return oReasoner.getInstances(cExpression, direct).getFlattened();
     }
 
     /**
@@ -121,7 +126,7 @@ public class QueryEngine {
     /**
      * @return the sProvider
      */
-    public getsProvider() {
+    public ShortFormProvider getsProvider() {
         return sProvider;
     }
 }

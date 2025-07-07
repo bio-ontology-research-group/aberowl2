@@ -16,8 +16,11 @@
 
 package src;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import org.semanticweb.owlapi.apibinding.OWLManager;
 import org.semanticweb.owlapi.model.IRI;
 import org.semanticweb.owlapi.model.OWLAnnotationAssertionAxiom;
 import org.semanticweb.owlapi.model.OWLAnnotationProperty;
@@ -28,8 +31,10 @@ import org.semanticweb.owlapi.model.OWLLiteral;
 import org.semanticweb.owlapi.model.OWLObject;
 import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.model.OWLOntologySetProvider;
+import org.semanticweb.owlapi.util.BidirectionalShortFormProvider;
 import org.semanticweb.owlapi.util.* ;
 import org.semanticweb.owlapi.search.*;
+import org.semanticweb.owlapi.vocab.OWLRDFVocabulary;
 
 /**
  * Modified version of the standard short form provider to add quotations around
@@ -38,7 +43,7 @@ import org.semanticweb.owlapi.search.*;
  * @see ShortFormProvider
  * @author OWLAPI, Robert Hoehndorf (leechuck@leechuck.de)
  */
-public class NewShortFormProvider implements ShortFormProvider {
+public class NewShortFormProvider implements BidirectionalShortFormProvider {
     private final OWLOntologySetProvider ontologySetProvider;
     private final ShortFormProvider alternateShortFormProvider;
     private IRIShortFormProvider alternateIRIShortFormProvider;
@@ -65,6 +70,12 @@ public class NewShortFormProvider implements ShortFormProvider {
      *            An {@code OWLOntologySetProvider} which provides a set of
      *            ontology from which candidate annotation axioms should be
      *            taken. For a given entity, all ontologies are examined. */
+    public NewShortFormProvider(Set<OWLOntology> ontologies) {
+        this(Collections.singletonList(OWLManager.getOWLDataFactory().getOWLAnnotationProperty(OWLRDFVocabulary.RDFS_LABEL.getIRI())),
+                Collections.emptyMap(),
+                new SimpleOntologySetProviderImpl(ontologies));
+    }
+
     public NewShortFormProvider(
             List<OWLAnnotationProperty> annotationProperties,
             Map<OWLAnnotationProperty, List<String>> preferredLanguageMap,
@@ -133,11 +144,11 @@ public class NewShortFormProvider implements ShortFormProvider {
      *            form of the individual.
      * @param alternateIRIShortFormProvider
      *            the alternate IRI short form provider */
-    public NewShortFormProvider(ontologySetProvider,
-            alternateShortFormProvider,
-            alternateIRIShortFormProvider,
-            annotationProperties,
-            preferredLanguageMap) {
+    public NewShortFormProvider(OWLOntologySetProvider ontologySetProvider,
+            ShortFormProvider alternateShortFormProvider,
+            IRIShortFormProvider alternateIRIShortFormProvider,
+            List<OWLAnnotationProperty> annotationProperties,
+            Map<OWLAnnotationProperty, List<String>> preferredLanguageMap) {
         this(ontologySetProvider, alternateShortFormProvider,
                 alternateIRIShortFormProvider, annotationProperties,
                 preferredLanguageMap, new OWLAnnotationValueVisitorsExNew());
@@ -203,56 +214,26 @@ public class NewShortFormProvider implements ShortFormProvider {
                 }
             }
             if(checker.getMatch() != null) {
-                String res = getRendering(checker.getMatch());
-                // We still need to handle spaces for the Manchester syntax parser,
-                // but we don't want to display quotes in the frontend
-                // The parser will handle this internally now
-                // Replace spaces with underscores for display
-                return addSpacesToCamelCase(res).toLowerCase().replace(" ", "_");
+                return getRendering(checker.getMatch());
             }
         }
-        return addSpacesToCamelCase(alternateShortFormProvider.getShortForm(entity)).toLowerCase().replace(" ", "_");
+        return alternateShortFormProvider.getShortForm(entity);
     }
-    
-    /**
-     * Adds spaces to camel case text.
-     * For example: "PizzaVegetarianaEquivalente2" becomes "Pizza Vegetariana Equivalente 2"
-     *
-     * @param text The text to process
-     * @return The text with spaces added between camel case words
-     */
-    private String addSpacesToCamelCase(String text) {
-        if (text == null || text.isEmpty()) {
-            return text;
-        }
-        
-        // If text already contains spaces or underscores, return it as is
-        if (text.contains(" ") || text.contains("_")) {
-            return text;
-        }
-        
-        // Simple character-by-character approach to avoid regex issues
-        StringBuilder result = new StringBuilder();
-        result.append(text.charAt(0));
-        
-        for (int i = 1; i < text.length(); i++) {
-            char current = text.charAt(i);
-            char previous = text.charAt(i - 1);
-            
-            // Add space before uppercase letter if previous char is lowercase
-            if (Character.isUpperCase(current) && Character.isLowerCase(previous)) {
-                result.append(' ');
-            }
-            // Add space before digit if previous char is a letter
-            else if (Character.isDigit(current) && Character.isLetter(previous)) {
-                result.append(' ');
-            }
-            
-            result.append(current);
-        }
-        
-        return result.toString();
+
+    @Override
+    public Set<OWLEntity> getEntities(String shortForm) {
+        return Collections.emptySet();
     }
+
+    @Override
+    public Set<String> getShortForms() {
+        return Collections.emptySet();
+    }
+
+    public OWLEntity getEntity(String shortForm) {
+        return null;
+    }
+
 
     /** Obtains the rendering of the specified object. If the object is a
      * constant then the rendering is equal to the literal value, if the object
@@ -336,9 +317,22 @@ public class NewShortFormProvider implements ShortFormProvider {
             candidateValue = iri;
         }
     }
+
+    private static class SimpleOntologySetProviderImpl implements OWLOntologySetProvider {
+        private final Set<OWLOntology> ontologies;
+
+        public SimpleOntologySetProviderImpl(Set<OWLOntology> ontologies) {
+            this.ontologies = ontologies;
+        }
+
+        @Override
+        public Set<OWLOntology> getOntologies() {
+            return ontologies;
+        }
+    }
 }
 
-public class OWLAnnotationValueVisitorsExNew implements OWLAnnotationValueVisitorEx {
+class OWLAnnotationValueVisitorsExNew implements OWLAnnotationValueVisitorEx {
                     @Override
                     public String visit(IRI iri) {
                         // TODO refactor the short form providers in here

@@ -62,6 +62,10 @@ echo "Setting execute permissions on host script: $HOST_INDEXER_SCRIPT_PATH"
 chmod +x "$HOST_INDEXER_SCRIPT_PATH"
 
 # Run docker compose up
+# This will build images on the first run and use cached images on subsequent runs.
+# To force a rebuild, run 'docker compose build' or 'docker compose up --build'.
+# We run in the foreground (no -d) to see all service logs.
+# This uses the default docker-compose.yml to build images locally.
 # We use -d for detached mode. The indexer service will run, index, and then exit.
 # Use the -p flag to specify a unique project name
 docker compose -p "$PROJECT_NAME" up --build -d

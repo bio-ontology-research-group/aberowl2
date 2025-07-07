@@ -11,10 +11,11 @@ println "--- OntologyServer.groovy execution started ---"
     @Grab(group='com.googlecode.json-simple', module='json-simple', version='1.1.1'),
     @Grab(group='org.slf4j', module='slf4j-nop', version='1.7.25'),
     @Grab(group='org.semanticweb.elk', module='elk-owlapi', version='0.4.3'),
-    @Grab(group='net.sourceforge.owlapi', module='owlapi-api', version='4.3.2'),
-    @Grab(group='net.sourceforge.owlapi', module='owlapi-apibinding', version='4.3.2'),
-    @Grab(group='net.sourceforge.owlapi', module='owlapi-impl', version='4.3.2'),
-    @Grab(group='net.sourceforge.owlapi', module='owlapi-parsers', version='4.3.2'),
+    @Grab(group='net.sourceforge.owlapi', module='owlapi-distribution', version='4.5.26'),
+    @Grab(group='net.sourceforge.owlapi', module='owlapi-api', version='4.5.26'),
+    @Grab(group='net.sourceforge.owlapi', module='owlapi-apibinding', version='4.5.26'),
+    @Grab(group='net.sourceforge.owlapi', module='owlapi-impl', version='4.5.26'),
+    @Grab(group='net.sourceforge.owlapi', module='owlapi-parsers', version='4.5.26'),
     @Grab(group='org.codehaus.gpars', module='gpars', version='1.1.0'),
     @Grab(group='com.google.guava', module='guava', version='19.0'),
     @Grab(group='ch.qos.reload4j', module='reload4j', version='1.2.18.5'),
@@ -74,6 +75,7 @@ def startServer(def ontologyFilePath, def port) {
     context.addServlet(GroovyServlet, '/api/getObjectProperties.groovy')
     context.addServlet(GroovyServlet, '/api/retrieveRSuccessors.groovy')
     context.addServlet(GroovyServlet, '/api/retrieveAllLabels.groovy')
+    context.addServlet(GroovyServlet, '/api/getStatistics.groovy')
     context.addServlet(GroovyServlet, '/api/sparql.groovy')
 
     context.setAttribute('port', port)
