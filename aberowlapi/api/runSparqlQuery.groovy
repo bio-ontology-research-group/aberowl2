@@ -14,7 +14,7 @@ if (request != null) {
 println "DEBUG: Extracted params: ${params}"
 
 def query = params.query
-def endpoint = params.endpoint ?: "http://localhost:8080/virtuoso/"
+def endpoint = params.endpoint ?: "http://localhost:8080/"
 def manager = application.manager
 
 response.contentType = 'application/json'
