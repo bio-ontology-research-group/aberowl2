@@ -60,9 +60,10 @@ Alpine.data('ontologyApp', () => ({
   llmQuery: '',
   detectedParams: null,
   isLoading: false,
-  endpoint: '/virtuoso/',
+  endpoint: '',
     
   init() {
+    this.endpoint = window.location.origin + '/virtuoso/';
     
     // Fetch the ontology data
     this.fetchOntologyData();
@@ -759,7 +760,7 @@ Alpine.data('ontologyApp', () => ({
     "PREFIX owl: <http://www.w3.org/2002/07/owl#> \n" +
     "SELECT DISTINCT ?class \n" +
     "WHERE { \n" +
-    "VALUES ?class {OWL superclass <> <> { cheesy_pizza } } . } \n" +
+    "VALUES ?class {OWL superclass { cheesy_pizza } } . } \n" +
     "ORDER BY ?class \n"
   this.query = query
     },
@@ -851,19 +852,19 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
     formData.append('query', this.query.trim());
     formData.append('endpoint', this.endpoint);
 
-    const queryUrl = `${sparqlUrl}?${formData.toString()}`;
-    
-    fetch(queryUrl, {
-        method: 'GET',
+    fetch(sparqlUrl, {
+        method: 'POST',
         headers: {
-      'Accept': 'application/sparql-results+json,*/*;q=0.9'
-        }
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/sparql-results+json,*/*;q=0.9'
+        },
+        body: formData
     })
       .then(response => {
-    if (!response.ok) {
-        throw new Error('Network response was not ok');
-    }
-    return response.text(); // Get the raw response as text
+        if (!response.ok) {
+            return response.text().then(text => { throw new Error(text || 'Network response was not ok') });
+        }
+        return response.text(); // Get the raw response as text
       })
       .then(data => {
   // Store the original parsed results
