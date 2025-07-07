@@ -14,7 +14,7 @@ if (request != null) {
 println "DEBUG: Extracted params: ${params}"
 
 def query = params.query
-def endpoint = params.endpoint ?: "http://localhost:8080/"
+def endpoint = params.endpoint ?: "http://localhost:8890/sparql"
 def manager = application.manager
 
 response.contentType = 'application/json'
