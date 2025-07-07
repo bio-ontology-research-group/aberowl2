@@ -847,20 +847,19 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
     if (event) event.preventDefault();
     this.isLoading = true;
 
-    const sparqlUrl = '/api/api/runSparqlQuery.groovy';
-    const formData = new URLSearchParams();
-    formData.append('query', this.query.trim());
-    formData.append('endpoint', this.endpoint);
+const params = new URLSearchParams();
+params.append('query', this.query.trim());
+params.append('endpoint', this.endpoint);
 
-    fetch(sparqlUrl, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Accept': 'application/sparql-results+json,*/*;q=0.9'
-        },
-        body: formData
-    })
-      .then(response => {
+const sparqlUrl = `/api/api/runSparqlQuery.groovy?${params.toString()}`;
+
+	fetch(sparqlUrl, {
+	    method: 'GET',
+	    headers: {
+		'Accept': 'application/sparql-results+json,*/*;q=0.9'
+	    }
+	})
+	.then(response => {
         if (!response.ok) {
             return response.text().then(text => { throw new Error(text || 'Network response was not ok') });
         }

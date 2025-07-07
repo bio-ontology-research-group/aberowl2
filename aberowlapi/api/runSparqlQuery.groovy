@@ -10,33 +10,36 @@ def params = [:]
 if (request != null) {
     params = Util.extractParams(request)
 }
-//println "DEBUG: Extracted params: ${params}"
 
 def query = params.query
-//def endpoint = params.endpoint ?: "http://localhost:8080/virtuoso/"
 def endpoint = params.endpoint ?: "http://virtuoso:8890/sparql/"
+// Get the original host as seen by the user (before nginx proxy)
+def userHost = request.getHeader('X-Forwarded-Host') ?: request.getHeader('Host')
+
+// Check if endpoint refers to the local virtuoso instance
+if (userHost.contains("ontology-api:8080")) {
+    endpoint = "http://virtuoso:8890/sparql/"
+}
 def manager = application.manager
 
 response.contentType = 'application/json'
 
 try {
     def rewrittenQuery = query
-    def owlPattern = /OWL\s+(\w+)\s+\{\s*(.*?)\s*\}/
-    def matcher = query =~ owlPattern
+    def valuesOwlPattern = /VALUES\s+(\?\w+)\s+\{\s*OWL\s+(\w+)\s+\{\s*(.*?)\s*\}\s*\}/
+    def matcher = query =~ valuesOwlPattern
     if (matcher.find()) {
-        def type = matcher.group(1)
-        def dlQuery = matcher.group(2)
-
-        def owlResults = manager.runQuery(dlQuery, type, true, true, false)
-//	println "DL Query results: ${owlResults}"
-        def iriList = owlResults.collect { "<${it.class}>" }.join("\n")
-        rewrittenQuery = query.replaceFirst(owlPattern, "VALUES ?ontid { \n${iriList}\n}")
+	def variableName = matcher.group(1)  // e.g., "?class"
+	def type = matcher.group(2)          // e.g., "SomeType"
+	def dlQuery = matcher.group(3)       // e.g., "some_dl_query"
+	def owlResults = manager.runQuery(dlQuery, type, true, true, false)
+	//	println "DL Query results: ${owlResults}"
+	def iriList = owlResults.collect { "<${it.class}>" }.join("\n")
+	rewrittenQuery = query.replaceFirst(valuesOwlPattern, "VALUES ${variableName} { \n${iriList}\n}")
     }
-    
     def endpointUrl = endpoint
 
     def queryParams = "query=" + URLEncoder.encode(rewrittenQuery, "UTF-8") + "&format=application%2Fsparql-results%2Bjson&default-graph-uri="
-    
     def fullUrl = new URL(endpointUrl + "?" + queryParams)
 //    println "DEBUG: Sending SPARQL query to endpoint ${fullUrl}"
 
