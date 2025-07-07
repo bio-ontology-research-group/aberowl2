@@ -1207,7 +1207,7 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
     // Get the port number from the URL
     const port = window.location.port;
     // Use the port number to construct the correct index name
-    const indexName = `class_index_${port}`;
+    const indexName = `class_index`;
     
     // Direct Elasticsearch query for label matches
     fetch(`/elastic/${indexName}/_search`, {
