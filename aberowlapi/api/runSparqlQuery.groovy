@@ -15,16 +15,15 @@ response.contentType = 'application/json'
 
 try {
     def rewrittenQuery = query
-    def matcher = query =~ /OWL\s+(\w+)\s+<([^>]+)>\s+<([^>]*)>\s*\{\s*(.*?)\s*\}/
+    def owlPattern = /OWL\s+(\w+)\s+\{\s*(.*?)\s*\}/
+    def matcher = query =~ owlPattern
     if (matcher.find()) {
         def type = matcher.group(1)
-        def ontology = matcher.group(2)
-        def base = matcher.group(3)
-        def dlQuery = matcher.group(4)
+        def dlQuery = matcher.group(2)
 
         def owlResults = manager.runQuery(dlQuery, type, true, true, false)
         def iriList = owlResults.collect { "<${it}>" }.join("\n")
-        rewrittenQuery = query.replaceFirst(/OWL\s+(\w+)\s+<([^>]+)>\s+<([^>]*)>\s*\{\s*(.*?)\s*\}/, "VALUES ?ontid { \n${iriList}\n}")
+        rewrittenQuery = query.replaceFirst(owlPattern, "VALUES ?ontid { \n${iriList}\n}")
     }
     
     // Use the provided endpoint or default to /virtuoso/ if not specified
