@@ -37,21 +37,12 @@ try {
 
     def queryParams = "query=" + URLEncoder.encode(rewrittenQuery, "UTF-8") + "&format=application%2Fsparql-results%2Bjson&default-graph-uri="
     
-    println "DEBUG: Sending SPARQL query to endpoint ${endpointUrl}"
+    def fullUrl = new URL(endpointUrl + "?" + queryParams)
+    println "DEBUG: Sending SPARQL query to endpoint ${fullUrl}"
 
-    def http = new URL(endpointUrl).openConnection() as HttpURLConnection
-    http.setInstanceFollowRedirects(true)
-    http.setDoOutput(true)
-    http.setRequestProperty('Accept', 'application/sparql-results+json')
-    http.setRequestProperty('Content-Type', 'application/x-www-form-urlencoded')
-    http.connect()
-    
+    def http = fullUrl.openConnection() as HttpURLConnection
     http.setRequestMethod('GET')
-    
-    def writer = new OutputStreamWriter(http.getOutputStream())
-    writer.write(queryParams)
-    writer.flush()
-    writer.close()
+    http.setRequestProperty('Accept', 'application/sparql-results+json')
 
     def responseCode = http.responseCode
     println "DEBUG: SPARQL endpoint responded with HTTP ${responseCode}"
