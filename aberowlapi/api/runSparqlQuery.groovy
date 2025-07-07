@@ -36,12 +36,18 @@ try {
     def endpointUrl = endpoint.startsWith("http") ? endpoint : request.getRequestURL().toString().replaceFirst(/runSparqlQuery\.groovy$/, (endpoint.startsWith('/') ? endpoint.substring(1) : endpoint))
 
     def queryParams = "query=" + URLEncoder.encode(rewrittenQuery, "UTF-8") + "&format=application%2Fsparql-results%2Bjson&default-graph-uri="
-    def fullUrl = endpointUrl.contains("?") ? (endpointUrl + "&" + queryParams) : (endpointUrl + "?" + queryParams)
     
-    println "DEBUG: Sending SPARQL query to endpoint ${fullUrl}"
+    println "DEBUG: Sending SPARQL query to endpoint ${endpointUrl}"
 
-    def http = new URL(fullUrl).openConnection() as HttpURLConnection
+    def http = new URL(endpointUrl).openConnection() as HttpURLConnection
     http.setRequestMethod('GET')
+    http.setDoOutput(true)
+    http.setRequestProperty('Content-Type', 'application/x-www-form-urlencoded')
+    
+    def writer = new OutputStreamWriter(http.getOutputStream())
+    writer.write(queryParams)
+    writer.flush()
+    writer.close()
     http.setRequestProperty('Accept', 'application/sparql-results+json')
     http.connect()
 
