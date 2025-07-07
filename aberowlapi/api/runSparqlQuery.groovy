@@ -35,7 +35,7 @@ try {
     // Use the provided endpoint or default to /virtuoso/ if not specified
     def endpointUrl = endpoint.startsWith("http") ? endpoint : request.getRequestURL().toString().replaceFirst(/runSparqlQuery\.groovy$/, (endpoint.startsWith('/') ? endpoint.substring(1) : endpoint))
 
-    def queryParams = "query=" + URLEncoder.encode(rewrittenQuery, "UTF-8") + "&format=" + URLEncoder.encode("application/sparql-results+json", "UTF-8") + "&default-graph-uri="
+    def queryParams = "query=" + URLEncoder.encode(rewrittenQuery, "UTF-8") + "&format=application%2Fsparql-results%2Bjson&default-graph-uri="
     def fullUrl = endpointUrl.contains("?") ? (endpointUrl + "&" + queryParams) : (endpointUrl + "?" + queryParams)
     
     println "DEBUG: Sending SPARQL query to endpoint ${fullUrl}"
