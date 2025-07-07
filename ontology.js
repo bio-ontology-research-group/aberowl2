@@ -849,25 +849,22 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
 
     
     executeSparql(event) {
-  console.log('Available methods:', Object.getOwnPropertyNames(this));
-  console.log('testMethod type:', typeof this.testMethod);
-  console.log('executeSparql type:', typeof this.executeSparql);
+    if (event) event.preventDefault();
+    this.isLoading = true;
 
-  if (event) event.preventDefault();
-  this.isLoading = true;
+    const sparqlUrl = '/api/runSparqlQuery.groovy';
+    const formData = new URLSearchParams();
+    formData.append('query', this.query.trim());
+    formData.append('endpoint', this.endpoint);
 
-  const sparqlUrl = 'http://localhost:88/api/api/sparql.groovy';
-  const formData = new URLSearchParams();
-  formData.append('query', this.query.trim());
-
-  const queryUrl = `${sparqlUrl}?${formData.toString()}`;
-  
-  fetch(queryUrl, {
-      method: 'GET',
-      headers: {
-    'Accept': 'application/sparql-results+json,*/*;q=0.9'
-      }
-  })
+    const queryUrl = `${sparqlUrl}?${formData.toString()}`;
+    
+    fetch(queryUrl, {
+        method: 'GET',
+        headers: {
+      'Accept': 'application/sparql-results+json,*/*;q=0.9'
+        }
+    })
       .then(response => {
     if (!response.ok) {
         throw new Error('Network response was not ok');
