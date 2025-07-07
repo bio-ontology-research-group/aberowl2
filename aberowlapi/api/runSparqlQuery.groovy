@@ -8,13 +8,13 @@ if(!application) {
 
 def params = [:]
 if (request != null) {
-    println "DEBUG: Extracted params: ${request}"
     params = Util.extractParams(request)
 }
-println "DEBUG: Extracted params: ${params}"
+//println "DEBUG: Extracted params: ${params}"
 
 def query = params.query
-def endpoint = params.endpoint ?: "http://localhost:8080/virtuoso/"
+//def endpoint = params.endpoint ?: "http://localhost:8080/virtuoso/"
+def endpoint = params.endpoint ?: "http://virtuoso:8890/sparql/"
 def manager = application.manager
 
 response.contentType = 'application/json'
@@ -28,28 +28,28 @@ try {
         def dlQuery = matcher.group(2)
 
         def owlResults = manager.runQuery(dlQuery, type, true, true, false)
+//	println "DL Query results: ${owlResults}"
         def iriList = owlResults.collect { "<${it}>" }.join("\n")
         rewrittenQuery = query.replaceFirst(owlPattern, "VALUES ?ontid { \n${iriList}\n}")
     }
     
-    // Use the provided endpoint or default to /virtuoso/ if not specified
-    def endpointUrl = endpoint.startsWith("http") ? endpoint : request.getRequestURL().toString().replaceFirst(/runSparqlQuery\.groovy$/, (endpoint.startsWith('/') ? endpoint.substring(1) : endpoint))
+    def endpointUrl = endpoint
 
     def queryParams = "query=" + URLEncoder.encode(rewrittenQuery, "UTF-8") + "&format=application%2Fsparql-results%2Bjson&default-graph-uri="
     
     def fullUrl = new URL(endpointUrl + "?" + queryParams)
-    println "DEBUG: Sending SPARQL query to endpoint ${fullUrl}"
+//    println "DEBUG: Sending SPARQL query to endpoint ${fullUrl}"
 
     def http = fullUrl.openConnection() as HttpURLConnection
     http.setRequestMethod('GET')
-    http.setRequestProperty('Accept', 'application/sparql-results+json')
+    //http.setRequestProperty('Accept', 'application/sparql-results+json')
 
     def responseCode = http.responseCode
-    println "DEBUG: SPARQL endpoint responded with HTTP ${responseCode}"
+//    println "DEBUG: SPARQL endpoint responded with HTTP ${responseCode}"
     
     if (responseCode >= 200 && responseCode < 300) {
         def responseText = http.inputStream.text
-        println "DEBUG: Response text: ${responseText}"
+//        println "DEBUG: Response text: ${responseText}"
         
         if (!responseText?.trim()) {
             // Handle empty response
