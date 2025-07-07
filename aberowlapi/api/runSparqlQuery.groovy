@@ -29,7 +29,7 @@ try {
 
         def owlResults = manager.runQuery(dlQuery, type, true, true, false)
 //	println "DL Query results: ${owlResults}"
-        def iriList = owlResults.collect { "<${it}>" }.join("\n")
+        def iriList = owlResults.collect { "<${it.class}>" }.join("\n")
         rewrittenQuery = query.replaceFirst(owlPattern, "VALUES ?ontid { \n${iriList}\n}")
     }
     

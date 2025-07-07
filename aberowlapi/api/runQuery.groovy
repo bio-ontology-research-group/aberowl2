@@ -2,13 +2,6 @@
 
 import groovy.json.*
 import src.util.Util
-import groovyx.gpars.GParsPool
-import src.AberowlManchesterOwlParser
-import src.NewShortFormProvider
-import org.semanticweb.owlapi.expression.ShortFormEntityChecker
-import org.semanticweb.owlapi.util.BidirectionalShortFormProviderAdapter
-import org.semanticweb.owlapi.model.OWLClassExpression
-import java.util.function.Supplier
 
 if(!application) {
     application = request.getApplication(true)
@@ -37,22 +30,7 @@ response.contentType = 'application/json'
 try {
     def results = new HashMap()
     def start = System.currentTimeMillis()
-    def out
-    if (query.startsWith("http") || query.startsWith("<")) {
-        out = manager.runQuery(query, type, direct, labels, axioms)
-    } else {
-        def ont = manager.getOntology()
-        def sfp = new NewShortFormProvider(ont.getImportsClosure())
-        def bidiSfp = new BidirectionalShortFormProviderAdapter(ont.getImportsClosure(), sfp)
-        def checker = new ShortFormEntityChecker(bidiSfp)
-        def df = ont.getOWLOntologyManager().getOWLDataFactory()
-        def configSupplier = { -> ont.getOWLOntologyManager().getOntologyLoaderConfiguration() }
-        def parser = new org.semanticweb.owlapi.manchestersyntax.parser.ManchesterOWLSyntaxParserImpl(configSupplier, df)
-        parser.setStringToParse(query)
-        parser.setOWLEntityChecker(checker)
-        def expression = parser.parseClassExpression()
-        out = manager.runQuery(expression, type, direct, labels, axioms)
-    }
+    def out = manager.runQuery(query, type, direct, labels, axioms)
     def end = System.currentTimeMillis()
     results.put('time', (end - start))
     results.put('result', out)

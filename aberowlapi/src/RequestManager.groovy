@@ -18,6 +18,9 @@ import org.semanticweb.owlapi.util.*;
 import org.semanticweb.owlapi.search.*;
 import org.semanticweb.owlapi.manchestersyntax.renderer.*;
 import org.semanticweb.owlapi.reasoner.structural.*
+import org.semanticweb.owlapi.expression.ShortFormEntityChecker
+import org.semanticweb.owlapi.manchestersyntax.parser.ManchesterOWLSyntaxParserImpl
+import org.semanticweb.owlapi.util.BidirectionalShortFormProviderAdapter
 
 import java.util.concurrent.*
 import java.util.concurrent.atomic.*
@@ -330,24 +333,37 @@ public class RequestManager {
     }
     
     Set runQuery(String mOwlQuery, String type, boolean direct, boolean labels, boolean axioms) {
-        type = type.toLowerCase()
-	def requestType
-	switch (type) {
-	    case "superclass": requestType = RequestType.SUPERCLASS; break;
-	    case "subclass": requestType = RequestType.SUBCLASS; break;
-	    case "equivalent": requestType = RequestType.EQUIVALENT; break;
-	    case "supeq": requestType = RequestType.SUPEQ; break;
-	    case "subeq": requestType = RequestType.SUBEQ; break;
-	    case "realize": requestType = RequestType.REALIZE; break;
-	    default: requestType = RequestType.SUBEQ; break;
-	}
+        if (mOwlQuery.startsWith("http") || mOwlQuery.startsWith("<")) {
+            type = type.toLowerCase()
+            def requestType
+            switch (type) {
+                case "superclass": requestType = RequestType.SUPERCLASS; break;
+                case "subclass": requestType = RequestType.SUBCLASS; break;
+                case "equivalent": requestType = RequestType.EQUIVALENT; break;
+                case "supeq": requestType = RequestType.SUPEQ; break;
+                case "subeq": requestType = RequestType.SUBEQ; break;
+                case "realize": requestType = RequestType.REALIZE; break;
+                default: requestType = RequestType.SUBEQ; break;
+            }
 
-        
-	Set resultSet = Sets.newHashSet(Iterables.limit(queryEngine.getClasses(mOwlQuery, requestType, direct, labels), MAX_REASONER_RESULTS))
-        resultSet.remove(df.getOWLNothing())
-	resultSet.remove(df.getOWLThing())
-	def classes = classes2info(resultSet, axioms);
-	return classes.sort {x, y -> x["label"].compareTo(y["label"])};
+            Set resultSet = Sets.newHashSet(Iterables.limit(queryEngine.getClasses(mOwlQuery, requestType, direct, labels), MAX_REASONER_RESULTS))
+            resultSet.remove(df.getOWLNothing())
+            resultSet.remove(df.getOWLThing())
+            def classes = classes2info(resultSet, axioms);
+            return classes.sort {x, y -> x["label"].compareTo(y["label"])};
+        } else {
+            def ont = this.getOntology()
+            def sfp = new NewShortFormProvider(ont.getImportsClosure())
+            def bidiSfp = new BidirectionalShortFormProviderAdapter(ont.getImportsClosure(), sfp)
+            def checker = new ShortFormEntityChecker(bidiSfp)
+            def df = ont.getOWLOntologyManager().getOWLDataFactory()
+            def configSupplier = { -> ont.getOWLOntologyManager().getOntologyLoaderConfiguration() }
+            def parser = new org.semanticweb.owlapi.manchestersyntax.parser.ManchesterOWLSyntaxParserImpl(configSupplier, df)
+            parser.setStringToParse(mOwlQuery)
+            parser.setOWLEntityChecker(checker)
+            def expression = parser.parseClassExpression()
+            return runQuery(expression, type, direct, labels, axioms)
+        }
     }
 
 
