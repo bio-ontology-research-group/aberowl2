@@ -53,6 +53,7 @@ try {
             print new JsonBuilder([head: [vars:[]], results: [bindings:[]]]).toString()
         } else {
             try {
+		println("Response: $responseText")
                 def results = new JsonSlurper().parseText(responseText)
                 print new JsonBuilder(results).toString()
             } catch (Exception e) {
