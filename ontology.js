@@ -185,14 +185,20 @@ Alpine.data('ontologyApp', () => ({
         .then(response => response.json())
         .then(data => {
             const metadata = {};
-            data.results.bindings.forEach(binding => {
-                const prop = binding.p.value.split('#').pop().split('/').pop();
-                const value = binding.o.value;
-                if (!metadata[prop]) {
-                    metadata[prop] = [];
-                }
-                metadata[prop].push(value);
-            });
+            
+            // Check if data has the expected structure with bindings
+            if (data && data.results && data.results.bindings) {
+                data.results.bindings.forEach(binding => {
+                    const prop = binding.p.value.split('#').pop().split('/').pop();
+                    const value = binding.o.value;
+                    if (!metadata[prop]) {
+                        metadata[prop] = [];
+                    }
+                    metadata[prop].push(value);
+                });
+            } else {
+                console.warn('SPARQL query response missing expected bindings structure:', data);
+            }
 
             const first = (arr) => arr && arr.length > 0 ? arr[0] : undefined;
 
