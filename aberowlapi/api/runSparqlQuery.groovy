@@ -50,14 +50,18 @@ try {
     http.connect()
 
     def responseCode = http.responseCode
+    println "DEBUG: SPARQL endpoint responded with HTTP ${responseCode}"
+    
     if (responseCode >= 200 && responseCode < 300) {
         def responseText = http.inputStream.text
+        println "DEBUG: Response text: ${responseText}"
+        
         if (!responseText?.trim()) {
-            // Handle empty response as empty result set
-            print new JsonBuilder([head: [vars:[]], results: [bindings:[]]]).toString()
+            // Handle empty response
+            response.setStatus(500)
+            print new JsonBuilder([ 'error': true, 'message': 'SPARQL endpoint returned an empty response' ]).toString()
         } else {
             try {
-		println("Response: $responseText")
                 def results = new JsonSlurper().parseText(responseText)
                 print new JsonBuilder(results).toString()
             } catch (Exception e) {
@@ -68,7 +72,8 @@ try {
         }
     } else {
         def errorText = http.errorStream?.text ?: "No error message from server."
-        throw new Exception("SPARQL endpoint returned HTTP ${responseCode}. Message: ${errorText}")
+        response.setStatus(500)
+        print new JsonBuilder([ 'error': true, 'message': "SPARQL endpoint returned HTTP ${responseCode}. Message: ${errorText}" ]).toString()
     }
     
 } catch(Exception e) {
