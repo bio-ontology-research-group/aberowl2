@@ -32,8 +32,6 @@ echo "Using project name: $PROJECT_NAME (this will prefix all container names)"
 # Use port-specific index names to avoid conflicts between instances
 # We're hardcoding the Elasticsearch URL to ensure internal Docker network communication
 export ELASTICSEARCH_URL="http://elasticsearch:9200"
-export ONTOLOGY_INDEX_NAME="ontology_index_${NGINX_PORT}"
-export CLASS_INDEX_NAME="class_index_${NGINX_PORT}"
 export SKIP_EMBEDDING=${SKIP_EMBEDDING:-"True"} # Set to "False" to attempt embedding loading
 
 # Check if the ontology file exists on the host
@@ -68,7 +66,10 @@ chmod +x "$HOST_INDEXER_SCRIPT_PATH"
 # To force a rebuild, run 'docker compose build' or 'docker compose up --build'.
 # We run in the foreground (no -d) to see all service logs.
 # This uses the default docker-compose.yml to build images locally.
-docker compose -p "$PROJECT_NAME" up
+# We use -d for detached mode. The indexer service will run, index, and then exit.
+# Use the -p flag to specify a unique project name
+docker compose -p "$PROJECT_NAME" up --build -d
+# docker compose -f dockerhub-compose.yml -p "$PROJECT_NAME" up -d
 
 
 # --- Output Information ---
@@ -79,11 +80,11 @@ echo "You can check logs with: docker compose -p $PROJECT_NAME logs -f"
 echo "---"
 echo "Once ready:"
 echo "Main application should be available at: http://localhost:$NGINX_PORT"
-echo "SPARQL endpoint should be available at: http://localhost:8890/sparql"
-echo "Ontology API should be available at: http://localhost:8080"
-echo "Elasticsearch should be available at: http://localhost:9200"
+echo "SPARQL endpoint should be available at: http://localhost:$NGINX_PORT/sparql"
+echo "Ontology API should be available at: http://localhost:$NGINX_PORT/api"
+echo "Elasticsearch should be available at: http://localhost:$NGINX_PORT/elastic"
 echo "You can check Elasticsearch indices with:"
-echo "curl http://localhost:9200/_cat/indices?v"
-echo "curl 'http://localhost:9200/$ONTOLOGY_INDEX_NAME/_search?pretty'"
-echo "curl 'http://localhost:9200/$CLASS_INDEX_NAME/_search?pretty'"
+echo "curl http://localhost:$NGINX_PORT/elastic/_cat/indices?v"
+echo "curl 'http://localhost:$NGINX_PORT/elastic/$ONTOLOGY_INDEX_NAME/_search?pretty'"
+echo "curl 'http://localhost:$NGINX_PORT/elastic/$CLASS_INDEX_NAME/_search?pretty'"
 echo "---"
