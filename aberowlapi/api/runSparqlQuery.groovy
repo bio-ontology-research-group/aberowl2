@@ -40,6 +40,7 @@ try {
     println "DEBUG: Sending SPARQL query to endpoint ${endpointUrl}"
 
     def http = new URL(endpointUrl).openConnection() as HttpURLConnection
+    http.setInstanceFollowRedirects(true)
     http.setDoOutput(true)
     http.setRequestProperty('Accept', 'application/sparql-results+json')
     http.setRequestProperty('Content-Type', 'application/x-www-form-urlencoded')
