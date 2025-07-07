@@ -53,14 +53,33 @@ public class QueryParser {
      * @return An OWLClassExpression generated from mOwl
      */
     public OWLClassExpression parse(String mOwl, boolean labels) {
-	def result = null
+ def result = null
 
-	if (mOwl.startsWith("<") && mOwl.endsWith(">")) {
-		mOwl = mOwl.substring(1, mOwl.length() - 1).trim();
-	        def iri = IRI.create(mOwl);
-	        result = this.ontology.getOWLOntologyManager().getOWLDataFactory().getOWLClass(iri);
+ if (mOwl.startsWith("<") && mOwl.endsWith(">")) {
+  mOwl = mOwl.substring(1, mOwl.length() - 1).trim();
+         def iri = IRI.create(mOwl);
+         result = this.ontology.getOWLOntologyManager().getOWLDataFactory().getOWLClass(iri);
         }else{
      try {
+                // First try to find the class directly by name
+                for (OWLClass cls : ontology.getClassesInSignature(true)) {
+                    String shortForm = cls.getIRI().getFragment()
+                    if (shortForm.equalsIgnoreCase(mOwl) ||
+                        shortForm.replace("_", "").equalsIgnoreCase(mOwl.replace("_", ""))) {
+                        return cls
+                    }
+                }
+                
+                // If not found directly, try with quotes for Manchester syntax
+                // Check if the input contains spaces and is not already quoted
+                if (mOwl.contains(" ") && !mOwl.startsWith("'") && !mOwl.endsWith("'")) {
+                    // Add quotes around the entity name
+                    mOwl = "'" + mOwl + "'";
+                } else if (!mOwl.contains(" ") && !mOwl.startsWith("'") && !mOwl.endsWith("'")) {
+                    // For single words, also try with quotes
+                    mOwl = "'" + mOwl + "'";
+                }
+                
                 OWLDataFactory dFactory = this.ontology.getOWLOntologyManager().getOWLDataFactory();
   def eChecker = new BasicEntityChecker(dFactory, ontology)
   def parser = new ManchesterOWLSyntaxClassExpressionParser(dFactory, eChecker);
@@ -75,21 +94,14 @@ public class QueryParser {
                 try {
                     result = parser.parse(mOwl);
                 } catch(Exception firstTryException) {
-                    // If parsing fails and the input doesn't contain spaces,
-                    // try to find a matching class with spaces in its label
-                    if (!mOwl.contains(" ")) {
-                        // First try with our enhanced BasicEntityChecker
-                        def basicChecker = new BasicEntityChecker(dFactory, ontology)
-                        def basicParser = new ManchesterOWLSyntaxClassExpressionParser(dFactory, basicChecker);
-                        
-                        try {
-                            result = basicParser.parse(mOwl);
-                        } catch(Exception secondTryException) {
-                            // If that fails too, rethrow the original exception
-                            throw firstTryException;
-                        }
-                    } else {
-                        // If the input already contains spaces, just rethrow the exception
+                    // Always try with our enhanced BasicEntityChecker regardless of spaces
+                    def basicChecker = new BasicEntityChecker(dFactory, ontology)
+                    def basicParser = new ManchesterOWLSyntaxClassExpressionParser(dFactory, basicChecker);
+                    
+                    try {
+                        result = basicParser.parse(mOwl);
+                    } catch(Exception secondTryException) {
+                        // If that fails too, rethrow the original exception
                         throw firstTryException;
                     }
                 }

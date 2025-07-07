@@ -216,7 +216,29 @@ Alpine.data('ontologyApp', () => ({
 
     // Fetch ontology statistics from the new endpoint
     fetch('/api/api/getStatistics.groovy')
-        .then(response => response.json())
+        .then(response => {
+            // Check if the response is OK and has the correct content type
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            
+            // Check content type to ensure we're getting JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error(`Expected JSON but got ${contentType || 'unknown content type'}`);
+            }
+            
+            return response.text().then(text => {
+                try {
+                    // Try to parse the text as JSON
+                    return JSON.parse(text);
+                } catch (e) {
+                    // If parsing fails, log the first part of the response for debugging
+                    console.error('Failed to parse JSON:', text.substring(0, 100) + '...');
+                    throw new Error('Invalid JSON response');
+                }
+            });
+        })
         .then(stats => {
             this.ontology.submission.nb_classes = stats.class_count ?? 'N/A';
             this.ontology.submission.nb_properties = stats.property_count ?? 'N/A';
