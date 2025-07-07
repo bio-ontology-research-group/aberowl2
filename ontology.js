@@ -777,29 +777,22 @@ const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
   
   setDDIEMFilterExampleQuery(event) {
     if (event) event.preventDefault();
-const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
-      "PREFIX owl: <http://www.w3.org/2002/07/owl#> \n" +
-            "SELECT DISTINCT ?class \n" + 
-      " WHERE { ?class rdf:type owl:Class . } \n" +
-      "ORDER BY ?class \n" +
-      "LIMIT 10";
-
-    // const query2 = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
-    // "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>   \n" +
-    // "PREFIX obo: <http://purl.obolibrary.org/obo/>   \n" +   
-    // "SELECT ?procedure ?evidenceCode ?phenotypeCorrected   \n" +   
-    // "FROM <http://ddiem.phenomebrowser.net>    \n" +  
-    // "WHERE {    \n" +     
-    // "	?procedure rdf:type ?procedureType .    \n" +  
-    // "	?procedure obo:RO_0002558 ?evidenceCode .     \n" + 
-    // "	?procedure obo:RO_0002212 ?phenotypes .      \n" +
-    // "	?phenotypes rdfs:label ?phenotypeCorrected .      \n" +
-    // "	FILTER ( ?procedureType in (    \n" +
-    // "		OWL equivalent <http://ddiem.phenomebrowser.net/sparql> <DDIEM> {     \n" +   
-    // "			'metabolite replacement'       \n" +
-    // "		}        \n" +
-    // "	) ).     \n" +
-    // "}";
+const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
+    "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>   \n" +
+    "PREFIX obo: <http://purl.obolibrary.org/obo/>   \n" +   
+    "SELECT ?procedure ?evidenceCode ?phenotypeCorrected   \n" +   
+    "FROM <http://ddiem.phenomebrowser.net>    \n" +  
+    "WHERE {    \n" +     
+    "	?procedure rdf:type ?procedureType .    \n" +  
+    "	?procedure obo:RO_0002558 ?evidenceCode .     \n" + 
+    "	?procedure obo:RO_0002212 ?phenotypes .      \n" +
+    "	?phenotypes rdfs:label ?phenotypeCorrected .      \n" +
+    "	FILTER ( ?procedureType in (    \n" +
+    "		OWL equivalent <http://ddiem.phenomebrowser.net/sparql> <DDIEM> {     \n" +   
+    "			'metabolite replacement'       \n" +
+    "		}        \n" +
+    "	) ).     \n" +
+    "}";
     
     this.query = query;
   },

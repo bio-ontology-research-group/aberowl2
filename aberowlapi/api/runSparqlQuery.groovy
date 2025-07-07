@@ -8,7 +8,7 @@ if(!application) {
 def params = Util.extractParams(request)
 
 def query = params.query
-def endpoint = params.endpoint
+def endpoint = params.endpoint ?: "/virtuoso/"
 def manager = application.manager
 
 response.contentType = 'application/json'
@@ -26,6 +26,9 @@ try {
         def iriList = owlResults.collect { "<${it}>" }.join("\n")
         rewrittenQuery = query.replaceFirst(/OWL\s+(\w+)\s+<([^>]+)>\s+<([^>]*)>\s*\{\s*(.*?)\s*\}/, "VALUES ?ontid { \n${iriList}\n}")
     }
+    
+    // Use the provided endpoint or default to /virtuoso/ if not specified
+    def endpointUrl = endpoint.startsWith("http") ? endpoint : request.getRequestURL().toString().replaceFirst(/\/api\/runSparqlQuery\.groovy$/, endpoint)
 
     def http = new URL(endpoint).openConnection() as HttpURLConnection
     http.setRequestMethod('POST')
