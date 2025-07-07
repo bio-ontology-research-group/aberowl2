@@ -37,6 +37,8 @@ try {
     http.setRequestProperty('Accept', 'application/sparql-results+json')
     
     def postData = "query=" + URLEncoder.encode(rewrittenQuery, "UTF-8")
+    println "DEBUG: Sending SPARQL query to endpoint ${endpointUrl}:"
+    println postData
     def writer = new OutputStreamWriter(http.getOutputStream())
     writer.write(postData)
     writer.flush()
@@ -50,8 +52,14 @@ try {
             // Handle empty response as empty result set
             print new JsonBuilder([head: [vars:[]], results: [bindings:[]]]).toString()
         } else {
-            def results = new JsonSlurper().parseText(responseText)
-            print new JsonBuilder(results).toString()
+            try {
+                def results = new JsonSlurper().parseText(responseText)
+                print new JsonBuilder(results).toString()
+            } catch (Exception e) {
+                // Handle JSON parsing errors
+                response.setStatus(500)
+                print new JsonBuilder([ 'error': true, 'message': 'Error parsing SPARQL response: ' + e.getMessage() ]).toString()
+            }
         }
     } else {
         def errorText = http.errorStream?.text ?: "No error message from server."
