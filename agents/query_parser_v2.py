@@ -274,5 +274,58 @@ async def identify_entities_debug(query: Query):
     }
 
 
+@app.post("/test_query_types")
+async def test_query_type_detection():
+    test_cases = [
+        # Default subeq cases
+        ("pizzas with cheese", "subeq"),
+        ("red cars", "subeq"),
+        ("things that have 4 wheels", "subeq"),
+        
+        # Explicit subclass
+        ("strict subclasses of Vehicle", "subclass"),
+        ("proper types of Pizza", "subclass"),
+        ("only subclasses of Animal", "subclass"),
+        
+        # Explicit superclass
+        ("strict superclasses of Car", "superclass"),
+        ("proper generalizations of Pizza", "superclass"),
+        
+        # Default supeq
+        ("generalizations of Car", "supeq"),
+        ("what encompasses Pizza", "supeq"),
+        ("broader than Dog", "supeq"),
+        
+        # Equivalent
+        ("equivalent to red cars", "equivalent"),
+        ("same as Pizza with cheese", "equivalent"),
+        ("exactly animals that fly", "equivalent"),
+        
+        # Complex cases
+        ("types of pizzas (not equivalent)", "subclass"),
+        ("generalizations of Car including Car itself", "supeq"),
+        ("what is a kind of vehicle", "subeq")
+    ]
+    
+    results = []
+    for query, expected in test_cases:
+        detected = detect_query_type(query)
+        llm_result = await identify_entities(Query(query=query))
+        
+        results.append({
+            "query": query,
+            "expected": expected,
+            "pattern_detected": detected,
+            "llm_detected": llm_result.get("query_type"),
+            "correct": detected == expected,
+            "entities": llm_result.get("potential_classes", [])
+        })
+    
+    return {
+        "test_results": results,
+        "accuracy": sum(r["correct"] for r in results) / len(results)
+    }
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001)
