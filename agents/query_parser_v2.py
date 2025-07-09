@@ -34,89 +34,64 @@ model = ModelFactory.create(
 class Query(BaseModel):
     query: str
 
-@app.post("/parse_v2_identify")
-async def identify_entities(query: Query):
-    prompt = """
-    Extract potential ontology entities from natural language queries for Manchester OWL syntax.
-    
-    EXAMPLES:
-    
-    Query: "red cars"
-    Output: {{
-      "potential_classes": ["car", "red"],
-      "potential_properties": [],
-      "structure_hints": ["red" could modify "car" as: "car and red" OR "car and (hasColor some red)"],
-      "quantifiers": [],
-      "query_type": "class_expression"
-    }}
-    
-    Query: "cars with the quality of being red or green"
-    Output: {{
-      "potential_classes": ["car", "quality", "red", "green"],
-      "potential_properties": ["hasQuality", "quality", "with"],
-      "structure_hints": ["with" suggests AND, "red or green" is a disjunction],
-      "sub_expressions": ["red or green"],
-      "quantifiers": [],
-      "query_type": "class_expression"
-    }}
-    
-    Query: "pizzas that have cheese or mushroom toppings"
-    Output: {{
-      "potential_classes": ["pizza", "cheese", "mushroom", "topping"],
-      "potential_properties": ["hasTopping", "have", "topping"],
-      "structure_hints": ["that have" suggests existential quantification],
-      "sub_expressions": ["cheese or mushroom"],
-      "quantifiers": [{{ "property": "hasTopping", "quantifier": "some" }}],
-      "query_type": "class_expression"
-    }}
-    
-    Query: "things with at least 3 parts"
-    Output: {{
-      "potential_classes": ["thing", "part"],
-      "potential_properties": ["hasPart", "part", "with"],
-      "structure_hints": ["with" suggests property restriction],
-      "quantifiers": [{{ "property": "hasPart", "quantifier": "min", "cardinality": 3 }}],
-      "query_type": "class_expression"
-    }}
-    
-    Query: "animals that eat only plants"
-    Output: {{
-      "potential_classes": ["animal", "plant"],
-      "potential_properties": ["eat", "eats"],
-      "structure_hints": ["only" is universal quantification],
-      "quantifiers": [{{ "property": "eat", "quantifier": "only" }}],
-      "query_type": "class_expression"
-    }}
-    
-    Query: "subclasses of red or blue vehicles"
-    Output: {{
-      "potential_classes": ["vehicle", "red", "blue"],
-      "potential_properties": [],
-      "structure_hints": ["red or blue" modifies "vehicles"],
-      "sub_expressions": ["red or blue"],
-      "quantifiers": [],
-      "query_type": "subclass"
-    }}
-    
-    PATTERNS TO RECOGNIZE:
-    - "with/having/that have" often indicates property restrictions (AND + some)
-    - "or" creates disjunctions within sub-expressions
-    - "only" indicates universal quantification
-    - "at least N" indicates min cardinality
-    - "exactly N" indicates exact cardinality
-    - "and" between properties usually means intersection
-    - Prepositions often indicate properties: "in", "on", "from", "to", "with"
-    - "-ing" words often indicate properties: "having", "containing", "eating"
-    
-    Now analyze this query: "{query}"
-    
-    Return JSON with the structure shown in examples above.
+def detect_query_type(query: str):
     """
+    Detect query type with defaults to subeq/supeq unless explicitly excluded
+    """
+    query_lower = query.lower()
     
-    final_prompt = prompt.format(query=query.query)
+    # Keywords for different query types
+    keywords = {
+        "subclass_indicators": [
+            "subclass", "subclasses", "type of", "types of", "kind of", "kinds of",
+            "specific", "specialized", "subtypes", "children of", "derived from",
+            "examples of", "instances of", "forms of", "varieties of"
+        ],
+        "superclass_indicators": [
+            "superclass", "superclasses", "generalization", "generalizations",
+            "parent of", "parents of", "broader than", "general", "abstract",
+            "encompasses", "subsumes"
+        ],
+        "equivalent_indicators": [
+            "equivalent", "same as", "exactly", "precisely", "defined as",
+            "means the same as", "is the same as", "equals"
+        ],
+        "exclusion_indicators": [
+            "strict subclass", "proper subclass", "only subclass",
+            "strict superclass", "proper superclass", "only superclass",
+            "not equivalent", "not the same", "excluding equivalent",
+            "proper subset", "strict subset"
+        ]
+    }
+    
+    # Check for explicit exclusions first
+    exclude_equivalent = any(indicator in query_lower for indicator in keywords["exclusion_indicators"])
+    
+    # Check for query type indicators
+    has_subclass = any(indicator in query_lower for indicator in keywords["subclass_indicators"])
+    has_superclass = any(indicator in query_lower for indicator in keywords["superclass_indicators"])
+    has_equivalent = any(indicator in query_lower for indicator in keywords["equivalent_indicators"])
+    
+    # Determine query type
+    if has_equivalent and not exclude_equivalent:
+        return "equivalent"
+    elif has_subclass and exclude_equivalent:
+        return "subclass"
+    elif has_superclass and exclude_equivalent:
+        return "superclass"
+    elif has_subclass:
+        return "subeq"  # Default: subclass or equivalent
+    elif has_superclass:
+        return "supeq"  # Default: superclass or equivalent
+    else:
+        # Default when no clear indicators
+        return "subeq"
+
+
+def call_llm(prompt: str):
     context = "You are a helpful assistant that parses natural language queries about ontologies and returns JSON."
     agent = ChatAgent(context, model=model)
-    response = agent.step(final_prompt)
+    response = agent.step(prompt)
     interpretation = response.msgs[0].content
 
     try:
@@ -124,16 +99,105 @@ async def identify_entities(query: Query):
         json_match = re.search(r'\{.*\}', interpretation, re.DOTALL)
         if json_match:
             json_str = json_match.group(0)
-            # The user's prompt example uses double quotes, so this might not be needed.
-            # But it's safer to have it.
             json_str = json_str.replace("'", '"')
             parsed_result = json.loads(json_str)
             return parsed_result
         else:
-            # Fallback if no JSON is found
             return {"error": "Failed to parse LLM response", "raw_response": interpretation}
     except Exception as e:
         return {"error": str(e), "raw_response": interpretation}
+
+
+# Enhanced prompt with query type examples
+QUERY_TYPE_PROMPT = """
+Extract entities and determine query type from natural language.
+
+QUERY TYPE EXAMPLES:
+
+1. SUBEQ (Subclass or Equivalent - DEFAULT):
+   - "pizzas with cheese" → Find all pizzas with cheese (including equivalent definitions)
+   - "red cars" → Find all things that are red cars
+   - "things with 4 wheels" → Find all classes that have 4 wheels
+
+2. SUBCLASS (Strict Subclass Only):
+   - "strict subclasses of vehicle" → Only proper subclasses, not Vehicle itself
+   - "proper types of pizza" → Only specializations of Pizza
+   - "kinds of animals (not equivalent)" → Exclude equivalent classes
+
+3. SUPEQ (Superclass or Equivalent):
+   - "generalizations of Car" → Find superclasses of Car (including Car itself)
+   - "what encompasses Pizza" → Find classes that subsume Pizza
+   - "broader categories than Dog" → Find superclasses
+
+4. SUPERCLASS (Strict Superclass Only):
+   - "strict superclasses of Pizza" → Only proper superclasses
+   - "proper generalizations of Car" → Exclude Car itself
+
+5. EQUIVALENT:
+   - "things defined exactly as red cars" → Only equivalent definitions
+   - "what is the same as Pizza with cheese" → Find equivalent classes
+   - "classes equivalent to Animal that eats meat" → Exact matches only
+
+EXAMPLES WITH ANALYSIS:
+
+Query: "types of pizzas with cheese topping"
+{{
+  "potential_classes": ["pizza", "cheese", "topping"],
+  "potential_properties": ["hasTopping", "topping", "with"],
+  "query_type": "subeq",
+  "query_type_reasoning": "'types of' indicates subclass, no exclusion mentioned, default to subeq"
+}}
+
+Query: "strict subclasses of red vehicles"
+{{
+  "potential_classes": ["vehicle", "red"],
+  "potential_properties": [],
+  "query_type": "subclass",
+  "query_type_reasoning": "'strict subclasses' explicitly excludes equivalents"
+}}
+
+Query: "what is equivalent to cars that use electricity"
+{{
+  "potential_classes": ["car", "electricity"],
+  "potential_properties": ["use", "uses"],
+  "query_type": "equivalent",
+  "query_type_reasoning": "'equivalent to' explicitly requests equivalent classes only"
+}}
+
+Query: "animals that eat plants"
+{{
+  "potential_classes": ["animal", "plant"],
+  "potential_properties": ["eat", "eats"],
+  "query_type": "subeq",
+  "query_type_reasoning": "No query type specified, default to subeq"
+}}
+
+Query: "generalizations of pizza (not including pizza itself)"
+{{
+  "potential_classes": ["pizza"],
+  "potential_properties": [],
+  "query_type": "superclass",
+  "query_type_reasoning": "'not including pizza itself' excludes equivalent"
+}}
+
+Now analyze: "{query}"
+"""
+
+@app.post("/parse_v2_identify")
+async def identify_entities(query: Query):
+    # Use pattern detection
+    query_type = detect_query_type(query.query)
+    
+    # Get LLM analysis with enhanced prompt
+    prompt = QUERY_TYPE_PROMPT.format(query=query.query)
+    llm_result = call_llm(prompt)
+    
+    # Override LLM's query type if pattern detection is more reliable
+    if "error" not in llm_result:
+        llm_result["query_type"] = query_type
+        llm_result["query_type_source"] = "pattern_detection"
+    
+    return llm_result
 
 
 # Add helper function to provide additional structure hints
