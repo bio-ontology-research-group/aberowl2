@@ -35,43 +35,43 @@ model = ModelFactory.create(
 class Query(BaseModel):
     query: str
 
+# Keywords for different query types
+QUERY_TYPE_KEYWORDS = {
+    "subclass_indicators": [
+        "subclass", "subclasses", "type of", "types of", "kind of", "kinds of",
+        "specific", "specialized", "subtypes", "children of", "derived from",
+        "examples of", "instances of", "forms of", "varieties of"
+    ],
+    "superclass_indicators": [
+        "superclass", "superclasses", "generalization", "generalizations",
+        "parent of", "parents of", "broader than", "general", "abstract",
+        "encompasses", "subsumes"
+    ],
+    "equivalent_indicators": [
+        "equivalent", "same as", "exactly", "precisely", "defined as",
+        "means the same as", "is the same as", "equals"
+    ],
+    "exclusion_indicators": [
+        "strict subclass", "proper subclass", "only subclass",
+        "strict superclass", "proper superclass", "only superclass",
+        "not equivalent", "not the same", "excluding equivalent",
+        "proper subset", "strict subset"
+    ]
+}
+
 def detect_query_type(query: str):
     """
     Detect query type with defaults to subeq/supeq unless explicitly excluded
     """
     query_lower = query.lower()
     
-    # Keywords for different query types
-    keywords = {
-        "subclass_indicators": [
-            "subclass", "subclasses", "type of", "types of", "kind of", "kinds of",
-            "specific", "specialized", "subtypes", "children of", "derived from",
-            "examples of", "instances of", "forms of", "varieties of"
-        ],
-        "superclass_indicators": [
-            "superclass", "superclasses", "generalization", "generalizations",
-            "parent of", "parents of", "broader than", "general", "abstract",
-            "encompasses", "subsumes"
-        ],
-        "equivalent_indicators": [
-            "equivalent", "same as", "exactly", "precisely", "defined as",
-            "means the same as", "is the same as", "equals"
-        ],
-        "exclusion_indicators": [
-            "strict subclass", "proper subclass", "only subclass",
-            "strict superclass", "proper superclass", "only superclass",
-            "not equivalent", "not the same", "excluding equivalent",
-            "proper subset", "strict subset"
-        ]
-    }
-    
     # Check for explicit exclusions first
-    exclude_equivalent = any(indicator in query_lower for indicator in keywords["exclusion_indicators"])
+    exclude_equivalent = any(indicator in query_lower for indicator in QUERY_TYPE_KEYWORDS["exclusion_indicators"])
     
     # Check for query type indicators
-    has_subclass = any(indicator in query_lower for indicator in keywords["subclass_indicators"])
-    has_superclass = any(indicator in query_lower for indicator in keywords["superclass_indicators"])
-    has_equivalent = any(indicator in query_lower for indicator in keywords["equivalent_indicators"])
+    has_subclass = any(indicator in query_lower for indicator in QUERY_TYPE_KEYWORDS["subclass_indicators"])
+    has_superclass = any(indicator in query_lower for indicator in QUERY_TYPE_KEYWORDS["superclass_indicators"])
+    has_equivalent = any(indicator in query_lower for indicator in QUERY_TYPE_KEYWORDS["equivalent_indicators"])
     
     # Determine query type
     if has_equivalent and not exclude_equivalent:
@@ -325,6 +325,36 @@ async def test_query_type_detection():
     return {
         "test_results": results,
         "accuracy": sum(r["correct"] for r in results) / len(results)
+    }
+
+
+@app.post("/debug_query_type")
+async def debug_query_type(query: Query):
+    query_lower = query.query.lower()
+    
+    # Detailed keyword matching
+    keyword_matches = {
+        "subclass_keywords": [kw for kw in QUERY_TYPE_KEYWORDS["subclass_indicators"] 
+                              if kw in query_lower],
+        "superclass_keywords": [kw for kw in QUERY_TYPE_KEYWORDS["superclass_indicators"] 
+                                if kw in query_lower],
+        "equivalent_keywords": [kw for kw in QUERY_TYPE_KEYWORDS["equivalent_indicators"] 
+                                if kw in query_lower],
+        "exclusion_keywords": [kw for kw in QUERY_TYPE_KEYWORDS["exclusion_indicators"] 
+                               if kw in query_lower]
+    }
+    
+    pattern_type = detect_query_type(query.query)
+    llm_result = await identify_entities(query)
+    
+    return {
+        "query": query.query,
+        "keyword_matches": keyword_matches,
+        "pattern_detection_result": pattern_type,
+        "llm_result": llm_result.get("query_type"),
+        "llm_reasoning": llm_result.get("query_type_reasoning"),
+        "final_query_type": pattern_type,
+        "explanation": f"Detected as {pattern_type} because: {keyword_matches}"
     }
 
 
