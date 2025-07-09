@@ -6,6 +6,9 @@ from fastapi.concurrency import run_in_threadpool
 import os
 import json
 import re
+from typing import Optional
+
+from elasticsearch import AsyncElasticsearch
 
 from camel.models import ModelFactory
 from camel.types import ModelPlatformType
@@ -23,6 +26,11 @@ app.add_middleware(
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
+# Elasticsearch client
+ES_HOST = os.getenv("ES_HOST", "http://localhost:9200")
+ES_INDEX = os.getenv("ES_INDEX", "ontology_entities")
+es = AsyncElasticsearch(ES_HOST)
+
 
 model = ModelFactory.create(
     model_platform=ModelPlatformType.OPENROUTER,
@@ -34,6 +42,10 @@ model = ModelFactory.create(
 
 class Query(BaseModel):
     query: str
+
+class ESSearchQuery(BaseModel):
+    entity: str
+    entity_type: Optional[str] = None
 
 # Keywords for different query types
 QUERY_TYPE_KEYWORDS = {
@@ -107,6 +119,48 @@ async def call_llm(prompt: str):
             return {"error": "Failed to parse LLM response", "raw_response": interpretation}
     except Exception as e:
         return {"error": str(e), "raw_response": interpretation}
+
+
+async def search_entity_in_es(entity: str, entity_type: Optional[str] = None):
+    """
+    Searches for an entity in ElasticSearch using multiple strategies.
+    """
+    query_body = {
+        "size": 5,
+        "query": {
+            "bool": {
+                "should": [
+                    {"match_phrase": {"label": {"query": entity, "boost": 10}}},
+                    {"match": {"label": {"query": entity, "fuzziness": "AUTO"}}},
+                    {"match": {"synonyms": entity}}
+                ],
+                "minimum_should_match": 1
+            }
+        }
+    }
+
+    if entity_type:
+        query_body["query"]["bool"]["filter"] = [
+            {"term": {"type": entity_type.lower()}}
+        ]
+
+    try:
+        response = await es.search(index=ES_INDEX, body=query_body)
+        
+        candidates = []
+        for hit in response['hits']['hits']:
+            source = hit['_source']
+            candidates.append({
+                "label": source.get("label"),
+                "uri": source.get("uri"),
+                "type": source.get("type"),
+                "score": hit['_score']
+            })
+        
+        return {"found": len(candidates) > 0, "candidates": candidates}
+
+    except Exception as e:
+        return {"found": False, "candidates": [], "error": str(e)}
 
 
 # Enhanced prompt with query type examples
@@ -199,6 +253,14 @@ async def identify_entities(query: Query):
         llm_result["query_type_source"] = "pattern_detection"
     
     return llm_result
+
+
+@app.post("/test_es_search")
+async def test_es_search(query: ESSearchQuery):
+    """
+    Test endpoint for searching entities in Elasticsearch.
+    """
+    return await search_entity_in_es(query.entity, query.entity_type)
 
 
 # Add helper function to provide additional structure hints
