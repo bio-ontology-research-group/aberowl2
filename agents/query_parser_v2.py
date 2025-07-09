@@ -135,5 +135,80 @@ async def identify_entities(query: Query):
     except Exception as e:
         return {"error": str(e), "raw_response": interpretation}
 
+
+# Add helper function to provide additional structure hints
+def analyze_query_patterns(query: str):
+    """
+    Pre-process query to identify structural patterns
+    """
+    patterns = {
+        "has_with": "with" in query or "having" in query,
+        "has_that": "that" in query,
+        "has_only": "only" in query,
+        "has_some": "some" in query or "any" in query,
+        "has_all": "all" in query or "every" in query,
+        "has_cardinality": any(phrase in query for phrase in 
+                              ["at least", "at most", "exactly", "more than", "less than"]),
+        "has_disjunction": " or " in query,
+        "has_conjunction": " and " in query,
+        "has_negation": "not" in query or "no" in query,
+        "query_markers": {
+            "subclass": "subclass" in query or "types of" in query,
+            "superclass": "superclass" in query or "generalization" in query,
+            "equivalent": "same as" in query or "equivalent" in query,
+            "instances": "instances of" in query or "individuals" in query
+        }
+    }
+    
+    # Extract potential sub-expressions (text between certain markers)
+    import re
+    sub_expressions = []
+    
+    # Pattern for "X or Y" expressions
+    or_pattern = re.findall(r'(\w+\s+or\s+\w+)', query)
+    sub_expressions.extend(or_pattern)
+    
+    # Pattern for "that/which [verb]" clauses
+    clause_pattern = re.findall(r'(?:that|which)\s+(\w+.*?)(?:\s+and|\s+or|$)', query)
+    sub_expressions.extend(clause_pattern)
+    
+    return {
+        "patterns": patterns,
+        "sub_expressions": sub_expressions
+    }
+
+def merge_hints(patterns, llm_result):
+    """
+    A simple function to combine hints from pattern analysis and LLM extraction.
+    """
+    # This is a placeholder implementation.
+    # It can be made more sophisticated later.
+    combined = {
+        "query_type": llm_result.get("query_type", "unknown"),
+        "structure_hints": llm_result.get("structure_hints", []),
+        "detected_patterns": patterns.get("patterns", {}),
+        "detected_sub_expressions": patterns.get("sub_expressions", [])
+    }
+    if "error" in llm_result:
+        combined["llm_error"] = llm_result["error"]
+    return combined
+
+@app.post("/parse_v2_identify_debug")
+async def identify_entities_debug(query: Query):
+    # First get pattern analysis
+    patterns = analyze_query_patterns(query.query)
+    
+    # Then get LLM analysis
+    llm_result = await identify_entities(query)
+    
+    # Combine results
+    return {
+        "query": query.query,
+        "pattern_analysis": patterns,
+        "llm_extraction": llm_result,
+        "combined_hints": merge_hints(patterns, llm_result)
+    }
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001)
