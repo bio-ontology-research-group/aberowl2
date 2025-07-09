@@ -163,6 +163,93 @@ async def search_entity_in_es(entity: str, entity_type: Optional[str] = None):
         return {"found": False, "candidates": [], "error": str(e)}
 
 
+def _to_camel_case(s: str) -> str:
+    parts = re.split(r'[\s_]+', s)
+    if not parts:
+        return ""
+    return parts[0].lower() + ''.join(x.title() for x in parts[1:])
+
+def generate_property_variations(prop_name: str) -> list[str]:
+    """Generates likely variations of a property name."""
+    prop_name = prop_name.lower()
+    variations = {prop_name}
+    
+    # Handle multi-word properties like "part of"
+    if ' ' in prop_name or '_' in prop_name:
+        camel_case = _to_camel_case(prop_name)
+        variations.add(camel_case)
+        variations.add(f"has{camel_case.title()}")
+        variations.add(prop_name.replace(' ', '_'))
+    else: # Single word like "topping"
+        variations.add(f"has{prop_name.title()}")
+        variations.add(f"has_{prop_name}")
+        variations.add(f"is{prop_name.title()}")
+
+    return list(variations)
+
+
+async def validate_all_entities(extraction_result: dict):
+    """
+    Validates entities from LLM extraction against Elasticsearch.
+    """
+    validated_entities = {
+        "classes": {},
+        "properties": {}
+    }
+    unmatched_entities = {
+        "classes": [],
+        "properties": []
+    }
+
+    # Validate classes
+    potential_classes = extraction_result.get("potential_classes", [])
+    for p_class in potential_classes:
+        result = await search_entity_in_es(p_class, "class")
+        if result.get("found"):
+            # Take the top candidate
+            validated_entities["classes"][p_class] = result["candidates"][0]
+        else:
+            unmatched_entities["classes"].append(p_class)
+
+    # Validate properties
+    potential_properties = extraction_result.get("potential_properties", [])
+    for p_prop in potential_properties:
+        variations = generate_property_variations(p_prop)
+        found_prop = False
+        for var in variations:
+            result = await search_entity_in_es(var, "property")
+            if result.get("found"):
+                validated_entities["properties"][p_prop] = result["candidates"][0]
+                found_prop = True
+                break # Found a match, move to next potential property
+        if not found_prop:
+            unmatched_entities["properties"].append(p_prop)
+            
+    return {
+        "validated_entities": validated_entities,
+        "unmatched_entities": unmatched_entities
+    }
+
+
+@app.post("/parse_v2_validate")
+async def validate_query_entities(query: Query):
+    """
+    Full pipeline: identify potential entities and then validate them.
+    """
+    # 1. Identify potential entities
+    extraction_result = await identify_entities(query)
+    if "error" in extraction_result:
+        return extraction_result
+    
+    # 2. Validate entities against ES
+    validation_result = await validate_all_entities(extraction_result)
+    
+    return {
+        "extraction": extraction_result,
+        "validation": validation_result
+    }
+
+
 # Enhanced prompt with query type examples
 QUERY_TYPE_PROMPT = """
 Extract entities and determine query type from natural language.
