@@ -231,6 +231,155 @@ async def validate_all_entities(extraction_result: dict):
     }
 
 
+MANCHESTER_GENERATION_PROMPT = """
+Your task is to convert a natural language query into a Manchester OWL Syntax class expression.
+You MUST use ONLY the provided validated entities. Do not invent new classes or properties.
+Use the entity labels provided in the JSON, not the original words from the query.
+
+- For simple conjunctions, use 'and'.
+- For disjunctions, use 'or' and group with parentheses.
+- For property restrictions, use the format: 'PROPERTY QUANTIFIER CLASS'.
+  - Common quantifiers: some, only, min, max, exactly, value.
+- If a cardinality is given without a class (e.g., "at least 3 parts"), use 'Thing' as the class.
+
+---
+EXAMPLE 1:
+Natural Language Query: "pizzas with cheese or mushroom toppings"
+Validated Entities:
+{{
+  "classes": {{
+    "pizza": {{"label": "Pizza"}},
+    "cheese": {{"label": "Cheese"}},
+    "mushroom": {{"label": "Mushroom"}}
+  }},
+  "properties": {{
+    "hasTopping": {{"label": "hasTopping"}}
+  }}
+}}
+
+Resulting Manchester Expression:
+Pizza and (hasTopping some (Cheese or Mushroom))
+
+---
+EXAMPLE 2:
+Natural Language Query: "cars with exactly 4 wheels"
+Validated Entities:
+{{
+  "classes": {{
+    "car": {{"label": "Car"}},
+    "wheel": {{"label": "Wheel"}}
+  }},
+  "properties": {{
+    "hasPart": {{"label": "hasPart"}}
+  }}
+}}
+
+Resulting Manchester Expression:
+Car and (hasPart exactly 4 Wheel)
+
+---
+EXAMPLE 3:
+Natural Language Query: "red or blue vehicles"
+Validated Entities:
+{{
+  "classes": {{
+    "vehicle": {{"label": "Vehicle"}},
+    "red": {{"label": "Red"}},
+    "blue": {{"label": "Blue"}}
+  }},
+  "properties": {{}}
+}}
+
+Resulting Manchester Expression:
+Vehicle and (Red or Blue)
+
+---
+EXAMPLE 4:
+Natural Language Query: "animals that eat only plants"
+Validated Entities:
+{{
+  "classes": {{
+    "animal": {{"label": "Animal"}},
+    "plant": {{"label": "Plant"}}
+  }},
+  "properties": {{
+    "eats": {{"label": "eats"}}
+  }}
+}}
+
+Resulting Manchester Expression:
+Animal and (eats only Plant)
+
+---
+Now, generate the Manchester expression for the following:
+
+Natural Language Query: "{query}"
+Validated Entities:
+{validation_json}
+
+Resulting Manchester Expression:
+"""
+
+async def generate_candidate_manchester(query: str, extraction: dict, validation: dict):
+    """
+    Generates a candidate Manchester query using an LLM, constrained by validated entities.
+    """
+    # We only need the labels for the prompt, not the full validation dict
+    simple_validation = {
+        "classes": {k: {"label": v["label"]} for k, v in validation["validated_entities"]["classes"].items()},
+        "properties": {k: {"label": v["label"]} for k, v in validation["validated_entities"]["properties"].items()}
+    }
+    
+    validation_json = json.dumps(simple_validation, indent=2)
+    
+    final_prompt = MANCHESTER_GENERATION_PROMPT.format(query=query, validation_json=validation_json)
+
+    # We don't want a JSON response here, just the raw text of the expression.
+    context = "You are a helpful assistant that converts natural language to Manchester OWL Syntax."
+    agent = ChatAgent(context, model=model)
+    response = await run_in_threadpool(agent.step, final_prompt)
+    candidate = response.msgs[0].content.strip()
+
+    if candidate:
+        return {
+            "success": True,
+            "candidate": candidate,
+            "unmatched_entities": validation.get("unmatched_entities")
+        }
+    else:
+        return {
+            "success": False,
+            "candidate": "",
+            "unmatched_entities": validation.get("unmatched_entities"),
+            "error": "LLM failed to generate a candidate expression."
+        }
+
+
+@app.post("/parse_v2_generate")
+async def generate_manchester_query(query: Query):
+    """
+    Full pipeline: identify, validate, and generate Manchester query.
+    """
+    # 1. Identify potential entities
+    extraction_result = await identify_entities(query)
+    if "error" in extraction_result:
+        return {"error": "Extraction failed", "details": extraction_result}
+    
+    # 2. Validate entities against ES
+    validation_result = await validate_all_entities(extraction_result)
+    if "error" in validation_result:
+        return {"error": "Validation failed", "details": validation_result}
+        
+    # 3. Generate Manchester candidate
+    generation_result = await generate_candidate_manchester(query.query, extraction_result, validation_result)
+    
+    return {
+        "extraction": extraction_result,
+        "validation": validation_result,
+        "generation": generation_result
+    }
+
+
 @app.post("/parse_v2_validate")
 async def validate_query_entities(query: Query):
     """
