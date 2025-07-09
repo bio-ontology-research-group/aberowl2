@@ -7,6 +7,7 @@ import os
 import json
 import re
 from typing import Optional
+import logging
 
 from elasticsearch import AsyncElasticsearch
 
@@ -15,6 +16,10 @@ from camel.types import ModelPlatformType
 from camel.agents import ChatAgent
 
 app = FastAPI()
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Enable CORS
 app.add_middleware(
@@ -144,6 +149,7 @@ async def search_entity_in_es(entity: str, entity_type: Optional[str] = None):
             {"term": {"type": entity_type.lower()}}
         ]
 
+    logger.info(f"Elasticsearch query: {json.dumps(query_body, indent=2)}")
     try:
         response = await es.search(index=ES_INDEX, body=query_body)
         
@@ -170,7 +176,7 @@ def _to_camel_case(s: str) -> str:
     return parts[0].lower() + ''.join(x.title() for x in parts[1:])
 
 def generate_property_variations(prop_name: str) -> list[str]:
-    """Generates likely variations of a property name."""
+    """Generates likely variations of a property name, including some inverse patterns."""
     prop_name = prop_name.lower()
     variations = {prop_name}
     
@@ -180,6 +186,9 @@ def generate_property_variations(prop_name: str) -> list[str]:
         variations.add(camel_case)
         variations.add(f"has{camel_case.title()}")
         variations.add(prop_name.replace(' ', '_'))
+        # Specific inverse pattern for "part of" -> "hasPart"
+        if "part of" in prop_name:
+            variations.add("hasPart")
     else: # Single word like "topping"
         variations.add(f"has{prop_name.title()}")
         variations.add(f"has_{prop_name}")
@@ -355,10 +364,37 @@ async def generate_candidate_manchester(query: str, extraction: dict, validation
         }
 
 
-@app.post("/parse_v2_generate")
-async def generate_manchester_query(query: Query):
+@app.post("/parse_v2")
+async def parse_v2(query: Query):
     """
-    Full pipeline: identify, validate, and generate Manchester query.
+    Runs the full parsing pipeline and returns a concise result.
+    """
+    # 1. Identify potential entities
+    extraction_result = await identify_entities(query)
+    if "error" in extraction_result:
+        return {"error": "Extraction failed", "details": extraction_result}
+    
+    # 2. Validate entities against ES
+    validation_result = await validate_all_entities(extraction_result)
+    if "error" in validation_result:
+        return {"error": "Validation failed", "details": validation_result}
+        
+    # 3. Generate Manchester candidate
+    generation_result = await generate_candidate_manchester(query.query, extraction_result, validation_result)
+    
+    return {
+        "query": query.query,
+        "query_type": extraction_result.get("query_type"),
+        "manchester_expression": generation_result.get("candidate"),
+        "unmatched_entities": generation_result.get("unmatched_entities"),
+        "validation_details": validation_result
+    }
+
+
+@app.post("/parse_v2_debug")
+async def parse_v2_debug(query: Query):
+    """
+    Full pipeline with intermediate steps: identify, validate, and generate Manchester query.
     """
     # 1. Identify potential entities
     extraction_result = await identify_entities(query)
@@ -654,6 +690,47 @@ async def debug_query_type(query: Query):
         "final_query_type": pattern_type,
         "explanation": f"Detected as {pattern_type} because: {keyword_matches}"
     }
+
+
+@app.post("/test_pipeline")
+async def test_pipeline():
+    """
+    Runs a suite of test cases through the full parsing pipeline.
+    """
+    test_cases = [
+        "pizzas with cheese topping",
+        "vehicles that have exactly 4 wheels",
+        "red or blue cars",
+        "animals that eat only plants",
+        "things with at least 3 parts"
+    ]
+    
+    results = []
+    for q_str in test_cases:
+        query = Query(query=q_str)
+        # Re-using the debug endpoint logic to get all steps
+        pipeline_result = await parse_v2_debug(query)
+
+        if "error" in pipeline_result:
+            results.append({"query": q_str, "error": pipeline_result})
+            continue
+
+        extraction = pipeline_result.get("extraction", {})
+        validation = pipeline_result.get("validation", {})
+        generation = pipeline_result.get("generation", {})
+        
+        unmatched = validation.get("unmatched_entities", {})
+        is_valid = not unmatched.get("classes") and not unmatched.get("properties")
+        
+        results.append({
+            "query": q_str,
+            "extracted_entities": extraction,
+            "es_validation_results": validation,
+            "generated_manchester_expression": generation.get("candidate"),
+            "is_valid": is_valid
+        })
+    
+    return {"test_results": results}
 
 
 if __name__ == "__main__":
