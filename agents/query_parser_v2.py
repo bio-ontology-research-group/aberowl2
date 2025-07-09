@@ -36,27 +36,87 @@ class Query(BaseModel):
 
 @app.post("/parse_v2_identify")
 async def identify_entities(query: Query):
-    prompt = f"""
-Extract potential ontology entities from this query. 
-Identify words/phrases that could be:
-- Classes (types of things, usually nouns)
-- Properties (relationships, usually verbs or prepositions with nouns)
-- Quantifiers (some, only, all, exactly, min, max)
-- Query type (subclass, superclass, equivalent, instances)
-
-Query: "{query.query}"
-
-Return JSON:
-{{
-  "potential_classes": ["list", "of", "class", "candidates"],
-  "potential_properties": ["list", "of", "property", "candidates"],
-  "quantifiers": [{{"property": "prop_name", "quantifier": "some"}}],
-  "query_type": "subclass"
-}}
-"""
+    prompt = """
+    Extract potential ontology entities from natural language queries for Manchester OWL syntax.
+    
+    EXAMPLES:
+    
+    Query: "red cars"
+    Output: {{
+      "potential_classes": ["car", "red"],
+      "potential_properties": [],
+      "structure_hints": ["red" could modify "car" as: "car and red" OR "car and (hasColor some red)"],
+      "quantifiers": [],
+      "query_type": "class_expression"
+    }}
+    
+    Query: "cars with the quality of being red or green"
+    Output: {{
+      "potential_classes": ["car", "quality", "red", "green"],
+      "potential_properties": ["hasQuality", "quality", "with"],
+      "structure_hints": ["with" suggests AND, "red or green" is a disjunction],
+      "sub_expressions": ["red or green"],
+      "quantifiers": [],
+      "query_type": "class_expression"
+    }}
+    
+    Query: "pizzas that have cheese or mushroom toppings"
+    Output: {{
+      "potential_classes": ["pizza", "cheese", "mushroom", "topping"],
+      "potential_properties": ["hasTopping", "have", "topping"],
+      "structure_hints": ["that have" suggests existential quantification],
+      "sub_expressions": ["cheese or mushroom"],
+      "quantifiers": [{{ "property": "hasTopping", "quantifier": "some" }}],
+      "query_type": "class_expression"
+    }}
+    
+    Query: "things with at least 3 parts"
+    Output: {{
+      "potential_classes": ["thing", "part"],
+      "potential_properties": ["hasPart", "part", "with"],
+      "structure_hints": ["with" suggests property restriction],
+      "quantifiers": [{{ "property": "hasPart", "quantifier": "min", "cardinality": 3 }}],
+      "query_type": "class_expression"
+    }}
+    
+    Query: "animals that eat only plants"
+    Output: {{
+      "potential_classes": ["animal", "plant"],
+      "potential_properties": ["eat", "eats"],
+      "structure_hints": ["only" is universal quantification],
+      "quantifiers": [{{ "property": "eat", "quantifier": "only" }}],
+      "query_type": "class_expression"
+    }}
+    
+    Query: "subclasses of red or blue vehicles"
+    Output: {{
+      "potential_classes": ["vehicle", "red", "blue"],
+      "potential_properties": [],
+      "structure_hints": ["red or blue" modifies "vehicles"],
+      "sub_expressions": ["red or blue"],
+      "quantifiers": [],
+      "query_type": "subclass"
+    }}
+    
+    PATTERNS TO RECOGNIZE:
+    - "with/having/that have" often indicates property restrictions (AND + some)
+    - "or" creates disjunctions within sub-expressions
+    - "only" indicates universal quantification
+    - "at least N" indicates min cardinality
+    - "exactly N" indicates exact cardinality
+    - "and" between properties usually means intersection
+    - Prepositions often indicate properties: "in", "on", "from", "to", "with"
+    - "-ing" words often indicate properties: "having", "containing", "eating"
+    
+    Now analyze this query: "{query}"
+    
+    Return JSON with the structure shown in examples above.
+    """
+    
+    final_prompt = prompt.format(query=query.query)
     context = "You are a helpful assistant that parses natural language queries about ontologies and returns JSON."
     agent = ChatAgent(context, model=model)
-    response = agent.step(prompt)
+    response = agent.step(final_prompt)
     interpretation = response.msgs[0].content
 
     try:
