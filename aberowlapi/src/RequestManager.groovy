@@ -499,5 +499,34 @@ public class RequestManager {
 	       return result.toString();
 	   }
 	   
+    public static String forwardToQueryParser(String path, String body, String method = 'POST') {
+        try {
+            def connection = new URL("http://query_parser:8001" + path).openConnection()
+            connection.requestMethod = method
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("Accept", "application/json")
+            connection.connectTimeout = 5000 // 5 seconds
+            connection.readTimeout = 60000 // 60 seconds for potentially long LLM calls
+
+            if (body && (method == 'POST' || method == 'PUT' || method == 'PATCH')) {
+                connection.doOutput = true
+                connection.outputStream.withWriter('UTF-8') { writer ->
+                    writer.write(body)
+                }
+            }
+            
+            if (connection.responseCode.equals(200)) {
+                return connection.inputStream.text
+            } else {
+                def errorStream = connection.errorStream ?: connection.inputStream
+                def errorBody = errorStream ? errorStream.text : "No error body."
+                println "Error forwarding request to ${path}. Status: ${connection.responseCode}. Body: ${errorBody}"
+                return """{"error": "Failed to connect to query parser", "status": ${connection.responseCode}, "details": "${errorBody.replaceAll('"', '\\\\"')}"}"""
+            }
+        } catch (Exception e) {
+            e.printStackTrace()
+            return """{"error": "Exception while forwarding request to query parser", "message": "${e.message.replaceAll('"', '\\\\"')}"}"""
+        }
+    }
 }
 

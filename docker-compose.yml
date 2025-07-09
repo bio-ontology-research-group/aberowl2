@@ -36,6 +36,7 @@ services:
     command: python3 /app/api_server.py ${ONTOLOGY_FILE}
     depends_on:
       - virtuoso
+      - query_parser
     restart: unless-stopped
 
   elasticsearch:
@@ -93,24 +94,24 @@ services:
       - virtuoso
       - ontology-api
       - elasticsearch
-      - llm
+      - query_parser
     volumes:
       # Optional: Mount the frontend files if you're serving them via nginx
       - ./:/usr/share/nginx/html
 
-  llm:
+  query_parser:
     build:
       context: .
       dockerfile: Dockerfile.llm
-    # Ports commented out as they'll be accessed through nginx
-    # Uncomment for direct access during development if needed
-    # ports:
-    #   - "127.0.0.1:8000:8000"  # FastAPI port
+    # This service runs the Python-based query parser on port 8001.
+    # It is accessed internally by the ontology-api service.
     environment:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - ES_HOST=http://elasticsearch:9200
+      - ES_INDEX=${CLASS_INDEX_NAME:-owl_class_index}
     restart: unless-stopped
     depends_on:
-      - ontology-api
+      - elasticsearch
 
 volumes:
   virtuoso_data:

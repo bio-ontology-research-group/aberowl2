@@ -33,7 +33,7 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 # Elasticsearch client
 ES_HOST = os.getenv("ES_HOST", "http://localhost:9200")
-ES_INDEX = os.getenv("ES_INDEX", "ontology_entities")
+ES_INDEX = os.getenv("ES_INDEX", "owl_class_index")
 es = AsyncElasticsearch(ES_HOST)
 
 

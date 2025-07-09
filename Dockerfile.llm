@@ -18,10 +18,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the query parser code
-COPY agents/query_parser.py /app/query_parser.py
+COPY agents/query_parser_v2.py /app/query_parser_v2.py
 
 # Expose the port the app runs on
-EXPOSE 8000
+EXPOSE 8001
 
 # Command to run the application
-CMD ["python", "/app/query_parser.py"]
+CMD ["python", "/app/query_parser_v2.py"]
