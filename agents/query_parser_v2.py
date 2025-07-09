@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.concurrency import run_in_threadpool
 import os
 import json
 import re
@@ -88,10 +89,10 @@ def detect_query_type(query: str):
         return "subeq"
 
 
-def call_llm(prompt: str):
+async def call_llm(prompt: str):
     context = "You are a helpful assistant that parses natural language queries about ontologies and returns JSON."
     agent = ChatAgent(context, model=model)
-    response = agent.step(prompt)
+    response = await run_in_threadpool(agent.step, prompt)
     interpretation = response.msgs[0].content
 
     try:
@@ -190,7 +191,7 @@ async def identify_entities(query: Query):
     
     # Get LLM analysis with enhanced prompt
     prompt = QUERY_TYPE_PROMPT.format(query=query.query)
-    llm_result = call_llm(prompt)
+    llm_result = await call_llm(prompt)
     
     # Override LLM's query type if pattern detection is more reliable
     if "error" not in llm_result:
