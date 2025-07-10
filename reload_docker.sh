@@ -86,7 +86,7 @@ chmod +x "$HOST_INDEXER_SCRIPT_PATH"
 
 # Run docker compose up
 # We use --build to force a rebuild and -d for detached mode.
-docker compose --env-file "$ENV_FILE" up --build -d
+docker compose --env-file "$ENV_FILE" up --build
 
 # --- Output Information ---
 echo "Services are starting/restarting."
