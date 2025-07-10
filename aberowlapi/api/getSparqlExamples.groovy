@@ -1,8 +1,15 @@
 import groovy.json.JsonOutput
 
-def result = [
-    exampleSuperclassLabel: requestManager.exampleSuperclassLabel,
-    exampleSubclassExpression: requestManager.exampleSubclassExpression
-]
+if(!application) {
+    application = request.getApplication(true);
+}
 
-println(JsonOutput.toJson(result))
+def manager = application.manager
+response.contentType = 'application/json'
+
+if(manager) {
+    def result = manager.getSparqlExamples()
+    print(JsonOutput.toJson(result))
+} else {
+    print('{"status": "error", "message": "Please provide an ontology!"}')
+}

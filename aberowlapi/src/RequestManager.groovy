@@ -500,6 +500,13 @@ public class RequestManager {
         }
     }
 	   
+    def getSparqlExamples() {
+        return [
+            exampleSuperclassLabel: this.exampleSuperclassLabel,
+            exampleSubclassExpression: this.exampleSubclassExpression
+        ]
+    }
+	   
 	   /**
 	    * Adds spaces to camel case text.
 	    * For example: "PizzaVegetarianaEquivalente2" becomes "Pizza Vegetariana Equivalente 2"
