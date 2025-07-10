@@ -42,7 +42,19 @@ HOST_INDEXER_SCRIPT_PATH="docker/scripts/run_indexer.sh" # Define path to host s
 
 NGINX_PORT=$2
 echo "Using custom nginx port: $NGINX_PORT"
-ABEROWL_PUBLIC_URL="http://localhost:${NGINX_PORT}"
+
+# --- Determine Host IP for Public URL ---
+# Use 'ip route' to find the default route and get the primary IP address.
+# This is more robust than 'hostname -I' which can return multiple IPs.
+HOST_IP=$(ip route get 1.1.1.1 | awk '{print $7}' | head -n 1)
+if [ -z "$HOST_IP" ]; then
+    echo "Warning: Could not determine host IP address. Falling back to localhost."
+    echo "Registration may fail if central server is in a different container or on another machine."
+    HOST_IP="localhost"
+fi
+echo "Host IP detected as: $HOST_IP"
+ABEROWL_PUBLIC_URL="http://${HOST_IP}:${NGINX_PORT}"
+echo "Public URL for registration set to: $ABEROWL_PUBLIC_URL"
 
 # Central server registration settings, read from environment
 ABEROWL_REGISTER=${ABEROWL_REGISTER:-"false"}
