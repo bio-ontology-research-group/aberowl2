@@ -61,6 +61,8 @@ Alpine.data('ontologyApp', () => ({
   detectedParams: null,
   isLoading: false,
   endpoint: '',
+  exampleSuperclassLabel: null,
+  exampleSubclassExpression: null,
     
   init() {
     this.endpoint = window.location.origin + '/virtuoso/';
@@ -68,6 +70,9 @@ Alpine.data('ontologyApp', () => ({
     // Fetch the ontology data
     this.fetchOntologyData();
         
+    // Fetch SPARQL examples
+    this.fetchSparqlExamples();
+
     window.addEventListener('hash:changed', () => {
       this.checkUrlHash();
     });
@@ -294,6 +299,16 @@ Alpine.data('ontologyApp', () => ({
           detail: { message: 'Failed to load ontology data: ' + error.message }
         }));
       });
+  },
+
+  fetchSparqlExamples() {
+    fetch('/api/api/getSparqlExamples.groovy')
+        .then(response => response.json())
+        .then(data => {
+            this.exampleSuperclassLabel = data.exampleSuperclassLabel;
+            this.exampleSubclassExpression = data.exampleSubclassExpression;
+        })
+        .catch(error => console.error('Error fetching SPARQL examples:', error));
   },
   
   // These methods are no longer needed as we're loading real data

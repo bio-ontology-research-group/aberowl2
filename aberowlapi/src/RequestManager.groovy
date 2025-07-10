@@ -83,6 +83,8 @@ public class RequestManager {
     ];
 
     NewShortFormProvider shortFormProvider;
+    def exampleSuperclassLabel = null;
+    def exampleSubclassExpression = null;
 
     public RequestManager(String ont, String ontIRI) {
 	this.ont = ont;
@@ -194,6 +196,8 @@ public class RequestManager {
 	    this.queryEngine = new QueryEngine(this.oReasoner, this.shortFormProvider)
 	    println "Successfully classified $ont"
 	}
+
+	findExampleClassesAndExpressions()
 
 	println "Classified $ont"
     }
@@ -458,6 +462,43 @@ public class RequestManager {
 	}
 	return ["result": result.sort {x, y -> x["label"].compareTo(y["label"])}];
 	   }
+	   
+    /**
+     * Find an example superclass label and subclass expression during ontology load time.
+     */
+    void findExampleClassesAndExpressions() {
+        def classes = this.ontology.getClassesInSignature(true)
+        OWLClass exampleSuperclass = null
+
+        // Find an example superclass (a named class)
+        for (def cls : classes) {
+            if (!cls.isOWLThing() && !cls.isOWLNothing()) {
+                exampleSuperclass = cls
+                break
+            }
+        }
+
+        if (exampleSuperclass != null) {
+            this.exampleSuperclassLabel = this.shortFormProvider.getShortForm(exampleSuperclass)
+        }
+
+        // Find an example subclass expression (a complex class)
+        def manSyntaxRenderer = new AberOWLSyntaxRendererImpl()
+	    manSyntaxRenderer.setShortFormProvider(this.shortFormProvider)
+        for (def cls : classes) {
+            def subClassAxioms = this.ontology.getSubClassAxiomsForSubClass(cls)
+            for (def axiom : subClassAxioms) {
+                def superClass = axiom.getSuperClass()
+                if (superClass.isAnonymous()) {
+                    this.exampleSubclassExpression = manSyntaxRenderer.render(superClass)
+                    break
+                }
+            }
+            if (this.exampleSubclassExpression != null) {
+                break
+            }
+        }
+    }
 	   
 	   /**
 	    * Adds spaces to camel case text.
