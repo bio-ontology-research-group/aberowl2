@@ -512,10 +512,15 @@ Alpine.data('ontologyApp', () => ({
         // First, let's fix the spacing issues in the HTML
         let fixed = htmlText;
 
-        // Add space between a closing tag or quote and a keyword
-        fixed = fixed.replace(/([>'])(some|only|value|min|max|exactly|that|inverse|self|and|or|not)\b/gi, '$1 $2');
-        // Add space between a keyword and an opening tag or quote
-        fixed = fixed.replace(/\b(some|only|value|min|max|exactly|that|inverse|self|and|or|not)([<'])/gi, '$1 $2');
+        // Add space between a closing tag (>) and a keyword.
+        fixed = fixed.replace(/>(some|only|value|min|max|exactly|that|inverse|self|and|or|not)\b/gi, '> $1');
+        // Add space between a closing quote (') and a keyword.
+        fixed = fixed.replace(/'(some|only|value|min|max|exactly|that|inverse|self|and|or|not)\b/gi, '\' $1');
+        
+        // Add space between a keyword and an opening tag (<).
+        fixed = fixed.replace(/\b(some|only|value|min|max|exactly|that|inverse|self|and|or|not)</gi, '$1 <');
+        // Add space between a keyword and an opening quote (').
+        fixed = fixed.replace(/\b(some|only|value|min|max|exactly|that|inverse|self|and|or|not)'/gi, '$1 \'');
         // Add space for keyword followed by parenthesis
         fixed = fixed.replace(/\b(and|or|not)\(/gi, '$1 (');
         // Add space for closing parenthesis followed by keyword
