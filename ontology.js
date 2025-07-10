@@ -399,223 +399,25 @@ Alpine.data('ontologyApp', () => ({
   },
 
 
-    getFormattedClass(owlClass) {
-        if (!owlClass || typeof owlClass !== 'string') {
-            return owlClass;
+    formatManchesterAxiom(html) {
+        if (!html || typeof html !== 'string') {
+            return html;
         }
-
-        const manchesterKeywords = new Set(['and', 'or', 'not', 'some', 'only', 'value', 'min', 'max', 'exactly', 'that', 'inverse', 'self']);
-
-        // Get all labels from classesMap and propsMap
-        const allLabels = new Map();
-        for (const classObj of this.classesMap.values()) {
-            if (classObj.label) {
-                allLabels.set(classObj.label.toLowerCase(), classObj.label);
-            }
-        }
-        for (const propObj of this.propsMap.values()) {
-            if (propObj.label) {
-                allLabels.set(propObj.label.toLowerCase(), propObj.label);
-            }
-        }
-
-        // Sort labels by length, descending, to match longer labels first
-        const sortedLabels = Array.from(allLabels.keys()).sort((a, b) => b.length - a.length);
-
-        let processedQuery = owlClass;
-
-        // First, ensure proper spacing around Manchester keywords and operators
-        processedQuery = processedQuery
-            // Add spaces around 'some', 'only', 'value', etc.
-            .replace(/(\w)'(some|only|value|min|max|exactly|that|inverse|self)'/g, "$1' $2 '")
-            .replace(/'(some|only|value|min|max|exactly|that|inverse|self)'(\w)/g, "' $1 '$2")
-            .replace(/'(some|only|value|min|max|exactly|that|inverse|self)'/g, " $1 ")
-            // Add spaces around 'and', 'or', 'not'
-            .replace(/(\w)'(and|or|not)'/g, "$1' $2 '")
-            .replace(/'(and|or|not)'(\w)/g, "' $1 '$2")
-            .replace(/'(and|or|not)'/g, " $1 ")
-            // Handle commas with proper spacing
-            .replace(/','(\w)/g, "', '$1")
-            .replace(/(\w)','(\w)/g, "$1', '$2")
-            .replace(/',''/g, "', '")
-            // Clean up multiple spaces
-            .replace(/\s+/g, ' ')
-            .trim();
-
-        for (const label of sortedLabels) {
-            if (manchesterKeywords.has(label)) {
-                continue;
-            }
-
-            // Case-insensitive replacement of whole words
-            const regex = new RegExp(`\\b${label.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'gi');
-            
-            const originalLabel = allLabels.get(label);
-            let replacement = originalLabel;
-            if (originalLabel.includes(' ')) {
-                replacement = `'${originalLabel}'`;
-            }
-            
-            processedQuery = processedQuery.replace(regex, replacement);
-        }
-
-        // Final cleanup: ensure proper spacing around quoted terms and keywords
-        processedQuery = processedQuery
-            // Ensure space before and after keywords
-            .replace(/(\w)(some|only|value|min|max|exactly|that|inverse|self|and|or|not)(\w)/g, "$1 $2 $3")
-            .replace(/'(\w+)'(some|only|value|min|max|exactly|that|inverse|self|and|or|not)/g, "'$1' $2")
-            .replace(/(some|only|value|min|max|exactly|that|inverse|self|and|or|not)'(\w+)'/g, "$1 '$2'")
-            // Clean up multiple spaces again
-            .replace(/\s+/g, ' ')
-            .trim();
-
-        return processedQuery;
-    },
-
-    // Format OWL axioms for display with proper highlighting and spacing
-    formatOwlAxiomForDisplay(axiomText) {
-        if (!axiomText || typeof axiomText !== 'string') {
-            return axiomText;
-        }
-
-        // Check if the axiom already contains HTML - if so, fix spacing in the HTML
-        if (axiomText.includes('<') && axiomText.includes('>')) {
-            return this.fixServerGeneratedAxiomHTML(axiomText);
-        }
-
-        // First apply the basic formatting
-        let formatted = this.getFormattedClass(axiomText);
-
-        // Add HTML highlighting for different components
-        // IMPORTANT: Do NOT highlight operators that are inside quoted strings
-        
-        // First, temporarily replace quoted strings with placeholders to protect them
-        const quotedStrings = [];
-        let placeholderIndex = 0;
-        formatted = formatted.replace(/'([^']+)'/g, (match, content) => {
-            quotedStrings.push(match);
-            return `__QUOTED_${placeholderIndex++}__`;
-        });
-        
-        // Now highlight operators ONLY outside of quoted strings
-        formatted = formatted
-            // Highlight quantifiers
-            .replace(/\b(some|only|value|min|max|exactly|that|inverse|self)\b/gi, 
-                     '<span class="owl-quantifier">$1</span>')
-            // Highlight logical operators - only when NOT inside quotes
-            .replace(/\b(and|or|not)\b/gi, 
-                     '<span class="owl-operator">$1</span>');
-        
-        // Restore quoted strings and determine if they should be highlighted
-        formatted = formatted.replace(/__QUOTED_(\d+)__/g, (match, index) => {
-            const quotedString = quotedStrings[parseInt(index)];
-            // Check if this quoted string is followed by a quantifier (making it a property)
-            const nextWordMatch = formatted.substring(formatted.indexOf(match) + match.length).match(/^\s*<span class="owl-quantifier">/);
-            if (nextWordMatch) {
-                return `<span class="owl-property">${quotedString}</span>`;
-            } else {
-                return `<span class="owl-class">${quotedString}</span>`;
-            }
-        });
-
-        return formatted;
-    },
-
-    // Fix spacing and add highlighting to server-generated HTML axioms
-    fixServerGeneratedAxiomHTML(htmlText) {
-        if (!htmlText || typeof htmlText !== 'string') {
-            return htmlText;
-        }
-
-        // Work directly with the HTML, preserving links
-        let fixed = htmlText;
-
-        // First, fix spacing issues while preserving HTML structure
-        // Add space after closing tags before keywords
-        fixed = fixed.replace(/(<\/[^>]+>)(some|only|value|min|max|exactly|that|inverse|self|and|or|not)\b/gi, '$1 $2');
-        // Add space after closing quote before keywords
-        fixed = fixed.replace(/'(some|only|value|min|max|exactly|that|inverse|self|and|or|not)\b/gi, '\' $1');
-        // Add space before opening tags after keywords
-        fixed = fixed.replace(/\b(some|only|value|min|max|exactly|that|inverse|self|and|or|not)(<[^>]+>)/gi, '$1 $2');
-        // Add space before opening quote after keywords
-        fixed = fixed.replace(/\b(some|only|value|min|max|exactly|that|inverse|self|and|or|not)'/gi, '$1 \'');
-        // Fix spacing around parentheses with keywords
-        fixed = fixed.replace(/\b(and|or|not)\(/gi, '$1 (');
-        fixed = fixed.replace(/\)(and|or|not)\b/gi, ') $1');
-        // Add space after comma
-        fixed = fixed.replace(/,([^\s<])/g, ', $1');
-        // Fix spacing between quoted terms and keywords (e.g., 'during'some -> 'during' some)
-        fixed = fixed.replace(/'(\w+)'(some|only|value|min|max|exactly|that|inverse|self|and|or|not)\b/gi, '\'$1\' $2');
-        // Fix spacing between keywords and quoted terms (e.g., some'term' -> some 'term')
-        fixed = fixed.replace(/\b(some|only|value|min|max|exactly|that|inverse|self|and|or|not)'(\w+)'/gi, '$1 \'$2\'');
-        // Also fix spacing when there's no quotes but direct concatenation
-        fixed = fixed.replace(/([a-zA-Z]+)'(some|only|value|min|max|exactly|that|inverse|self|and|or|not)\b/gi, '$1\' $2');
-        fixed = fixed.replace(/\b(some|only|value|min|max|exactly|that|inverse|self|and|or|not)([a-zA-Z]+)/gi, '$1 $2');
-        
-        // Now add highlighting while preserving existing HTML tags
-        // We need to be careful not to modify text inside HTML tags
-        
-        // Split the HTML into text nodes and HTML tags
-        const parts = [];
-        let lastIndex = 0;
-        const tagRegex = /<[^>]+>/g;
-        let match;
-        
-        while ((match = tagRegex.exec(fixed)) !== null) {
-            // Add text before the tag
-            if (match.index > lastIndex) {
-                parts.push({
-                    type: 'text',
-                    content: fixed.substring(lastIndex, match.index)
-                });
-            }
-            // Add the tag itself
-            parts.push({
-                type: 'tag',
-                content: match[0]
-            });
-            lastIndex = match.index + match[0].length;
-        }
-        
-        // Add any remaining text
-        if (lastIndex < fixed.length) {
-            parts.push({
-                type: 'text',
-                content: fixed.substring(lastIndex)
-            });
-        }
-        
-        // Apply highlighting only to text nodes
-        const highlightedParts = parts.map(part => {
-            if (part.type === 'tag') {
-                return part.content;
-            }
-            
-            // Apply highlighting to text content
-            let highlighted = part.content;
-            
-            // Highlight quantifiers (not in quotes)
-            highlighted = highlighted.replace(/\b(some|only|value|min|max|exactly|that|inverse|self)\b/gi, 
-                                           '<span class="owl-quantifier">$1</span>');
-            
-            // Highlight logical operators
-            highlighted = highlighted.replace(/\b(and|or|not)\b/gi, 
-                                           '<span class="owl-operator">$1</span>');
-            
-            // For quoted strings, we need to check if they're already inside a link
-            // This is a simple approach - just highlight quoted strings that aren't preceded by >
-            highlighted = highlighted.replace(/(?<!>)'([^']+)'/g, '<span class="owl-class">\'$1\'</span>');
-            
-            return highlighted;
-        });
-        
-        return highlightedParts.join('');
+        // The backend provides spans with id attributes. We just need to map them to CSS classes.
+        // The 'g' flag ensures all occurrences are replaced.
+        return html
+            .replace(/id='man-owlclass'/g, "class='owl-class'")
+            .replace(/id='man-property'/g, "class='owl-property'")
+            .replace(/id='man-keyword'/g, "class='owl-quantifier'")
+            .replace(/id='man-and'/g, "class='owl-operator'")
+            .replace(/id='man-or'/g, "class='owl-operator'")
+            .replace(/id='man-not'/g, "class='owl-operator'");
     },
     
   executeDLQuery(owlClass, queryType, labels = true) {
       this.isLoading = true;
 
-      formattedQuery = this.getFormattedClass(owlClass);
+      const formattedQuery = owlClass;
       // Check if the query is a class label and format it properly for the Manchester OWL Syntax parser
       
       console.log('Executing DL query for class:', formattedQuery, 'with type:', queryType, 'and labels:', labels);
@@ -876,9 +678,9 @@ Alpine.data('ontologyApp', () => ({
           // These fields contain HTML from the server, but we need to fix spacing and add highlighting
           if (value) {
             if (Array.isArray(value)) {
-              value = value.map(axiom => this.fixServerGeneratedAxiomHTML(axiom)).join(', ');
+              value = value.map(axiom => this.formatManchesterAxiom(axiom)).join(', ');
             } else {
-              value = this.fixServerGeneratedAxiomHTML(value.toString());
+              value = this.formatManchesterAxiom(value.toString());
             }
           }
           return [item, value || '', true]; // Add flag to indicate HTML content
@@ -961,8 +763,6 @@ Alpine.data('ontologyApp', () => ({
         if (labelForQuery.includes(' ')) {
             labelForQuery = `'${labelForQuery}'`;
         }
-        // Use the unified formatting function
-        labelForQuery = this.getFormattedClass(labelForQuery);
         
         const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
                       "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n" +
@@ -999,7 +799,6 @@ Alpine.data('ontologyApp', () => ({
             .trim();
         
         // Apply consistent formatting
-        cleanExpression = this.getFormattedClass(cleanExpression);
         
         const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
                       "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n" +
@@ -1078,7 +877,7 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
                 const labelValue = binding.label.value;
                 
                 // Use the unified formatting function for consistency
-                const formattedLabel = this.formatOwlAxiomForDisplay(labelValue);
+                const formattedLabel = this.formatManchesterAxiom(labelValue);
                 
                 // Create a clickable link for the class with formatted label
                 // Make sure to use the original classUri in the href, not any formatted version
@@ -1110,12 +909,9 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
             }
             
             // Check if this looks like Manchester syntax and format it
-            if (value.includes(' some ') || value.includes(' only ') || value.includes(' and ') || value.includes(' or ') || 
-                value.includes(' min ') || value.includes(' max ') || value.includes(' exactly ') || 
-                value.includes(' value ') || value.includes(' that ') || value.includes(' inverse ') || 
-                value.includes(' self ') || value.includes(' not ')) {
+            if (value.includes("id='man-")) {
                 // Apply formatting and highlighting
-                const formatted = this.formatOwlAxiomForDisplay(value);
+                const formatted = this.formatManchesterAxiom(value);
                 return {
                     label: formatted,
                     fullUri: value,
@@ -1744,7 +1540,7 @@ const sparqlUrl = `/api/api/runSparqlQuery.groovy?${params.toString()}`;
                 
                 const top_result = searchResults[0].owlClass;
                 console.log("Top result from Elasticsearch:", top_result);
-                const formattedQuery = encodeURIComponent(this.getFormattedClass(top_result));
+                const formattedQuery = encodeURIComponent(top_result);
 
 		all_params.query = searchResults[0].label[0];
 		this.detectedParams = JSON.stringify(all_params, null, 2);
