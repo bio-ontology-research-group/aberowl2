@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Redis client instance will be managed in the lifespan context
-redis_client: redis.Redis
+redis_client: redis.Redis = None
 
 async def fetch_and_update_server_metadata(server: Dict[str, Any]):
     """Fetches metadata for a single server and updates Redis."""
