@@ -26,7 +26,6 @@ import java.util.concurrent.*
 import java.util.concurrent.atomic.*
 import java.util.timer.*
 import java.io.File
-import java.io.StringWriter
 
 import groovy.json.*
 import groovy.io.*
@@ -487,18 +486,18 @@ public class RequestManager {
         // Find an example subclass expression (a complex class)
         def manSyntaxHTMLRenderer = new AberOWLSyntaxRendererImpl()
         manSyntaxHTMLRenderer.setShortFormProvider(this.shortFormProvider)
-
-        def writer = new StringWriter()
-        def manSyntaxTextRenderer = new org.semanticweb.owlapi.manchestersyntax.renderer.ManchesterOWLSyntaxObjectRenderer(writer, this.shortFormProvider)
-
         for (def cls : classes) {
             def subClassAxioms = this.ontology.getSubClassAxiomsForSubClass(cls)
             for (def axiom : subClassAxioms) {
                 def superClass = axiom.getSuperClass()
                 if (superClass.isAnonymous()) {
                     this.exampleSubclassExpression = manSyntaxHTMLRenderer.render(superClass)
-                    superClass.accept(manSyntaxTextRenderer)
-                    this.exampleSubclassExpressionText = writer.toString()
+                    // Derive a plain-text version from the HTML by adding spaces and stripping tags
+                    this.exampleSubclassExpressionText = this.exampleSubclassExpression
+                        .replaceAll("</span>", "</span> ")
+                        .replaceAll("<[^>]+>", "")
+                        .trim()
+                        .replaceAll("\\s+", " ")
                     break
                 }
             }
