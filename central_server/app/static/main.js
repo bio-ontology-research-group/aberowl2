@@ -133,4 +133,63 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchServers();
     // Refresh data every 15 seconds
     setInterval(fetchServers, 15000);
+
+    const dlQueryForm = document.getElementById('dlQueryForm');
+    const dlQueryInput = document.getElementById('dlQueryInput');
+    const dlQueryResultsContainer = document.getElementById('dlQueryResultsContainer');
+    const dlQueryResultsList = document.getElementById('dlQueryResultsList');
+
+    dlQueryForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const queryType = event.submitter.value;
+        const query = dlQueryInput.value.trim();
+
+        if (!query) {
+            alert('Please enter a DL query.');
+            return;
+        }
+
+        dlQueryResultsList.innerHTML = '<li class="list-group-item">Loading...</li>';
+        dlQueryResultsContainer.style.display = 'block';
+
+        try {
+            const params = new URLSearchParams({ query, type: queryType });
+            const response = await fetch(`/api/dlquery_all?${params}`);
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+            }
+            const data = await response.json();
+            renderDlQueryResults(data.result);
+        } catch (error) {
+            console.error('Error executing DL query:', error);
+            dlQueryResultsList.innerHTML = `<li class="list-group-item list-group-item-danger">Error: ${error.message}</li>`;
+        }
+    });
+
+    function renderDlQueryResults(results) {
+        dlQueryResultsList.innerHTML = '';
+        if (!results || results.length === 0) {
+            dlQueryResultsList.innerHTML = '<li class="list-group-item">No results found.</li>';
+            return;
+        }
+
+        results.forEach(item => {
+            const li = document.createElement('li');
+            li.className = 'list-group-item';
+            // The result from groovy script has 'label', 'owlClass', and now 'ontology'
+            const label = item.label || item.owlClass;
+            const ontology = item.ontology || 'Unknown';
+            // Link to the individual server's browse page
+            const server = serversData.find(s => s.ontology === ontology);
+            let link = label;
+            if (server && item.owlClass) {
+                const browseUrl = `${server.url}#/Browse/${encodeURIComponent(item.owlClass)}`;
+                link = `<a href="${browseUrl}" target="_blank">${label}</a>`;
+            }
+            
+            li.innerHTML = `${link} <span class="label label-info pull-right">${ontology}</span>`;
+            dlQueryResultsList.appendChild(li);
+        });
+    }
 });
