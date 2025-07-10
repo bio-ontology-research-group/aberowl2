@@ -3,6 +3,9 @@ import os
 import signal
 import logging
 import time
+import urllib.request
+import urllib.error
+
 import gevent # Make sure gevent is used for non-blocking IO
 from gevent.subprocess import Popen, PIPE
 
@@ -23,6 +26,8 @@ class OntologyServerManager:
         signal.signal(signal.SIGQUIT, self.stop_subprocesses)
 
         self.ontology = ontology
+        self.register = os.getenv('ABEROWL_REGISTER', 'false').lower() in ('true', '1', 't')
+        self.central_server_url = os.getenv('ABEROWL_CENTRAL_URL')
         # Check path existence *inside* the run method, after Popen is setup,
         # as the path is relative to the CWD of the Popen call.
         # However, the path passed to __init__ is absolute within the container /data/...
@@ -58,6 +63,41 @@ class OntologyServerManager:
         logging.info("Ontology server manager stopped.")
         # Use os._exit for immediate exit within signal handler if needed
         os._exit(0) # Use os._exit in signal handler to avoid potential issues with exit()
+
+    def _register_with_central_server(self):
+        if not self.register:
+            return
+
+        if not self.central_server_url:
+            logging.error("Registration is enabled, but ABEROWL_CENTRAL_URL is not set.")
+            return
+
+        public_url = os.getenv('ABEROWL_PUBLIC_URL')
+        if not public_url:
+            logging.error("Registration is enabled, but ABEROWL_PUBLIC_URL is not set.")
+            return
+
+        payload = {
+            'ontology': os.path.basename(self.ontology),
+            'url': public_url,
+        }
+        
+        registration_url = f"{self.central_server_url.rstrip('/')}/register"
+
+        try:
+            data = json.dumps(payload).encode('utf-8')
+            headers = {'Content-Type': 'application/json'}
+            req = urllib.request.Request(registration_url, data=data, headers=headers)
+            
+            with urllib.request.urlopen(req, timeout=10) as response:
+                if 200 <= response.status < 300:
+                    logging.info(f"Successfully registered with central server at {registration_url}")
+                else:
+                    logging.error(f"Failed to register with central server. Status: {response.status}, Body: {response.read().decode()}")
+        except urllib.error.URLError as e:
+            logging.error(f"Error registering with central server at {registration_url}: {e}")
+        except Exception as e:
+            logging.error(f"An unexpected error occurred during registration: {e}", exc_info=True)
 
     def run(self):
         """Starts the API server for a single ontology."""
@@ -137,6 +177,7 @@ class OntologyServerManager:
                              logging.info(f"Detected loading finished message: {line}")
                         elif 'Server started successfully' in line:
                              logging.info("Detected Jetty server started message.")
+                             self._register_with_central_server()
                         elif 'Initial RequestManager creation successful' in line:
                               logging.info("Detected RequestManager created message.")
 
