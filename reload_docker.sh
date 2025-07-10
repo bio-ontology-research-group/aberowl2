@@ -46,19 +46,18 @@ ABEROWL_PUBLIC_URL="http://localhost:${NGINX_PORT}"
 
 # Central server registration settings, read from environment
 ABEROWL_REGISTER=${ABEROWL_REGISTER:-"false"}
-ABEROWL_CENTRAL_URL=${ABEROWL_CENTRAL_URL:-""} # User-provided URL for host access
-ABEROWL_CENTRAL_URL_FOR_CONTAINER=""
+# ABEROWL_CENTRAL_URL is inherited from the shell environment and may be overridden below for container networking.
 
 # Create a shared network for inter-container communication
 echo "Ensuring 'aberowl-net' Docker network exists..."
 docker network create aberowl-net || true
 
 if [[ "$ABEROWL_REGISTER" == "true" ]]; then
-    echo "Registration is enabled. Configuring container to use Docker network for communication."
-    # The ontology-api container will use the service name 'central-server' to connect.
+    echo "Registration is enabled. Overriding ABEROWL_CENTRAL_URL for container-to-container communication."
+    # The ontology-api container will use the service name 'central-server' to connect over the shared Docker network.
     # The port is 80, which is the internal port of the central-server container.
-    ABEROWL_CENTRAL_URL_FOR_CONTAINER="http://central-server:80"
-    echo "Registration URL inside container set to: $ABEROWL_CENTRAL_URL_FOR_CONTAINER"
+    export ABEROWL_CENTRAL_URL="http://central-server:80"
+    echo "Registration URL for container set to: $ABEROWL_CENTRAL_URL"
 fi
 
 # Create a unique project name based on the port number
@@ -103,7 +102,7 @@ CLASS_INDEX_NAME=${CLASS_INDEX_NAME}
 SKIP_EMBEDDING=${SKIP_EMBEDDING}
 ABEROWL_PUBLIC_URL=${ABEROWL_PUBLIC_URL}
 ABEROWL_REGISTER=${ABEROWL_REGISTER}
-ABEROWL_CENTRAL_URL=${ABEROWL_CENTRAL_URL_FOR_CONTAINER}
+ABEROWL_CENTRAL_URL=${ABEROWL_CENTRAL_URL}
 EOL
 
 # --- Stop and Clean Up ---
