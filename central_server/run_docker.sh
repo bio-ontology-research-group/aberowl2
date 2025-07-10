@@ -7,7 +7,7 @@ echo "Starting AberOWL Central Server..."
 # export CENTRAL_SERVER_PORT=8001
 # Defaults to 8000 if not set.
 
-docker compose up --build -d
+docker compose up --build
 
 PORT=${CENTRAL_SERVER_PORT:-8000}
 
