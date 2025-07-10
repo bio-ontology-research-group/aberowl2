@@ -526,6 +526,10 @@ Alpine.data('ontologyApp', () => ({
         fixed = fixed.replace(/\)(and|or|not)\b/gi, ') $1');
         // Add space after comma
         fixed = fixed.replace(/,([^\s<])/g, ', $1');
+        // Fix spacing between quoted terms and keywords (e.g., 'during'some -> 'during' some)
+        fixed = fixed.replace(/'(\w+)'(some|only|value|min|max|exactly|that|inverse|self|and|or|not)\b/gi, '\'$1\' $2');
+        // Fix spacing between keywords and quoted terms (e.g., some'term' -> some 'term')
+        fixed = fixed.replace(/\b(some|only|value|min|max|exactly|that|inverse|self|and|or|not)'(\w+)'/gi, '$1 \'$2\'');
         
         // Now add highlighting while preserving existing HTML tags
         // We need to be careful not to modify text inside HTML tags
@@ -1043,9 +1047,9 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
                 // Format the label with proper spacing for Manchester syntax
                 const formattedLabel = this.formatSparqlResultLabel(labelValue);
                 
-                // Create a clickable link for the class
+                // Create a clickable link for the class with formatted label
                 return {
-                    label: `<a href="#/Browse/${encodeURIComponent(classUri)}">${classUri}</a> (${formattedLabel})`,
+                    label: `<a href="#/Browse/${encodeURIComponent(classUri)}">${classUri}</a> (${this.fixServerGeneratedAxiomHTML(formattedLabel)})`,
                     fullUri: classUri,
                     isHtml: true
                 };
@@ -1063,6 +1067,20 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
             if (value.startsWith('http://') || value.startsWith('https://')) {
                 return {
                     label: `<a href="#/Browse/${encodeURIComponent(value)}">${value}</a>`,
+                    fullUri: value,
+                    isHtml: true
+                };
+            }
+            
+            // Check if this looks like Manchester syntax and format it
+            if (value.includes(' some ') || value.includes(' only ') || value.includes(' and ') || value.includes(' or ') || 
+                value.includes(' min ') || value.includes(' max ') || value.includes(' exactly ') || 
+                value.includes(' value ') || value.includes(' that ') || value.includes(' inverse ') || 
+                value.includes(' self ') || value.includes(' not ')) {
+                // Apply formatting and highlighting
+                const formatted = this.formatOwlAxiomForDisplay(value);
+                return {
+                    label: formatted,
                     fullUri: value,
                     isHtml: true
                 };
