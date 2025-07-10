@@ -4,10 +4,30 @@ set -e
 # Script to reload the Virtuoso docker container with a new ontology
 # and trigger Elasticsearch indexing.
 
+# Argument parsing
+BUILD_FLAG=""
+DETACH_FLAG=""
+while [[ "$1" == -* ]]; do
+    case "$1" in
+        --build)
+            BUILD_FLAG="--build"
+            shift
+            ;;
+        -d|--detach)
+            DETACH_FLAG="-d"
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+    esac
+done
+
 # Check if ontology file is provided
 if [ $# -lt 2 ]; then
-    echo "Usage: $0 <path_to_ontology_file> <nginx_port>"
-    echo "Example: $0 data/pizza.owl 8080"
+    echo "Usage: $0 [--build] [-d|--detach] <path_to_ontology_file> <nginx_port>"
+    echo "Example: $0 --build -d data/pizza.owl 8080"
     echo "Set ABEROWL_REGISTER=true and ABEROWL_CENTRAL_URL to enable registration with a central server."
     exit 1
 fi
@@ -86,7 +106,7 @@ chmod +x "$HOST_INDEXER_SCRIPT_PATH"
 
 # Run docker compose up
 # We use --build to force a rebuild and -d for detached mode.
-docker compose --env-file "$ENV_FILE" up --build
+docker compose --env-file "$ENV_FILE" up ${BUILD_FLAG} ${DETACH_FLAG}
 
 # --- Output Information ---
 echo "Services are starting/restarting."
