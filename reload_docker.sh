@@ -8,6 +8,7 @@ set -e
 if [ $# -lt 2 ]; then
     echo "Usage: $0 <path_to_ontology_file> <nginx_port>"
     echo "Example: $0 data/pizza.owl 8080"
+    echo "Set ABEROWL_REGISTER=true and ABEROWL_CENTRAL_URL to enable registration with a central server."
     exit 1
 fi
 
@@ -21,6 +22,10 @@ HOST_INDEXER_SCRIPT_PATH="docker/scripts/run_indexer.sh" # Define path to host s
 
 NGINX_PORT=$2
 echo "Using custom nginx port: $NGINX_PORT"
+
+# Central server registration settings, read from environment
+ABEROWL_REGISTER=${ABEROWL_REGISTER:-"false"}
+ABEROWL_CENTRAL_URL=${ABEROWL_CENTRAL_URL:-""}
 
 # Create a unique project name based on the port number
 PROJECT_NAME="aberowl_${NGINX_PORT}"
@@ -62,6 +67,8 @@ ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
 ONTOLOGY_INDEX_NAME=${ONTOLOGY_INDEX_NAME}
 CLASS_INDEX_NAME=${CLASS_INDEX_NAME}
 SKIP_EMBEDDING=${SKIP_EMBEDDING}
+ABEROWL_REGISTER=${ABEROWL_REGISTER}
+ABEROWL_CENTRAL_URL=${ABEROWL_CENTRAL_URL}
 EOL
 
 # --- Stop and Clean Up ---
