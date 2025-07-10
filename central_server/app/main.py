@@ -46,28 +46,31 @@ async def fetch_and_update_server_metadata(server: Dict[str, Any]):
     await redis_client.hset("registered_servers", ontology, json.dumps(server))
 
 
-async def fetch_all_metadata_task(initial_run=False):
-    """Periodically fetches metadata for all registered servers."""
-    if initial_run:
-        logger.info("Performing initial metadata fetch for all registered servers on startup.")
-    else:
-        # This part runs in a loop
-        while True:
-            await asyncio.sleep(60)  # Fetch every 60 seconds
-            logger.info("Starting periodic metadata fetch for all registered servers.")
-            
-            server_keys = await redis_client.hkeys("registered_servers")
-            if not server_keys:
-                continue
+async def _fetch_and_update_all_servers():
+    """Helper to fetch metadata for all servers in Redis."""
+    logger.info("Starting metadata fetch for all registered servers.")
+    server_keys = await redis_client.hkeys("registered_servers")
+    if not server_keys:
+        logger.info("No registered servers to fetch metadata for.")
+        return
 
-            tasks = []
-            for key in server_keys:
-                server_json = await redis_client.hget("registered_servers", key)
-                if server_json:
-                    server = json.loads(server_json)
-                    tasks.append(fetch_and_update_server_metadata(server))
-            
-            await asyncio.gather(*tasks)
+    tasks = []
+    for key in server_keys:
+        server_json = await redis_client.hget("registered_servers", key)
+        if server_json:
+            server = json.loads(server_json)
+            tasks.append(fetch_and_update_server_metadata(server))
+    
+    if tasks:
+        await asyncio.gather(*tasks)
+    logger.info("Finished metadata fetch for all registered servers.")
+
+
+async def periodic_metadata_fetch_task():
+    """Periodically fetches metadata for all registered servers."""
+    while True:
+        await asyncio.sleep(60)
+        await _fetch_and_update_all_servers()
 
 
 @asynccontextmanager
@@ -79,9 +82,9 @@ async def lifespan(app: FastAPI):
     logger.info("Successfully connected to Redis.")
     
     # Perform initial metadata fetch on startup
-    asyncio.create_task(fetch_all_metadata_task(initial_run=True))
+    asyncio.create_task(_fetch_and_update_all_servers())
     # Start the periodic background task
-    asyncio.create_task(fetch_all_metadata_task())
+    asyncio.create_task(periodic_metadata_fetch_task())
     
     yield
     
