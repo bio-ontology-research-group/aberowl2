@@ -307,7 +307,7 @@ Alpine.data('ontologyApp', () => ({
         .then(response => response.json())
         .then(data => {
             this.exampleSuperclassLabel = data.exampleSuperclassLabel;
-            this.exampleSubclassExpression = data.exampleSubclassExpression;
+            this.exampleSubclassExpression = this.formatManchesterAxiom(data.exampleSubclassExpression);
             this.exampleSubclassExpressionText = data.exampleSubclassExpressionText;
         })
         .catch(error => console.error('Error fetching SPARQL examples:', error));
