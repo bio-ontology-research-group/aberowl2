@@ -214,7 +214,11 @@ public class NewShortFormProvider implements BidirectionalShortFormProvider {
                 }
             }
             if(checker.getMatch() != null) {
-                return getRendering(checker.getMatch());
+                def rendering = getRendering(checker.getMatch())
+                if (rendering.contains(" "))
+                    return "'" + rendering + "'"
+                else
+                    return rendering
             }
         }
         return alternateShortFormProvider.getShortForm(entity);
@@ -222,15 +226,35 @@ public class NewShortFormProvider implements BidirectionalShortFormProvider {
 
     @Override
     public Set<OWLEntity> getEntities(String shortForm) {
-        return Collections.emptySet();
+        Set<OWLEntity> result = new HashSet<OWLEntity>();
+        if(getEntity(shortForm) != null) {
+            result.add(getEntity(shortForm));
+        }
+        return result;
     }
 
     @Override
     public Set<String> getShortForms() {
-        return Collections.emptySet();
+        Set<String> shortForms = new HashSet<String>();
+        for (OWLOntology o : ontologySetProvider.getOntologies()) {
+            for (OWLEntity e : o.getSignature()) {
+                shortForms.add(getShortForm(e));
+            }
+        }
+        return shortForms;
     }
 
     public OWLEntity getEntity(String shortForm) {
+        if(shortForm.startsWith("'") && shortForm.endsWith("'")) {
+            shortForm = shortForm.substring(1, shortForm.length() - 1);
+        }
+        for (OWLOntology o : ontologySetProvider.getOntologies()) {
+            for (OWLEntity e : o.getSignature()) {
+                if (getShortForm(e).replace("'", "") == shortForm) {
+                    return e;
+                }
+            }
+        }
         return null;
     }
 
