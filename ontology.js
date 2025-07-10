@@ -780,10 +780,13 @@ Alpine.data('ontologyApp', () => ({
             labelForQuery = `'${labelForQuery}'`;
         }
         const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
+                      "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n" +
                       "PREFIX owl: <http://www.w3.org/2002/07/owl#> \n" +
-                      "SELECT DISTINCT ?class \n" +
+                      "SELECT DISTINCT ?class ?label \n" +
                       "WHERE { \n" +
-                      `VALUES ?class {OWL superclass { ${labelForQuery} } } . } \n` +
+                      `VALUES ?class {OWL superclass { ${labelForQuery} } } . \n` +
+                      "OPTIONAL { ?class rdfs:label ?label } \n" +
+                      "} \n" +
                       "ORDER BY ?class \n";
         this.query = query;
     },
@@ -802,10 +805,13 @@ Alpine.data('ontologyApp', () => ({
             .trim();
         
         const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
+                      "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n" +
                       "PREFIX owl: <http://www.w3.org/2002/07/owl#> \n" +
-                      "SELECT DISTINCT ?class \n" +
+                      "SELECT DISTINCT ?class ?label \n" +
                       "WHERE { \n" +
-                      `VALUES ?class {OWL subclass { ${cleanExpression} } } . } \n` +
+                      `VALUES ?class {OWL subclass { ${cleanExpression} } } . \n` +
+                      "OPTIONAL { ?class rdfs:label ?label } \n" +
+                      "} \n" +
                       "ORDER BY ?class \n";
         this.query = query;
     },
@@ -865,6 +871,16 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
         }
         
         return results.results.bindings.map(binding => {
+            // Check if we have both class and label variables
+            if (binding.class && binding.label) {
+                const classUri = binding.class.value;
+                const labelValue = binding.label.value;
+                return {
+                    label: `${classUri} (${labelValue})`,
+                    fullUri: classUri
+                };
+            }
+            
             // Get the first variable in the binding
             const firstVarName = Object.keys(binding)[0];
             if (!firstVarName) {
@@ -872,13 +888,8 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
             }
             
             const value = binding[firstVarName].value;
-            // If it's a URI, extract the last part after # or /
+            // Show the full IRI instead of extracting the last part
             let displayValue = value;
-            if (binding[firstVarName].type === 'uri') {
-                displayValue = value.includes('#')
-                    ? value.split('#').pop()
-                    : value.split('/').pop();
-            }
             
             return {
                 label: displayValue,
