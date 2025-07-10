@@ -478,10 +478,9 @@ Alpine.data('ontologyApp', () => ({
             return axiomText;
         }
 
-        // Check if the axiom already contains HTML - if so, return it as-is
+        // Check if the axiom already contains HTML - if so, fix spacing in the HTML
         if (axiomText.includes('<') && axiomText.includes('>')) {
-            // It seems the axiom already has HTML formatting, don't process it
-            return axiomText;
+            return this.fixServerGeneratedAxiomHTML(axiomText);
         }
 
         // First apply the basic formatting
@@ -505,6 +504,61 @@ Alpine.data('ontologyApp', () => ({
                      '<span class="owl-property">\'$1\'</span>');
 
         return formatted;
+    },
+
+    // Fix spacing and add highlighting to server-generated HTML axioms
+    fixServerGeneratedAxiomHTML(htmlText) {
+        if (!htmlText || typeof htmlText !== 'string') {
+            return htmlText;
+        }
+
+        // First, let's fix the spacing issues in the HTML
+        let fixed = htmlText;
+
+        // Fix patterns like 'part of'some'M phase' by adding spaces
+        fixed = fixed.replace(/('[\w\s]+')(some|only|value|min|max|exactly|that|inverse|self)('[\w\s]+')/g, '$1 $2 $3');
+        
+        // Fix patterns where quotes are directly adjacent without spaces
+        fixed = fixed.replace(/'(\w+)'(\w+)'/g, '\'$1\' $2 \'');
+        fixed = fixed.replace(/'([^']+)'([a-z]+)'/g, '\'$1\' $2 \'');
+        fixed = fixed.replace(/'([a-z]+)'([^']+)'/g, '\' $1 \'$2\'');
+        
+        // Fix comma spacing
+        fixed = fixed.replace(/,(\w)/g, ', $1');
+        fixed = fixed.replace(/(\w),(\w)/g, '$1, $2');
+
+        // Now add highlighting to the fixed HTML
+        // We need to be careful not to break existing HTML tags
+        
+        // Temporarily replace existing HTML tags to protect them
+        const tagPlaceholders = [];
+        let tagIndex = 0;
+        fixed = fixed.replace(/<[^>]+>/g, (match) => {
+            const placeholder = `__TAG_${tagIndex}__`;
+            tagPlaceholders[tagIndex] = match;
+            tagIndex++;
+            return placeholder;
+        });
+
+        // Now apply highlighting to the text content
+        // Highlight object properties (in quotes)
+        fixed = fixed.replace(/'([^']*(?:part of|has part|located in|contains|participates in|regulates|enables|involved in)[^']*)'/gi, 
+                             '<span class="owl-property">\'$1\'</span>');
+        
+        // Highlight quantifiers (not in quotes)
+        fixed = fixed.replace(/\b(some|only|value|min|max|exactly|that|inverse|self)\b/gi, 
+                             '<span class="owl-quantifier">$1</span>');
+        
+        // Highlight logical operators
+        fixed = fixed.replace(/\b(and|or|not)\b/gi, 
+                             '<span class="owl-operator">$1</span>');
+
+        // Restore the original HTML tags
+        tagPlaceholders.forEach((tag, index) => {
+            fixed = fixed.replace(`__TAG_${index}__`, tag);
+        });
+
+        return fixed;
     },
     
   executeDLQuery(owlClass, queryType, labels = true) {
@@ -704,9 +758,13 @@ Alpine.data('ontologyApp', () => ({
       let value = obj[item];
       
       if (htmlFields.has(item)) {
-        // These fields already contain HTML from the server, don't format them
-        if (value && Array.isArray(value)) {
-          value = value.join(', ');
+        // These fields contain HTML from the server, but we need to fix spacing and add highlighting
+        if (value) {
+          if (Array.isArray(value)) {
+            value = value.map(axiom => this.fixServerGeneratedAxiomHTML(axiom)).join(', ');
+          } else {
+            value = this.fixServerGeneratedAxiomHTML(value.toString());
+          }
         }
         return [item, value || '', true]; // Add flag to indicate HTML content
       }
@@ -764,9 +822,13 @@ Alpine.data('ontologyApp', () => ({
         let value = obj[item];
         
         if (htmlFields.has(item)) {
-          // These fields already contain HTML from the server, don't format them
-          if (value && Array.isArray(value)) {
-            value = value.join(', ');
+          // These fields contain HTML from the server, but we need to fix spacing and add highlighting
+          if (value) {
+            if (Array.isArray(value)) {
+              value = value.map(axiom => this.fixServerGeneratedAxiomHTML(axiom)).join(', ');
+            } else {
+              value = this.fixServerGeneratedAxiomHTML(value.toString());
+            }
           }
           return [item, value || '', true]; // Add flag to indicate HTML content
         }
