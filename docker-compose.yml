@@ -35,11 +35,12 @@ services:
       - ./aberowlapi:/app/aberowlapi
     # Command uses the ONTOLOGY_FILE env var which should be the path inside the container
     command: python3 /app/api_server.py ${ONTOLOGY_FILE}
+    networks:
+      - default
+      - aberowl-net
     depends_on:
       - virtuoso
     restart: unless-stopped
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
 
   elasticsearch:
     image: elasticsearch:7.17.10 # Use a 7.x version compatible with the groovy script client
@@ -119,4 +120,9 @@ volumes:
   virtuoso_data:
   virtuoso_logs:
   elasticsearch_data:
+
+networks:
+  default:
+  aberowl-net:
+    external: true
 

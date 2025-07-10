@@ -10,3 +10,9 @@ services:
       - ./app:/code/app
     restart: always
     container_name: aberowl-central-server
+    networks:
+      - aberowl-net
+
+networks:
+  aberowl-net:
+    external: true
