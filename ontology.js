@@ -530,6 +530,9 @@ Alpine.data('ontologyApp', () => ({
         fixed = fixed.replace(/'(\w+)'(some|only|value|min|max|exactly|that|inverse|self|and|or|not)\b/gi, '\'$1\' $2');
         // Fix spacing between keywords and quoted terms (e.g., some'term' -> some 'term')
         fixed = fixed.replace(/\b(some|only|value|min|max|exactly|that|inverse|self|and|or|not)'(\w+)'/gi, '$1 \'$2\'');
+        // Also fix spacing when there's no quotes but direct concatenation
+        fixed = fixed.replace(/([a-zA-Z]+)'(some|only|value|min|max|exactly|that|inverse|self|and|or|not)\b/gi, '$1\' $2');
+        fixed = fixed.replace(/\b(some|only|value|min|max|exactly|that|inverse|self|and|or|not)([a-zA-Z]+)/gi, '$1 $2');
         
         // Now add highlighting while preserving existing HTML tags
         // We need to be careful not to modify text inside HTML tags
@@ -1048,9 +1051,11 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
                 const formattedLabel = this.formatSparqlResultLabel(labelValue);
                 
                 // Create a clickable link for the class with formatted label
+                // Make sure to use the original classUri in the href, not any formatted version
+                const cleanUri = classUri.replace(/<[^>]*>/g, ''); // Remove any HTML tags from the URI
                 return {
-                    label: `<a href="#/Browse/${encodeURIComponent(classUri)}">${classUri}</a> (${this.fixServerGeneratedAxiomHTML(formattedLabel)})`,
-                    fullUri: classUri,
+                    label: `<a href="#/Browse/${encodeURIComponent(cleanUri)}">${classUri}</a> (${this.fixServerGeneratedAxiomHTML(formattedLabel)})`,
+                    fullUri: cleanUri,
                     isHtml: true
                 };
             }
@@ -1065,9 +1070,11 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
             
             // Check if this looks like a class URI
             if (value.startsWith('http://') || value.startsWith('https://')) {
+                // Make sure to use the original value in the href, not any formatted version
+                const cleanValue = value.replace(/<[^>]*>/g, ''); // Remove any HTML tags
                 return {
-                    label: `<a href="#/Browse/${encodeURIComponent(value)}">${value}</a>`,
-                    fullUri: value,
+                    label: `<a href="#/Browse/${encodeURIComponent(cleanValue)}">${value}</a>`,
+                    fullUri: cleanValue,
                     isHtml: true
                 };
             }
@@ -1366,7 +1373,9 @@ const sparqlUrl = `/api/api/runSparqlQuery.groovy?${params.toString()}`;
   handleNodeClick(event, owlClass) {
     if (event) event.preventDefault();
     
-    const obj = this.classesMap.get(owlClass);
+    // Clean the owlClass in case it has any HTML formatting
+    const cleanOwlClass = owlClass.replace(/<[^>]*>/g, '');
+    const obj = this.classesMap.get(cleanOwlClass);
     if (!obj) {
       // If the class is not in the map, fetch it from the backend
       // this.isLoading = true;
@@ -1398,8 +1407,8 @@ const sparqlUrl = `/api/api/runSparqlQuery.groovy?${params.toString()}`;
       return;
     }
     
-    // Update URL hash
-    window.location.hash = `/Browse/${encodeURIComponent(owlClass)}`;
+    // Update URL hash - use the clean owlClass without HTML
+    window.location.hash = `/Browse/${encodeURIComponent(cleanOwlClass)}`;
     
     // Set selected class
     this.selectedClass = obj;
@@ -1418,11 +1427,11 @@ const sparqlUrl = `/api/api/runSparqlQuery.groovy?${params.toString()}`;
     
     // If we need to load children from the backend
     if (!obj.collapsed && (!obj.children || obj.children.length === 0)) {
-      this.loadChildrenForClass(owlClass);
+      this.loadChildrenForClass(cleanOwlClass);
     }
     
     // Execute a DL query to get subclasses when a node is selected
-    this.executeBrowseDLQuery(owlClass);
+    this.executeBrowseDLQuery(cleanOwlClass);
     
     // Set DL query expression based on class label
     if (this.selectedClass) {
