@@ -11,7 +11,7 @@ echo "Starting AberOWL Central Server..."
 echo "Ensuring 'aberowl-net' Docker network exists..."
 docker network create aberowl-net || true
 
-docker compose up --build -d
+docker compose up 
 
 PORT=${CENTRAL_SERVER_PORT:-8000}
 
