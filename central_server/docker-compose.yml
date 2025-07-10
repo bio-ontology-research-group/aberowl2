@@ -10,8 +10,22 @@ services:
       - ./app:/code/app
     restart: always
     container_name: aberowl-central-server
+    depends_on:
+      - redis
     networks:
       - aberowl-net
+
+  redis:
+    image: "redis:alpine"
+    container_name: aberowl-central-redis
+    volumes:
+      - redis_data:/data
+    restart: always
+    networks:
+      - aberowl-net
+
+volumes:
+  redis_data:
 
 networks:
   aberowl-net:

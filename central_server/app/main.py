@@ -1,9 +1,11 @@
 import asyncio
+import json
 import logging
 from contextlib import asynccontextmanager
 from typing import Dict, Any
 
 import aiohttp
+import redis.asyncio as redis
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -13,52 +15,79 @@ from pydantic import BaseModel, HttpUrl
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# In-memory storage for registered servers
-# The key is the ontology name, value is a dict with its data
-registered_servers: Dict[str, Dict[str, Any]] = {}
-servers_lock = asyncio.Lock()
+# Redis client instance will be managed in the lifespan context
+redis_client: redis.Redis
 
-async def fetch_metadata_task():
+async def fetch_and_update_server_metadata(server: Dict[str, Any]):
+    """Fetches metadata for a single server and updates Redis."""
+    url = server.get("url")
+    ontology = server.get("ontology")
+    if not url or not ontology:
+        return
+
+    stats_url = f"{str(url).rstrip('/')}/api/api/getStatistics.groovy"
+    logger.info(f"Fetching metadata for {ontology} from {stats_url}")
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(stats_url, timeout=10) as response:
+                if response.status == 200:
+                    stats = await response.json()
+                    server.update(stats)
+                    server["status"] = "online"
+                    logger.info(f"Successfully updated metadata for {ontology}")
+                else:
+                    logger.warning(f"Failed to fetch metadata for {ontology}. Status: {response.status}")
+                    server["status"] = "offline"
+    except Exception as e:
+        logger.error(f"Error fetching metadata for {ontology}: {e}")
+        server["status"] = "offline"
+    
+    # Update the server data in Redis
+    await redis_client.hset("registered_servers", ontology, json.dumps(server))
+
+
+async def fetch_all_metadata_task(initial_run=False):
     """Periodically fetches metadata for all registered servers."""
-    while True:
-        await asyncio.sleep(60)  # Fetch every 60 seconds
-        async with servers_lock:
-            servers_to_check = list(registered_servers.values())
-
-        for server in servers_to_check:
-            url = server.get("url")
-            ontology = server.get("ontology")
-            if not url or not ontology:
+    if initial_run:
+        logger.info("Performing initial metadata fetch for all registered servers on startup.")
+    else:
+        # This part runs in a loop
+        while True:
+            await asyncio.sleep(60)  # Fetch every 60 seconds
+            logger.info("Starting periodic metadata fetch for all registered servers.")
+            
+            server_keys = await redis_client.hkeys("registered_servers")
+            if not server_keys:
                 continue
 
-            stats_url = f"{str(url).rstrip('/')}/api/api/getStatistics.groovy"
-            logger.info(f"Fetching metadata for {ontology} from {stats_url}")
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(stats_url, timeout=10) as response:
-                        if response.status == 200:
-                            stats = await response.json()
-                            async with servers_lock:
-                                registered_servers[ontology].update(stats)
-                                registered_servers[ontology]["status"] = "online"
-                            logger.info(f"Successfully updated metadata for {ontology}")
-                        else:
-                            logger.warning(f"Failed to fetch metadata for {ontology}. Status: {response.status}")
-                            async with servers_lock:
-                                registered_servers[ontology]["status"] = "offline"
-            except Exception as e:
-                logger.error(f"Error fetching metadata for {ontology}: {e}")
-                async with servers_lock:
-                    if ontology in registered_servers:
-                        registered_servers[ontology]["status"] = "offline"
+            tasks = []
+            for key in server_keys:
+                server_json = await redis_client.hget("registered_servers", key)
+                if server_json:
+                    server = json.loads(server_json)
+                    tasks.append(fetch_and_update_server_metadata(server))
+            
+            await asyncio.gather(*tasks)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    asyncio.create_task(fetch_metadata_task())
+    global redis_client
+    redis_client = redis.from_url("redis://redis", decode_responses=True)
+    await redis_client.ping()
+    logger.info("Successfully connected to Redis.")
+    
+    # Perform initial metadata fetch on startup
+    asyncio.create_task(fetch_all_metadata_task(initial_run=True))
+    # Start the periodic background task
+    asyncio.create_task(fetch_all_metadata_task())
+    
     yield
-    # Shutdown (not needed for this task)
+    
+    # Shutdown
+    await redis_client.close()
+    logger.info("Redis connection closed.")
 
 app = FastAPI(lifespan=lifespan)
 
@@ -74,12 +103,18 @@ class RegistrationRequest(BaseModel):
 @app.post("/register")
 async def register_server(payload: RegistrationRequest):
     """Endpoint for ontology servers to register themselves."""
-    async with servers_lock:
-        server_data = payload.dict()
-        server_data["url"] = str(server_data["url"]) # convert pydantic model to string
-        server_data["status"] = "online" # Assume online on registration
-        registered_servers[payload.ontology] = server_data
-        logger.info(f"Registered/updated server for ontology: {payload.ontology} at {payload.url}")
+    server_data = payload.dict()
+    server_data["url"] = str(server_data["url"])
+    server_data["status"] = "online"  # Assume online on registration
+
+    await redis_client.hset(
+        "registered_servers", payload.ontology, json.dumps(server_data)
+    )
+    
+    # Trigger an immediate metadata fetch for the newly registered server
+    asyncio.create_task(fetch_and_update_server_metadata(server_data))
+
+    logger.info(f"Registered/updated server for ontology: {payload.ontology} at {payload.url}")
     return {"status": "ok", "message": f"Server for {payload.ontology} registered."}
 
 
@@ -92,8 +127,9 @@ async def dl_query_all(request: Request):
     if not query or not query_type:
         return {"error": "Missing 'query' or 'type' parameter"}, 400
 
-    async with servers_lock:
-        online_servers = [s for s in registered_servers.values() if s.get("status") == "online"]
+    server_data_json = await redis_client.hvals("registered_servers")
+    all_servers = [json.loads(s) for s in server_data_json]
+    online_servers = [s for s in all_servers if s.get("status") == "online"]
 
     async def query_one_server(server, session):
         ontology_name = server.get("ontology")
@@ -128,10 +164,10 @@ async def dl_query_all(request: Request):
 
 @app.get("/api/servers")
 async def get_servers():
-    """Returns a list of registered servers and their metadata."""
-    async with servers_lock:
-        # Return a list of server data dictionaries
-        return list(registered_servers.values())
+    """Returns a list of registered servers and their metadata from Redis."""
+    server_data_json = await redis_client.hvals("registered_servers")
+    servers = [json.loads(s) for s in server_data_json]
+    return servers
 
 
 @app.get("/", response_class=HTMLResponse)
