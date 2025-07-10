@@ -819,9 +819,13 @@ Alpine.data('ontologyApp', () => ({
   setQueryClassesExampleQuery(event) {
     if (event) event.preventDefault();
 const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
+      "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n" +
       "PREFIX owl: <http://www.w3.org/2002/07/owl#> \n" +
-            "SELECT DISTINCT ?class \n" + 
-      "WHERE { ?class rdf:type owl:Class . } \n" +
+            "SELECT DISTINCT ?class ?label \n" + 
+      "WHERE { \n" +
+      "?class rdf:type owl:Class . \n" +
+      "OPTIONAL { ?class rdfs:label ?label } \n" +
+      "} \n" +
       "ORDER BY ?class \n" +
       "LIMIT 10";
     
