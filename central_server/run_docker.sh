@@ -3,6 +3,26 @@ set -e
 
 echo "Starting AberOWL Central Server..."
 
+# Argument parsing
+BUILD_FLAG=""
+DETACH_FLAG=""
+while [[ "$1" == -* ]]; do
+    case "$1" in
+        --build)
+            BUILD_FLAG="--build"
+            shift
+            ;;
+        -d|--detach)
+            DETACH_FLAG="-d"
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+    esac
+done
+
 # You can set the port by exporting CENTRAL_SERVER_PORT, e.g.:
 # export CENTRAL_SERVER_PORT=8001
 # Defaults to 8000 if not set.
@@ -11,7 +31,7 @@ echo "Starting AberOWL Central Server..."
 echo "Ensuring 'aberowl-net' Docker network exists..."
 docker network create aberowl-net || true
 
-docker compose up --build -d
+docker compose up ${BUILD_FLAG} ${DETACH_FLAG}
 
 PORT=${CENTRAL_SERVER_PORT:-8000}
 
