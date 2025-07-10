@@ -487,18 +487,36 @@ Alpine.data('ontologyApp', () => ({
         let formatted = this.getFormattedClass(axiomText);
 
         // Add HTML highlighting for different components
+        // IMPORTANT: Do NOT highlight operators that are inside quoted strings
+        
+        // First, temporarily replace quoted strings with placeholders to protect them
+        const quotedStrings = [];
+        let placeholderIndex = 0;
+        formatted = formatted.replace(/'([^']+)'/g, (match, content) => {
+            quotedStrings.push(match);
+            return `__QUOTED_${placeholderIndex++}__`;
+        });
+        
+        // Now highlight operators ONLY outside of quoted strings
         formatted = formatted
-            // Highlight properties (quoted strings followed by a quantifier)
-            .replace(/'([^']+)'(?=\s+(?:some|only|value|min|max|exactly|that|inverse|self)\b)/gi,
-                     '<span class="owl-property">\'$1\'</span>')
             // Highlight quantifiers
             .replace(/\b(some|only|value|min|max|exactly|that|inverse|self)\b/gi, 
                      '<span class="owl-quantifier">$1</span>')
-            // Highlight logical operators
+            // Highlight logical operators - only when NOT inside quotes
             .replace(/\b(and|or|not)\b/gi, 
-                     '<span class="owl-operator">$1</span>')
-            // Highlight class names (remaining quoted terms)
-            .replace(/'([^']+)'/g, '<span class="owl-class">\'$1\'</span>');
+                     '<span class="owl-operator">$1</span>');
+        
+        // Restore quoted strings and determine if they should be highlighted
+        formatted = formatted.replace(/__QUOTED_(\d+)__/g, (match, index) => {
+            const quotedString = quotedStrings[parseInt(index)];
+            // Check if this quoted string is followed by a quantifier (making it a property)
+            const nextWordMatch = formatted.substring(formatted.indexOf(match) + match.length).match(/^\s*<span class="owl-quantifier">/);
+            if (nextWordMatch) {
+                return `<span class="owl-property">${quotedString}</span>`;
+            } else {
+                return `<span class="owl-class">${quotedString}</span>`;
+            }
+        });
 
         return formatted;
     },
@@ -943,8 +961,8 @@ Alpine.data('ontologyApp', () => ({
         if (labelForQuery.includes(' ')) {
             labelForQuery = `'${labelForQuery}'`;
         }
-        // Also format the label for proper spacing
-        labelForQuery = this.formatSparqlResultLabel(labelForQuery);
+        // Use the unified formatting function
+        labelForQuery = this.getFormattedClass(labelForQuery);
         
         const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
                       "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n" +
@@ -961,15 +979,27 @@ Alpine.data('ontologyApp', () => ({
     setSubclassExampleQuery(event) {
         if (event) event.preventDefault();
         if (!this.exampleSubclassExpressionText) return;
-        // Clean up the expression text to remove any HTML artifacts and fix quoting
-        let cleanExpression = this.exampleSubclassExpressionText
-            .replace(/'>|'</g, '')  // Remove HTML artifacts like '> or '<
+        // Clean up the expression text to remove any HTML artifacts
+        let cleanExpression = this.exampleSubclassExpressionText;
+        
+        // Parse HTML if it contains HTML tags
+        if (cleanExpression.includes('<') && cleanExpression.includes('>')) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = cleanExpression;
+            cleanExpression = tempDiv.textContent || tempDiv.innerText || cleanExpression;
+        }
+        
+        // Decode HTML entities
+        cleanExpression = cleanExpression
             .replace(/&gt;/g, '>')
             .replace(/&lt;/g, '<')
             .replace(/&amp;/g, '&')
             .replace(/&quot;/g, '"')
             .replace(/&#39;/g, "'")
             .trim();
+        
+        // Apply consistent formatting
+        cleanExpression = this.getFormattedClass(cleanExpression);
         
         const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
                       "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n" +
@@ -1047,14 +1077,14 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
                 const classUri = binding.class.value;
                 const labelValue = binding.label.value;
                 
-                // Format the label with proper spacing for Manchester syntax
-                const formattedLabel = this.formatSparqlResultLabel(labelValue);
+                // Use the unified formatting function for consistency
+                const formattedLabel = this.formatOwlAxiomForDisplay(labelValue);
                 
                 // Create a clickable link for the class with formatted label
                 // Make sure to use the original classUri in the href, not any formatted version
                 const cleanUri = classUri.replace(/<[^>]*>/g, ''); // Remove any HTML tags from the URI
                 return {
-                    label: `<a href="#/Browse/${encodeURIComponent(cleanUri)}">${classUri}</a> (${this.fixServerGeneratedAxiomHTML(formattedLabel)})`,
+                    label: `<a href="#/Browse/${encodeURIComponent(cleanUri)}">${classUri}</a> (${formattedLabel})`,
                     fullUri: cleanUri,
                     isHtml: true
                 };
@@ -1100,27 +1130,6 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
         });
     },
 
-    // Format SPARQL result labels with proper spacing for Manchester syntax
-    formatSparqlResultLabel(label) {
-        if (!label || typeof label !== 'string') {
-            return label;
-        }
-        
-        // Apply the same spacing rules as in fixServerGeneratedAxiomHTML
-        let formatted = label
-            // Fix spacing around keywords
-            .replace(/(\w)(some|only|value|min|max|exactly|that|inverse|self|and|or|not)(\w)/gi, '$1 $2 $3')
-            .replace(/'(some|only|value|min|max|exactly|that|inverse|self|and|or|not)\b/gi, '\' $1')
-            .replace(/\b(some|only|value|min|max|exactly|that|inverse|self|and|or|not)'/gi, '$1 \'')
-            .replace(/\b(and|or|not)\(/gi, '$1 (')
-            .replace(/\)(and|or|not)\b/gi, ') $1')
-            .replace(/,([^\s])/g, ', $1')
-            // Clean up multiple spaces
-            .replace(/\s+/g, ' ')
-            .trim();
-            
-        return formatted;
-    },
 
     
     executeSparql(event) {
@@ -1373,8 +1382,24 @@ const sparqlUrl = `/api/api/runSparqlQuery.groovy?${params.toString()}`;
   handleNodeClick(event, owlClass) {
     if (event) event.preventDefault();
     
-    // Clean the owlClass in case it has any HTML formatting
-    const cleanOwlClass = owlClass.replace(/<[^>]*>/g, '');
+    // Parse HTML if owlClass contains HTML to extract the actual class IRI
+    let cleanOwlClass = owlClass;
+    if (owlClass.includes('<') && owlClass.includes('>')) {
+        // Create a temporary element to parse HTML
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = owlClass;
+        // Extract text content, which should be the clean IRI
+        cleanOwlClass = tempDiv.textContent || tempDiv.innerText || owlClass;
+    }
+    
+    // Additional cleanup for any remaining HTML entities
+    cleanOwlClass = cleanOwlClass.replace(/&lt;/g, '<')
+                                 .replace(/&gt;/g, '>')
+                                 .replace(/&amp;/g, '&')
+                                 .replace(/&quot;/g, '"')
+                                 .replace(/&#39;/g, "'")
+                                 .trim();
+    
     const obj = this.classesMap.get(cleanOwlClass);
     if (!obj) {
       // If the class is not in the map, fetch it from the backend

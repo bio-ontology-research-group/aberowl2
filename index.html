@@ -306,7 +306,7 @@
                     <template x-for="(item, index) in dlResults" :key="index">
                       <tr>
                         <td>
-                          <a :href="'#/Browse/' + encodeURIComponent(item.owlClass)" @click.prevent="handleNodeClick($event, item.owlClass)" x-text="item.owlClass"></a>
+                          <a :href="'#/Browse/' + encodeURIComponent(item.owlClass)" x-text="item.owlClass"></a>
                         </td>
                         <td x-text="item.label"></td>
                         <td x-text="item.definition"></td>
