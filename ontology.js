@@ -424,6 +424,24 @@ Alpine.data('ontologyApp', () => ({
 
         let processedQuery = owlClass;
 
+        // First, ensure proper spacing around Manchester keywords and operators
+        processedQuery = processedQuery
+            // Add spaces around 'some', 'only', 'value', etc.
+            .replace(/(\w)'(some|only|value|min|max|exactly|that|inverse|self)'/g, "$1' $2 '")
+            .replace(/'(some|only|value|min|max|exactly|that|inverse|self)'(\w)/g, "' $1 '$2")
+            .replace(/'(some|only|value|min|max|exactly|that|inverse|self)'/g, " $1 ")
+            // Add spaces around 'and', 'or', 'not'
+            .replace(/(\w)'(and|or|not)'/g, "$1' $2 '")
+            .replace(/'(and|or|not)'(\w)/g, "' $1 '$2")
+            .replace(/'(and|or|not)'/g, " $1 ")
+            // Handle commas with proper spacing
+            .replace(/','(\w)/g, "', '$1")
+            .replace(/(\w)','(\w)/g, "$1', '$2")
+            .replace(/',''/g, "', '")
+            // Clean up multiple spaces
+            .replace(/\s+/g, ' ')
+            .trim();
+
         for (const label of sortedLabels) {
             if (manchesterKeywords.has(label)) {
                 continue;
@@ -441,7 +459,46 @@ Alpine.data('ontologyApp', () => ({
             processedQuery = processedQuery.replace(regex, replacement);
         }
 
+        // Final cleanup: ensure proper spacing around quoted terms and keywords
+        processedQuery = processedQuery
+            // Ensure space before and after keywords
+            .replace(/(\w)(some|only|value|min|max|exactly|that|inverse|self|and|or|not)(\w)/g, "$1 $2 $3")
+            .replace(/'(\w+)'(some|only|value|min|max|exactly|that|inverse|self|and|or|not)/g, "'$1' $2")
+            .replace(/(some|only|value|min|max|exactly|that|inverse|self|and|or|not)'(\w+)'/g, "$1 '$2'")
+            // Clean up multiple spaces again
+            .replace(/\s+/g, ' ')
+            .trim();
+
         return processedQuery;
+    },
+
+    // Format OWL axioms for display with proper highlighting and spacing
+    formatOwlAxiomForDisplay(axiomText) {
+        if (!axiomText || typeof axiomText !== 'string') {
+            return axiomText;
+        }
+
+        // First apply the basic formatting
+        let formatted = this.getFormattedClass(axiomText);
+
+        // Add HTML highlighting for different components
+        formatted = formatted
+            // Highlight object properties (quoted terms that are likely properties)
+            .replace(/'([^']*(?:part of|has part|located in|contains|participates in|regulates|enables|involved in)[^']*)'/gi, 
+                     '<span class="owl-property">\'$1\'</span>')
+            // Highlight quantifiers
+            .replace(/\b(some|only|value|min|max|exactly|that|inverse|self)\b/gi, 
+                     '<span class="owl-quantifier">$1</span>')
+            // Highlight logical operators
+            .replace(/\b(and|or|not)\b/gi, 
+                     '<span class="owl-operator">$1</span>')
+            // Highlight class names (remaining quoted terms)
+            .replace(/'([^']+)'/g, '<span class="owl-class">\'$1\'</span>')
+            // Clean up any double highlighting
+            .replace(/<span class="owl-property"><span class="owl-class">'([^']*)'<\/span><\/span>/g, 
+                     '<span class="owl-property">\'$1\'</span>');
+
+        return formatted;
     },
     
   executeDLQuery(owlClass, queryType, labels = true) {
@@ -641,8 +698,15 @@ Alpine.data('ontologyApp', () => ({
       let value = obj[item];
       
       if (htmlFields.has(item)) {
-        // Will be handled with x-html in the template
-        return [item, value.toString()];
+        // Format OWL axioms with proper spacing and highlighting
+        if (value) {
+          if (Array.isArray(value)) {
+            value = value.map(axiom => this.formatOwlAxiomForDisplay(axiom)).join(', ');
+          } else {
+            value = this.formatOwlAxiomForDisplay(value.toString());
+          }
+        }
+        return [item, value || ''];
       }
       
       if (value && Array.isArray(value)) {
@@ -698,8 +762,15 @@ Alpine.data('ontologyApp', () => ({
         let value = obj[item];
         
         if (htmlFields.has(item)) {
-          // Will be handled with x-html in the template
-          return [item, value ? value.toString() : ''];
+          // Format OWL axioms with proper spacing and highlighting
+          if (value) {
+            if (Array.isArray(value)) {
+              value = value.map(axiom => this.formatOwlAxiomForDisplay(axiom)).join(', ');
+            } else {
+              value = this.formatOwlAxiomForDisplay(value.toString());
+            }
+          }
+          return [item, value || ''];
         }
         
         if (value && Array.isArray(value)) {
