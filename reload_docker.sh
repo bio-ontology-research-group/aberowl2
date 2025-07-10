@@ -42,10 +42,21 @@ HOST_INDEXER_SCRIPT_PATH="docker/scripts/run_indexer.sh" # Define path to host s
 
 NGINX_PORT=$2
 echo "Using custom nginx port: $NGINX_PORT"
+ABEROWL_PUBLIC_URL="http://localhost:${NGINX_PORT}"
 
 # Central server registration settings, read from environment
 ABEROWL_REGISTER=${ABEROWL_REGISTER:-"false"}
 ABEROWL_CENTRAL_URL=${ABEROWL_CENTRAL_URL:-""}
+
+# If the central server URL is localhost, it needs to be replaced for container networking.
+# 'host.docker.internal' is a special DNS name that resolves to the host's internal IP.
+if [[ "$ABEROWL_CENTRAL_URL" == *"localhost"* || "$ABEROWL_CENTRAL_URL" == *"127.0.0.1"* ]]; then
+    echo "Central URL references localhost. Replacing with 'host.docker.internal' for container access."
+    ABEROWL_CENTRAL_URL_FOR_CONTAINER=$(echo "$ABEROWL_CENTRAL_URL" | sed -e 's/localhost/host.docker.internal/' -e 's/127.0.0.1/host.docker.internal/')
+    echo "URL for registration inside container will be: $ABEROWL_CENTRAL_URL_FOR_CONTAINER"
+else
+    ABEROWL_CENTRAL_URL_FOR_CONTAINER=$ABEROWL_CENTRAL_URL
+fi
 
 # Create a unique project name based on the port number
 PROJECT_NAME="aberowl_${NGINX_PORT}"
@@ -87,8 +98,9 @@ ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
 ONTOLOGY_INDEX_NAME=${ONTOLOGY_INDEX_NAME}
 CLASS_INDEX_NAME=${CLASS_INDEX_NAME}
 SKIP_EMBEDDING=${SKIP_EMBEDDING}
+ABEROWL_PUBLIC_URL=${ABEROWL_PUBLIC_URL}
 ABEROWL_REGISTER=${ABEROWL_REGISTER}
-ABEROWL_CENTRAL_URL=${ABEROWL_CENTRAL_URL}
+ABEROWL_CENTRAL_URL=${ABEROWL_CENTRAL_URL_FOR_CONTAINER}
 EOL
 
 # --- Stop and Clean Up ---

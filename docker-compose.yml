@@ -25,9 +25,10 @@ services:
     # Uncomment for direct access during development if needed
     # ports:
     #   - "127.0.0.1:8080:8080" # API port
-    # environment:
-      # ONTOLOGY_FILE is the path *inside* the container
-      # - ONTOLOGY_FILE=${ONTOLOGY_FILE:-/data/pizza.owl} # Default to pizza.owl if not set
+    environment:
+      - ABEROWL_PUBLIC_URL=${ABEROWL_PUBLIC_URL}
+      - ABEROWL_REGISTER=${ABEROWL_REGISTER}
+      - ABEROWL_CENTRAL_URL=${ABEROWL_CENTRAL_URL}
     volumes:
       # Mount the data directory containing ontologies
       - ./data:/data
@@ -37,6 +38,8 @@ services:
     depends_on:
       - virtuoso
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   elasticsearch:
     image: elasticsearch:7.17.10 # Use a 7.x version compatible with the groovy script client
