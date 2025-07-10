@@ -411,7 +411,8 @@ Alpine.data('ontologyApp', () => ({
             .replace(/id='man-keyword'/g, "class='owl-quantifier'")
             .replace(/id='man-and'/g, "class='owl-operator'")
             .replace(/id='man-or'/g, "class='owl-operator'")
-            .replace(/id='man-not'/g, "class='owl-operator'");
+            .replace(/id='man-not'/g, "class='owl-operator'")
+	    .replace(/>/g, '> ');
     },
     
   executeDLQuery(owlClass, queryType, labels = true) {
