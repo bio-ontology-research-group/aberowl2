@@ -66,7 +66,10 @@ class OntologyServerManager:
 
     def _register_with_central_server(self):
         if not self.register:
+            logging.info("Registration is disabled (ABEROWL_REGISTER is not 'true'). Skipping.")
             return
+
+        logging.info("Attempting to register with central server...")
 
         if not self.central_server_url:
             logging.error("Registration is enabled, but ABEROWL_CENTRAL_URL is not set.")
@@ -83,6 +86,8 @@ class OntologyServerManager:
         }
         
         registration_url = f"{self.central_server_url.rstrip('/')}/register"
+        logging.info(f"Registration endpoint: {registration_url}")
+        logging.info(f"Registration payload: {json.dumps(payload)}")
 
         try:
             data = json.dumps(payload).encode('utf-8')
@@ -175,8 +180,8 @@ class OntologyServerManager:
                         if 'Finished loading' in line:
                             # ... (parsing logic)
                              logging.info(f"Detected loading finished message: {line}")
-                        elif 'Server started successfully' in line:
-                             logging.info("Detected Jetty server started message.")
+                        elif 'Ontology loading sequence complete. Jetty server is running.' in line:
+                             logging.info("Detected server ready message. Triggering registration.")
                              self._register_with_central_server()
                         elif 'Initial RequestManager creation successful' in line:
                               logging.info("Detected RequestManager created message.")
