@@ -26,6 +26,12 @@ echo "Using custom nginx port: $NGINX_PORT"
 PROJECT_NAME="aberowl_${NGINX_PORT}"
 echo "Using project name: $PROJECT_NAME"
 
+# Env file settings
+ENV_DIR="env_files"
+ENV_FILE="${ENV_DIR}/${PROJECT_NAME}.env"
+mkdir -p "$ENV_DIR"
+echo "Using env file: $ENV_FILE"
+
 # Elasticsearch settings
 ELASTICSEARCH_URL="http://elasticsearch:9200"
 ONTOLOGY_INDEX_NAME="ontology_index_${NGINX_PORT}"
@@ -45,8 +51,8 @@ if [ ! -f "$HOST_INDEXER_SCRIPT_PATH" ]; then
 fi
 
 # --- Create .env file for Docker Compose ---
-echo "Creating .env file for docker-compose..."
-cat > .env <<EOL
+echo "Creating env file for docker-compose..."
+cat > "$ENV_FILE" <<EOL
 # Docker-compose environment variables
 COMPOSE_PROJECT_NAME=${PROJECT_NAME}
 NGINX_PORT=${NGINX_PORT}
@@ -61,11 +67,11 @@ EOL
 # --- Stop and Clean Up ---
 echo "Stopping and removing existing containers, networks, and volumes..."
 # docker compose down will use the .env file to identify the project
-docker compose down -v --remove-orphans
+docker compose --env-file "$ENV_FILE" down -v --remove-orphans
 
 # --- Build and Start ---
 echo "Building and starting services with the ontology: $HOST_ONTOLOGY_PATH"
-echo "Configuration has been written to .env file for docker-compose."
+echo "Configuration has been written to $ENV_FILE for docker-compose."
 
 # Ensure the indexer script is executable on the host (important if mounted as a volume)
 echo "Setting execute permissions on host script: $HOST_INDEXER_SCRIPT_PATH"
@@ -73,7 +79,7 @@ chmod +x "$HOST_INDEXER_SCRIPT_PATH"
 
 # Run docker compose up
 # We use --build to force a rebuild and -d for detached mode.
-docker compose up --build -d
+docker compose --env-file "$ENV_FILE" up --build -d
 
 # --- Output Information ---
 echo "Services are starting/restarting."
