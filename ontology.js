@@ -769,15 +769,28 @@ Alpine.data('ontologyApp', () => ({
     this.format = event.target.value;
   },
 
-    setCheesyPizzaExampleQuery(event) {
-  if (event) event.preventDefault();
-    const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
-    "PREFIX owl: <http://www.w3.org/2002/07/owl#> \n" +
-    "SELECT DISTINCT ?class \n" +
-    "WHERE { \n" +
-    "VALUES ?class {OWL superclass { cheesy_pizza } } . } \n" +
-    "ORDER BY ?class \n"
-  this.query = query
+    setSuperclassExampleQuery(event) {
+        if (event) event.preventDefault();
+        if (!this.exampleSuperclassLabel) return;
+        const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
+                      "PREFIX owl: <http://www.w3.org/2002/07/owl#> \n" +
+                      "SELECT DISTINCT ?class \n" +
+                      "WHERE { \n" +
+                      `VALUES ?class {OWL superclass { '${this.exampleSuperclassLabel}' } } . } \n` +
+                      "ORDER BY ?class \n";
+        this.query = query;
+    },
+
+    setSubclassExampleQuery(event) {
+        if (event) event.preventDefault();
+        if (!this.exampleSubclassExpression) return;
+        const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
+                      "PREFIX owl: <http://www.w3.org/2002/07/owl#> \n" +
+                      "SELECT DISTINCT ?class \n" +
+                      "WHERE { \n" +
+                      `VALUES ?class {OWL subclass { ${this.exampleSubclassExpression} } } . } \n` +
+                      "ORDER BY ?class \n";
+        this.query = query;
     },
     
   setQueryClassesExampleQuery(event) {
