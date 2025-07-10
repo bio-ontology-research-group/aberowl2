@@ -489,7 +489,7 @@ Alpine.data('ontologyApp', () => ({
         // Add HTML highlighting for different components
         formatted = formatted
             // Highlight object properties (quoted terms that are likely properties)
-            .replace(/'([^']*(?:part of|has part|located in|contains|participates in|regulates|enables|involved in)[^']*)'/gi, 
+            .replace(/'([^']*(?:part of|has part|located in|contains|participates in|regulates|enables|involved in|happens during)[^']*)'/gi, 
                      '<span class="owl-property">\'$1\'</span>')
             // Highlight quantifiers
             .replace(/\b(some|only|value|min|max|exactly|that|inverse|self)\b/gi, 
@@ -515,17 +515,18 @@ Alpine.data('ontologyApp', () => ({
         // First, let's fix the spacing issues in the HTML
         let fixed = htmlText;
 
-        // Fix patterns like 'part of'some'M phase' by adding spaces
-        fixed = fixed.replace(/('[\w\s]+')(some|only|value|min|max|exactly|that|inverse|self)('[\w\s]+')/g, '$1 $2 $3');
-        
-        // Fix patterns where quotes are directly adjacent without spaces
-        fixed = fixed.replace(/'(\w+)'(\w+)'/g, '\'$1\' $2 \'');
-        fixed = fixed.replace(/'([^']+)'([a-z]+)'/g, '\'$1\' $2 \'');
-        fixed = fixed.replace(/'([a-z]+)'([^']+)'/g, '\' $1 \'$2\'');
-        
-        // Fix comma spacing
-        fixed = fixed.replace(/,(\w)/g, ', $1');
-        fixed = fixed.replace(/(\w),(\w)/g, '$1, $2');
+        // Add space between a closing tag and a keyword.
+        fixed = fixed.replace(/(<\/[^>]+>)(some|only|value|min|max|exactly|that|inverse|self|and|or|not)\b/gi, '$1 $2');
+        // Add space between a keyword and an opening tag.
+        fixed = fixed.replace(/\b(some|only|value|min|max|exactly|that|inverse|self|and|or|not)(<[^>]+>)/gi, '$1 $2');
+        // Add space for keyword followed by parenthesis
+        fixed = fixed.replace(/\b(and|or|not)\(/gi, '$1 (');
+        // Add space for closing parenthesis followed by keyword
+        fixed = fixed.replace(/\)(and|or|not)\b/gi, ') $1');
+        // Add space between a closing quote and a keyword.
+        fixed = fixed.replace(/'(some|only|value|min|max|exactly|that|inverse|self)\b/gi, "' $1");
+        // Add space after comma
+        fixed = fixed.replace(/,([^\s<])/g, ', $1');
 
         // Now add highlighting to the fixed HTML
         // We need to be careful not to break existing HTML tags
@@ -542,7 +543,7 @@ Alpine.data('ontologyApp', () => ({
 
         // Now apply highlighting to the text content
         // Highlight object properties (in quotes)
-        fixed = fixed.replace(/'([^']*(?:part of|has part|located in|contains|participates in|regulates|enables|involved in)[^']*)'/gi, 
+        fixed = fixed.replace(/'([^']*(?:part of|has part|located in|contains|participates in|regulates|enables|involved in|happens during)[^']*)'/gi, 
                              '<span class="owl-property">\'$1\'</span>');
         
         // Highlight quantifiers (not in quotes)
