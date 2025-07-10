@@ -1551,16 +1551,19 @@ const sparqlUrl = `/api/api/runSparqlQuery.groovy?${params.toString()}`;
   onLLMQueryChange(event) {
     this.llmQuery = event.target.value;
   },
-  
-  // Example queries for LLMQuery tab
-  setSuperclassesCheesyPizzaExample(event) {
+
+  setSuperclassLLMExample(event) {
     if (event) event.preventDefault();
-    this.llmQuery = "What are the superclasses of cheesy pizza?";
+    if (this.exampleSuperclassLabel) {
+        this.llmQuery = `What are the superclasses of ${this.exampleSuperclassLabel}?`;
+    }
   },
-  
-  setSubclassesCheesyPizzaExample(event) {
+
+  setSubclassLLMExample(event) {
     if (event) event.preventDefault();
-    this.llmQuery = "What are the subclasses of cheesy pizza?";
+    if (this.exampleSubclassExpressionText) {
+        this.llmQuery = `What are the subclasses of ${this.exampleSubclassExpressionText}?`;
+    }
   },
 
 }));

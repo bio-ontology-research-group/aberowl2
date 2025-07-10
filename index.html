@@ -411,9 +411,11 @@
                   <div layout="row" class="margin-top-15">
                       <div class="alert alert-info">
                           <p>Enter your query in natural language and click "Run Query" to execute it.</p>
-                          <p>Examples:
-                             <a href="#" @click="setSuperclassesCheesyPizzaExample">What are the superclasses of cheesy pizza?</a> |
-                             <a href="#" @click="setSubclassesCheesyPizzaExample">What are the subclasses of cheesy pizza?</a>
+                          <p x-show="exampleSuperclassLabel">Examples:
+                             What are the superclasses of <a href="#" x-text="exampleSuperclassLabel" @click.prevent="setSuperclassLLMExample($event)"></a>?
+                          </p>
+                          <p x-show="exampleSubclassExpression">
+                             What are the subclasses of <a href="#" x-html="exampleSubclassExpression" @click.prevent="setSubclassLLMExample($event)"></a>?
                           </p>
                       </div>
                   </div>
