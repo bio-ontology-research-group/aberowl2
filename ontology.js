@@ -509,38 +509,82 @@ Alpine.data('ontologyApp', () => ({
             return htmlText;
         }
 
-        // Create a temporary DOM element to parse the HTML
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = htmlText;
+        // Work directly with the HTML, preserving links
+        let fixed = htmlText;
+
+        // First, fix spacing issues while preserving HTML structure
+        // Add space after closing tags before keywords
+        fixed = fixed.replace(/(<\/[^>]+>)(some|only|value|min|max|exactly|that|inverse|self|and|or|not)\b/gi, '$1 $2');
+        // Add space after closing quote before keywords
+        fixed = fixed.replace(/'(some|only|value|min|max|exactly|that|inverse|self|and|or|not)\b/gi, '\' $1');
+        // Add space before opening tags after keywords
+        fixed = fixed.replace(/\b(some|only|value|min|max|exactly|that|inverse|self|and|or|not)(<[^>]+>)/gi, '$1 $2');
+        // Add space before opening quote after keywords
+        fixed = fixed.replace(/\b(some|only|value|min|max|exactly|that|inverse|self|and|or|not)'/gi, '$1 \'');
+        // Fix spacing around parentheses with keywords
+        fixed = fixed.replace(/\b(and|or|not)\(/gi, '$1 (');
+        fixed = fixed.replace(/\)(and|or|not)\b/gi, ') $1');
+        // Add space after comma
+        fixed = fixed.replace(/,([^\s<])/g, ', $1');
         
-        // Extract the text content, which removes all HTML tags
-        let textContent = tempDiv.textContent || tempDiv.innerText || '';
+        // Now add highlighting while preserving existing HTML tags
+        // We need to be careful not to modify text inside HTML tags
         
-        // Now apply our formatting rules to the plain text
-        textContent = textContent
-            // Fix spacing around keywords
-            .replace(/(\w)(some|only|value|min|max|exactly|that|inverse|self|and|or|not)(\w)/gi, '$1 $2 $3')
-            .replace(/'(some|only|value|min|max|exactly|that|inverse|self|and|or|not)\b/gi, '\' $1')
-            .replace(/\b(some|only|value|min|max|exactly|that|inverse|self|and|or|not)'/gi, '$1 \'')
-            .replace(/\b(and|or|not)\(/gi, '$1 (')
-            .replace(/\)(and|or|not)\b/gi, ') $1')
-            .replace(/,([^\s])/g, ', $1')
-            // Clean up multiple spaces
-            .replace(/\s+/g, ' ')
-            .trim();
+        // Split the HTML into text nodes and HTML tags
+        const parts = [];
+        let lastIndex = 0;
+        const tagRegex = /<[^>]+>/g;
+        let match;
         
-        // Now add highlighting to the cleaned text
-        let highlighted = textContent
-            // Highlight quantifiers
-            .replace(/\b(some|only|value|min|max|exactly|that|inverse|self)\b/gi, 
-                     '<span class="owl-quantifier">$1</span>')
+        while ((match = tagRegex.exec(fixed)) !== null) {
+            // Add text before the tag
+            if (match.index > lastIndex) {
+                parts.push({
+                    type: 'text',
+                    content: fixed.substring(lastIndex, match.index)
+                });
+            }
+            // Add the tag itself
+            parts.push({
+                type: 'tag',
+                content: match[0]
+            });
+            lastIndex = match.index + match[0].length;
+        }
+        
+        // Add any remaining text
+        if (lastIndex < fixed.length) {
+            parts.push({
+                type: 'text',
+                content: fixed.substring(lastIndex)
+            });
+        }
+        
+        // Apply highlighting only to text nodes
+        const highlightedParts = parts.map(part => {
+            if (part.type === 'tag') {
+                return part.content;
+            }
+            
+            // Apply highlighting to text content
+            let highlighted = part.content;
+            
+            // Highlight quantifiers (not in quotes)
+            highlighted = highlighted.replace(/\b(some|only|value|min|max|exactly|that|inverse|self)\b/gi, 
+                                           '<span class="owl-quantifier">$1</span>');
+            
             // Highlight logical operators
-            .replace(/\b(and|or|not)\b/gi, 
-                     '<span class="owl-operator">$1</span>')
-            // Highlight quoted strings as classes
-            .replace(/'([^']+)'/g, '<span class="owl-class">\'$1\'</span>');
+            highlighted = highlighted.replace(/\b(and|or|not)\b/gi, 
+                                           '<span class="owl-operator">$1</span>');
+            
+            // For quoted strings, we need to check if they're already inside a link
+            // This is a simple approach - just highlight quoted strings that aren't preceded by >
+            highlighted = highlighted.replace(/(?<!>)'([^']+)'/g, '<span class="owl-class">\'$1\'</span>');
+            
+            return highlighted;
+        });
         
-        return highlighted;
+        return highlightedParts.join('');
     },
     
   executeDLQuery(owlClass, queryType, labels = true) {
@@ -892,6 +936,9 @@ Alpine.data('ontologyApp', () => ({
         if (labelForQuery.includes(' ')) {
             labelForQuery = `'${labelForQuery}'`;
         }
+        // Also format the label for proper spacing
+        labelForQuery = this.formatSparqlResultLabel(labelForQuery);
+        
         const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
                       "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n" +
                       "PREFIX owl: <http://www.w3.org/2002/07/owl#> \n" +
@@ -992,9 +1039,15 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
             if (binding.class && binding.label) {
                 const classUri = binding.class.value;
                 const labelValue = binding.label.value;
+                
+                // Format the label with proper spacing for Manchester syntax
+                const formattedLabel = this.formatSparqlResultLabel(labelValue);
+                
+                // Create a clickable link for the class
                 return {
-                    label: `${classUri} (${labelValue})`,
-                    fullUri: classUri
+                    label: `<a href="#/Browse/${encodeURIComponent(classUri)}">${classUri}</a> (${formattedLabel})`,
+                    fullUri: classUri,
+                    isHtml: true
                 };
             }
             
@@ -1005,14 +1058,43 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
             }
             
             const value = binding[firstVarName].value;
-            // Show the full IRI instead of extracting the last part
-            let displayValue = value;
+            
+            // Check if this looks like a class URI
+            if (value.startsWith('http://') || value.startsWith('https://')) {
+                return {
+                    label: `<a href="#/Browse/${encodeURIComponent(value)}">${value}</a>`,
+                    fullUri: value,
+                    isHtml: true
+                };
+            }
             
             return {
-                label: displayValue,
+                label: value,
                 fullUri: value
             };
         });
+    },
+
+    // Format SPARQL result labels with proper spacing for Manchester syntax
+    formatSparqlResultLabel(label) {
+        if (!label || typeof label !== 'string') {
+            return label;
+        }
+        
+        // Apply the same spacing rules as in fixServerGeneratedAxiomHTML
+        let formatted = label
+            // Fix spacing around keywords
+            .replace(/(\w)(some|only|value|min|max|exactly|that|inverse|self|and|or|not)(\w)/gi, '$1 $2 $3')
+            .replace(/'(some|only|value|min|max|exactly|that|inverse|self|and|or|not)\b/gi, '\' $1')
+            .replace(/\b(some|only|value|min|max|exactly|that|inverse|self|and|or|not)'/gi, '$1 \'')
+            .replace(/\b(and|or|not)\(/gi, '$1 (')
+            .replace(/\)(and|or|not)\b/gi, ') $1')
+            .replace(/,([^\s])/g, ', $1')
+            // Clean up multiple spaces
+            .replace(/\s+/g, ' ')
+            .trim();
+            
+        return formatted;
     },
 
     
@@ -1053,6 +1135,11 @@ const sparqlUrl = `/api/api/runSparqlQuery.groovy?${params.toString()}`;
   this.rawSparqlResults = { results: { bindings: [{ error: { type: "literal", value: 'Error: ' + error.message } }] } };
   this.dlResults = [{label: 'Error: ' + error.message}];
       });
+    },
+
+    // Check if a result item contains HTML
+    isHtmlResult(item) {
+        return item && item.isHtml === true;
     },
     
   onEndpointChange(event) {
