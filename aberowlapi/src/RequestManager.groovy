@@ -496,6 +496,13 @@ public class RequestManager {
                     this.exampleSubclassExpressionText = this.exampleSubclassExpression
                         .replaceAll("</span>", "</span> ")
                         .replaceAll("<[^>]+>", "")
+                        .replaceAll("&gt;", ">")
+                        .replaceAll("&lt;", "<")
+                        .replaceAll("&amp;", "&")
+                        .replaceAll("&quot;", "\"")
+                        .replaceAll("&#39;", "'")
+                        .replaceAll("'>", "")
+                        .replaceAll("'<", "")
                         .trim()
                         .replaceAll("\\s+", " ")
                     break

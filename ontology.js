@@ -774,11 +774,16 @@ Alpine.data('ontologyApp', () => ({
     setSuperclassExampleQuery(event) {
         if (event) event.preventDefault();
         if (!this.exampleSuperclassLabel) return;
+        // Remove any existing quotes and add single quotes only if the label contains spaces
+        let labelForQuery = this.exampleSuperclassLabel.replace(/^'|'$/g, '');
+        if (labelForQuery.includes(' ')) {
+            labelForQuery = `'${labelForQuery}'`;
+        }
         const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
                       "PREFIX owl: <http://www.w3.org/2002/07/owl#> \n" +
                       "SELECT DISTINCT ?class \n" +
                       "WHERE { \n" +
-                      `VALUES ?class {OWL superclass { '${this.exampleSuperclassLabel}' } } . } \n` +
+                      `VALUES ?class {OWL superclass { ${labelForQuery} } } . } \n` +
                       "ORDER BY ?class \n";
         this.query = query;
     },
@@ -786,11 +791,21 @@ Alpine.data('ontologyApp', () => ({
     setSubclassExampleQuery(event) {
         if (event) event.preventDefault();
         if (!this.exampleSubclassExpressionText) return;
+        // Clean up the expression text to remove any HTML artifacts and fix quoting
+        let cleanExpression = this.exampleSubclassExpressionText
+            .replace(/'>|'</g, '')  // Remove HTML artifacts like '> or '<
+            .replace(/&gt;/g, '>')
+            .replace(/&lt;/g, '<')
+            .replace(/&amp;/g, '&')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .trim();
+        
         const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
                       "PREFIX owl: <http://www.w3.org/2002/07/owl#> \n" +
                       "SELECT DISTINCT ?class \n" +
                       "WHERE { \n" +
-                      `VALUES ?class {OWL subclass { ${this.exampleSubclassExpressionText} } } . } \n` +
+                      `VALUES ?class {OWL subclass { ${cleanExpression} } } . } \n` +
                       "ORDER BY ?class \n";
         this.query = query;
     },
