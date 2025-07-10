@@ -478,6 +478,12 @@ Alpine.data('ontologyApp', () => ({
             return axiomText;
         }
 
+        // Check if the axiom already contains HTML - if so, return it as-is
+        if (axiomText.includes('<') && axiomText.includes('>')) {
+            // It seems the axiom already has HTML formatting, don't process it
+            return axiomText;
+        }
+
         // First apply the basic formatting
         let formatted = this.getFormattedClass(axiomText);
 
@@ -698,22 +704,18 @@ Alpine.data('ontologyApp', () => ({
       let value = obj[item];
       
       if (htmlFields.has(item)) {
-        // Format OWL axioms with proper spacing and highlighting
-        if (value) {
-          if (Array.isArray(value)) {
-            value = value.map(axiom => this.formatOwlAxiomForDisplay(axiom)).join(', ');
-          } else {
-            value = this.formatOwlAxiomForDisplay(value.toString());
-          }
+        // These fields already contain HTML from the server, don't format them
+        if (value && Array.isArray(value)) {
+          value = value.join(', ');
         }
-        return [item, value || ''];
+        return [item, value || '', true]; // Add flag to indicate HTML content
       }
       
       if (value && Array.isArray(value)) {
         value = value.join(', ');
       }
       
-      return [item, value];
+      return [item, value, false]; // Add flag to indicate plain text
     });
   },
 
@@ -762,22 +764,18 @@ Alpine.data('ontologyApp', () => ({
         let value = obj[item];
         
         if (htmlFields.has(item)) {
-          // Format OWL axioms with proper spacing and highlighting
-          if (value) {
-            if (Array.isArray(value)) {
-              value = value.map(axiom => this.formatOwlAxiomForDisplay(axiom)).join(', ');
-            } else {
-              value = this.formatOwlAxiomForDisplay(value.toString());
-            }
+          // These fields already contain HTML from the server, don't format them
+          if (value && Array.isArray(value)) {
+            value = value.join(', ');
           }
-          return [item, value || ''];
+          return [item, value || '', true]; // Add flag to indicate HTML content
         }
         
         if (value && Array.isArray(value)) {
           value = value.join(', ');
         }
         
-        return [item, value];
+        return [item, value, false]; // Add flag to indicate plain text
       });
   },
 
