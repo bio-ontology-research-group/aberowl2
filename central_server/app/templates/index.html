@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AberOWL Central Server</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>AberOWL Ontology Servers</h1>
+        <p>A list of currently registered and active AberOWL ontology instances.</p>
+
+        <div class="form-group">
+            <input type="text" id="searchInput" class="form-control" placeholder="Search for ontologies...">
+        </div>
+
+        <table class="table table-bordered table-striped">
+            <thead>
+                <tr>
+                    <th class="sortable" data-sort="ontology">Ontology <i class="glyphicon glyphicon-sort"></i></th>
+                    <th class="sortable" data-sort="description">Description <i class="glyphicon glyphicon-sort"></i></th>
+                    <th class="sortable" data-sort="class_count">Classes <i class="glyphicon glyphicon-sort"></i></th>
+                    <th class="sortable" data-sort="property_count">Properties <i class="glyphicon glyphicon-sort"></i></th>
+                    <th class="sortable" data-sort="status">Status <i class="glyphicon glyphicon-sort"></i></th>
+                    <th>URL</th>
+                </tr>
+            </thead>
+            <tbody id="serversTableBody">
+                <!-- Rows will be inserted here by JavaScript -->
+            </tbody>
+        </table>
+    </div>
+
+    <script src="/static/main.js"></script>
+</body>
+</html>
