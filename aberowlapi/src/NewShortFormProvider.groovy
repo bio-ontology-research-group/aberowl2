@@ -250,7 +250,7 @@ public class NewShortFormProvider implements BidirectionalShortFormProvider {
         }
         for (OWLOntology o : ontologySetProvider.getOntologies()) {
             for (OWLEntity e : o.getSignature()) {
-                if (getShortForm(e).replace("'", "") == shortForm) {
+                if (getShortForm(e).replace("'", "") == shortForm.replace("'", "")) {
                     return e;
                 }
             }
