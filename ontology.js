@@ -614,9 +614,9 @@ Alpine.data('ontologyApp', () => ({
         // These fields contain HTML from the server, but we need to fix spacing and add highlighting
         if (value) {
           if (Array.isArray(value)) {
-            value = value.map(axiom => this.fixServerGeneratedAxiomHTML(axiom)).join(', ');
+            value = value.map(axiom => this.formatManchesterAxiom(axiom)).join(', ');
           } else {
-            value = this.fixServerGeneratedAxiomHTML(value.toString());
+            value = this.formatManchesterAxiom(value.toString());
           }
         }
         return [item, value || '', true]; // Add flag to indicate HTML content
