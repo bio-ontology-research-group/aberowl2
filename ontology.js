@@ -509,61 +509,38 @@ Alpine.data('ontologyApp', () => ({
             return htmlText;
         }
 
-        // First, let's fix the spacing issues in the HTML
-        let fixed = htmlText;
-
-        // Add space between a closing tag (>) and a keyword.
-        fixed = fixed.replace(/>(some|only|value|min|max|exactly|that|inverse|self|and|or|not)\b/gi, '> $1');
-        // Add space between a closing quote (') and a keyword.
-        fixed = fixed.replace(/'(some|only|value|min|max|exactly|that|inverse|self|and|or|not)\b/gi, '\' $1');
+        // Create a temporary DOM element to parse the HTML
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = htmlText;
         
-        // Add space between a keyword and an opening tag (<).
-        fixed = fixed.replace(/\b(some|only|value|min|max|exactly|that|inverse|self|and|or|not)</gi, '$1 <');
-        // Add space between a keyword and an opening quote (').
-        fixed = fixed.replace(/\b(some|only|value|min|max|exactly|that|inverse|self|and|or|not)'/gi, '$1 \'');
-        // Add space for keyword followed by parenthesis
-        fixed = fixed.replace(/\b(and|or|not)\(/gi, '$1 (');
-        // Add space for closing parenthesis followed by keyword
-        fixed = fixed.replace(/\)(and|or|not)\b/gi, ') $1');
-        // Add space after comma
-        fixed = fixed.replace(/,([^\s<])/g, ', $1');
-        // Clean up double spaces that might have been introduced
-        fixed = fixed.replace(/\s\s+/g, ' ');
-
-        // Now add highlighting to the fixed HTML
-        // We need to be careful not to break existing HTML tags
+        // Extract the text content, which removes all HTML tags
+        let textContent = tempDiv.textContent || tempDiv.innerText || '';
         
-        // Temporarily replace existing HTML tags to protect them
-        const tagPlaceholders = [];
-        let tagIndex = 0;
-        fixed = fixed.replace(/<[^>]+>/g, (match) => {
-            const placeholder = `__TAG_${tagIndex}__`;
-            tagPlaceholders[tagIndex] = match;
-            tagIndex++;
-            return placeholder;
-        });
-
-        // Now apply highlighting to the text content.
-        // We cannot reliably distinguish properties from classes here, so we highlight all quoted terms as classes.
-        // This is a limitation when processing pre-formatted HTML from the server.
+        // Now apply our formatting rules to the plain text
+        textContent = textContent
+            // Fix spacing around keywords
+            .replace(/(\w)(some|only|value|min|max|exactly|that|inverse|self|and|or|not)(\w)/gi, '$1 $2 $3')
+            .replace(/'(some|only|value|min|max|exactly|that|inverse|self|and|or|not)\b/gi, '\' $1')
+            .replace(/\b(some|only|value|min|max|exactly|that|inverse|self|and|or|not)'/gi, '$1 \'')
+            .replace(/\b(and|or|not)\(/gi, '$1 (')
+            .replace(/\)(and|or|not)\b/gi, ') $1')
+            .replace(/,([^\s])/g, ', $1')
+            // Clean up multiple spaces
+            .replace(/\s+/g, ' ')
+            .trim();
         
-        // Highlight quantifiers (not in quotes)
-        fixed = fixed.replace(/\b(some|only|value|min|max|exactly|that|inverse|self)\b/gi, 
-                             '<span class="owl-quantifier">$1</span>');
+        // Now add highlighting to the cleaned text
+        let highlighted = textContent
+            // Highlight quantifiers
+            .replace(/\b(some|only|value|min|max|exactly|that|inverse|self)\b/gi, 
+                     '<span class="owl-quantifier">$1</span>')
+            // Highlight logical operators
+            .replace(/\b(and|or|not)\b/gi, 
+                     '<span class="owl-operator">$1</span>')
+            // Highlight quoted strings as classes
+            .replace(/'([^']+)'/g, '<span class="owl-class">\'$1\'</span>');
         
-        // Highlight logical operators
-        fixed = fixed.replace(/\b(and|or|not)\b/gi, 
-                             '<span class="owl-operator">$1</span>');
-
-        // Highlight all un-tagged quoted strings as classes
-        fixed = fixed.replace(/'([^']+)'/g, '<span class="owl-class">\'$1\'</span>');
-
-        // Restore the original HTML tags
-        tagPlaceholders.forEach((tag, index) => {
-            fixed = fixed.replace(`__TAG_${index}__`, tag);
-        });
-
-        return fixed;
+        return highlighted;
     },
     
   executeDLQuery(owlClass, queryType, labels = true) {
