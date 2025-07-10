@@ -26,6 +26,7 @@ import java.util.concurrent.*
 import java.util.concurrent.atomic.*
 import java.util.timer.*
 import java.io.File
+import java.io.StringWriter
 
 import groovy.json.*
 import groovy.io.*
@@ -85,6 +86,7 @@ public class RequestManager {
     NewShortFormProvider shortFormProvider;
     def exampleSuperclassLabel = null;
     def exampleSubclassExpression = null;
+    def exampleSubclassExpressionText = null;
 
     public RequestManager(String ont, String ontIRI) {
 	this.ont = ont;
@@ -483,14 +485,20 @@ public class RequestManager {
         }
 
         // Find an example subclass expression (a complex class)
-        def manSyntaxRenderer = new AberOWLSyntaxRendererImpl()
-	    manSyntaxRenderer.setShortFormProvider(this.shortFormProvider)
+        def manSyntaxHTMLRenderer = new AberOWLSyntaxRendererImpl()
+        manSyntaxHTMLRenderer.setShortFormProvider(this.shortFormProvider)
+
+        def writer = new StringWriter()
+        def manSyntaxTextRenderer = new org.semanticweb.owlapi.manchestersyntax.renderer.ManchesterOWLSyntaxObjectRenderer(writer, this.shortFormProvider)
+
         for (def cls : classes) {
             def subClassAxioms = this.ontology.getSubClassAxiomsForSubClass(cls)
             for (def axiom : subClassAxioms) {
                 def superClass = axiom.getSuperClass()
                 if (superClass.isAnonymous()) {
-                    this.exampleSubclassExpression = manSyntaxRenderer.render(superClass)
+                    this.exampleSubclassExpression = manSyntaxHTMLRenderer.render(superClass)
+                    superClass.accept(manSyntaxTextRenderer)
+                    this.exampleSubclassExpressionText = writer.toString()
                     break
                 }
             }
@@ -503,7 +511,8 @@ public class RequestManager {
     def getSparqlExamples() {
         return [
             exampleSuperclassLabel: this.exampleSuperclassLabel,
-            exampleSubclassExpression: this.exampleSubclassExpression
+            exampleSubclassExpression: this.exampleSubclassExpression,
+            exampleSubclassExpressionText: this.exampleSubclassExpressionText
         ]
     }
 	   

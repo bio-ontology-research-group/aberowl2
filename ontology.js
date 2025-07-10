@@ -63,6 +63,7 @@ Alpine.data('ontologyApp', () => ({
   endpoint: '',
   exampleSuperclassLabel: null,
   exampleSubclassExpression: null,
+  exampleSubclassExpressionText: null,
     
   init() {
     this.endpoint = window.location.origin + '/virtuoso/';
@@ -307,6 +308,7 @@ Alpine.data('ontologyApp', () => ({
         .then(data => {
             this.exampleSuperclassLabel = data.exampleSuperclassLabel;
             this.exampleSubclassExpression = data.exampleSubclassExpression;
+            this.exampleSubclassExpressionText = data.exampleSubclassExpressionText;
         })
         .catch(error => console.error('Error fetching SPARQL examples:', error));
   },
@@ -783,12 +785,12 @@ Alpine.data('ontologyApp', () => ({
 
     setSubclassExampleQuery(event) {
         if (event) event.preventDefault();
-        if (!this.exampleSubclassExpression) return;
+        if (!this.exampleSubclassExpressionText) return;
         const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
                       "PREFIX owl: <http://www.w3.org/2002/07/owl#> \n" +
                       "SELECT DISTINCT ?class \n" +
                       "WHERE { \n" +
-                      `VALUES ?class {OWL subclass { ${this.exampleSubclassExpression} } } . } \n` +
+                      `VALUES ?class {OWL subclass { ${this.exampleSubclassExpressionText} } } . } \n` +
                       "ORDER BY ?class \n";
         this.query = query;
     },

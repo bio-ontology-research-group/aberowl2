@@ -349,7 +349,7 @@
                         @click.prevent="setSuperclassExampleQuery($event)">Get superclasses</a>
                     </li>
                     <li x-show="exampleSubclassExpression">
-                      List of subclasses of <code x-text="exampleSubclassExpression"></code> <a href="#"
+                      List of subclasses of <code x-html="exampleSubclassExpression"></code> <a href="#"
                         @click.prevent="setSubclassExampleQuery($event)">Get subclasses</a>
                     </li>
                   </ul>
