@@ -92,7 +92,7 @@ Alpine.data('ontologyApp', () => ({
     const isCollapsed = node.collapsed || false;
     const hasChildren = node.children && node.children.length > 0;
     let html = `
-      <li class="${isActive ? 'active' : ''}"> 
+      <li class="${isActive ? 'active' : ''}" style="white-space: nowrap;"> 
         <span @click.prevent="toggleCollapsed('${node.owlClass}')">
             <i class="glyphicon ${isCollapsed ? 'glyphicon-plus' : 'glyphicon-minus'}"></i>
         </span>
@@ -115,7 +115,7 @@ Alpine.data('ontologyApp', () => ({
     const isCollapsed = node.collapsed || false;
     const hasChildren = node.children && node.children.length > 0;
     let html = `
-      <li class="${isActive ? 'active' : ''}"> 
+      <li class="${isActive ? 'active' : ''}" style="white-space: nowrap;"> 
         <span @click.prevent="toggleProperty('${node.owlClass}')">
             <i class="glyphicon ${isCollapsed ? 'glyphicon-plus' : 'glyphicon-minus'}"></i>
         </span>
