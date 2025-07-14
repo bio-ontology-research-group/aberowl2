@@ -5,6 +5,7 @@ import logging
 import time
 import urllib.request
 import urllib.error
+import uuid
 
 import gevent # Make sure gevent is used for non-blocking IO
 from gevent.subprocess import Popen, PIPE
@@ -26,6 +27,7 @@ class OntologyServerManager:
         signal.signal(signal.SIGQUIT, self.stop_subprocesses)
 
         self.ontology = ontology
+        self.secret_key_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.aberowl_secret_key')
         self.register = os.getenv('ABEROWL_REGISTER', 'false').lower() in ('true', '1', 't')
         self.central_server_url = os.getenv('ABEROWL_CENTRAL_URL')
         # Check path existence *inside* the run method, after Popen is setup,
@@ -80,14 +82,23 @@ class OntologyServerManager:
             logging.error("Registration is enabled, but ABEROWL_PUBLIC_URL is not set.")
             return
 
+        # Read secret key if it exists
+        secret_key = None
+        if os.path.exists(self.secret_key_path):
+            with open(self.secret_key_path, 'r') as f:
+                secret_key = f.read().strip()
+                logging.info("Found existing secret key for registration.")
+
         payload = {
             'ontology': os.path.basename(self.ontology),
             'url': public_url,
+            'secret_key': secret_key,
         }
         
         registration_url = f"{self.central_server_url.rstrip('/')}/register"
         logging.info(f"Registration endpoint: {registration_url}")
-        logging.info(f"Registration payload: {json.dumps(payload)}")
+        # Don't log the secret key
+        logging.info(f"Registration payload: {json.dumps({k: v for k, v in payload.items() if k != 'secret_key'})}")
 
         try:
             data = json.dumps(payload).encode('utf-8')
@@ -96,7 +107,14 @@ class OntologyServerManager:
             
             with urllib.request.urlopen(req, timeout=10) as response:
                 if 200 <= response.status < 300:
-                    logging.info(f"Successfully registered with central server at {registration_url}")
+                    response_data = json.loads(response.read().decode())
+                    new_secret_key = response_data.get('secret_key')
+                    if new_secret_key:
+                        with open(self.secret_key_path, 'w') as f:
+                            f.write(new_secret_key)
+                        logging.info("Successfully registered and saved new secret key.")
+                    else:
+                        logging.info(f"Successfully updated registration with central server at {registration_url}")
                 else:
                     logging.error(f"Failed to register with central server. Status: {response.status}, Body: {response.read().decode()}")
         except urllib.error.URLError as e:

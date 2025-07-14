@@ -1,8 +1,9 @@
 import asyncio
 import json
 import logging
+import uuid
 from contextlib import asynccontextmanager
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 import aiohttp
 import redis.asyncio as redis
@@ -101,24 +102,67 @@ templates = Jinja2Templates(directory="app/templates")
 class RegistrationRequest(BaseModel):
     ontology: str
     url: HttpUrl
+    secret_key: Optional[str] = None
 
 
 @app.post("/register")
 async def register_server(payload: RegistrationRequest):
     """Endpoint for ontology servers to register themselves."""
-    server_data = payload.dict()
-    server_data["url"] = str(server_data["url"])
-    server_data["status"] = "online"  # Assume online on registration
+    ontology_name = payload.ontology
+    server_url = str(payload.url)
+    secret_key = payload.secret_key
 
-    await redis_client.hset(
-        "registered_servers", payload.ontology, json.dumps(server_data)
-    )
+    existing_server_json = await redis_client.hget("registered_servers", ontology_name)
     
-    # Trigger an immediate metadata fetch for the newly registered server
+    new_key_issued = False
+    new_secret_key = None
+
+    if existing_server_json:
+        # Existing registration, check for update or takeover
+        server_data = json.loads(existing_server_json)
+        stored_key = server_data.get("secret_key")
+
+        if stored_key and secret_key == stored_key:
+            # Valid update from existing server
+            server_data["url"] = server_url
+            server_data["status"] = "online"
+            message = f"Server for {ontology_name} updated."
+            logger.info(f"Updated server URL for ontology: {ontology_name} at {server_url}")
+        else:
+            # Key mismatch or no key provided for existing entry -> new server taking over
+            new_secret_key = str(uuid.uuid4())
+            new_key_issued = True
+            server_data = {
+                "ontology": ontology_name,
+                "url": server_url,
+                "status": "online",
+                "secret_key": new_secret_key
+            }
+            message = f"New server for {ontology_name} registered, old one replaced."
+            logger.info(f"New server instance taking over for ontology: {ontology_name}. New key issued.")
+    else:
+        # New registration
+        new_secret_key = str(uuid.uuid4())
+        new_key_issued = True
+        server_data = {
+            "ontology": ontology_name,
+            "url": server_url,
+            "status": "online",
+            "secret_key": new_secret_key
+        }
+        message = f"Server for {ontology_name} registered."
+        logger.info(f"Registered new server for ontology: {ontology_name} at {server_url}")
+
+    await redis_client.hset("registered_servers", ontology_name, json.dumps(server_data))
+    
+    # Trigger an immediate metadata fetch for the newly registered/updated server
     asyncio.create_task(fetch_and_update_server_metadata(server_data))
 
-    logger.info(f"Registered/updated server for ontology: {payload.ontology} at {payload.url}")
-    return {"status": "ok", "message": f"Server for {payload.ontology} registered."}
+    response_payload = {"status": "ok", "message": message}
+    if new_key_issued:
+        response_payload["secret_key"] = new_secret_key
+
+    return response_payload
 
 
 @app.get("/api/dlquery_all")
