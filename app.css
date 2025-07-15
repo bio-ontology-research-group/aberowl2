@@ -198,6 +198,7 @@ header {
   margin-bottom: 10px;
   max-height: 400px;
   overflow-y: auto;
+  overflow-x: auto;
 }
 
 .tree ul {
@@ -212,8 +213,6 @@ header {
 .tree li {
   margin: 5px 0;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .tree li.active > a {
