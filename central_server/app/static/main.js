@@ -245,12 +245,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const label = item.label || item.owlClass;
             const ontology = item.ontology || 'Unknown';
             const server = serversData.find(s => s.ontology === ontology);
+            const title = server ? server.title : '';
             let link = label;
             if (server && item.owlClass) {
                 const browseUrl = `${server.url}#/Browse/${encodeURIComponent(item.owlClass)}`;
                 link = `<a href="${browseUrl}" target="_blank">${label}</a>`;
             }
-            li.innerHTML = `${link} <span class="label label-info pull-right">${ontology}</span>`;
+            li.innerHTML = `${link} <span class="label label-info pull-right" title="${title}">${ontology}</span>`;
             dlQueryResultsList.appendChild(li);
         });
 
