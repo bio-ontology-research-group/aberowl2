@@ -79,9 +79,6 @@ Alpine.data('ontologyApp', () => ({
     // Fetch the ontology data
     this.fetchOntologyData();
         
-    // Fetch SPARQL examples
-    this.fetchSparqlExamples();
-
     window.addEventListener('hash:changed', () => {
       this.checkUrlHash();
     });
@@ -210,6 +207,10 @@ Alpine.data('ontologyApp', () => ({
             this.ontology.submission.abox_axiom_count = stats.abox_axiom_count ?? 'N/A';
             this.ontology.submission.rbox_axiom_count = stats.rbox_axiom_count ?? 'N/A';
             this.ontology.submission.dl_expressivity = stats.dl_expressivity ?? 'N/A';
+
+            this.exampleSuperclassLabel = stats.exampleSuperclassLabel;
+            this.exampleSubclassExpression = this.formatManchesterAxiom(stats.exampleSubclassExpression);
+            this.exampleSubclassExpressionText = stats.exampleSubclassExpressionText;
         })
         .catch(error => {
             console.error('Error fetching ontology statistics:', error);
@@ -281,17 +282,6 @@ Alpine.data('ontologyApp', () => ({
           detail: { message: 'Failed to load ontology data: ' + error.message }
         }));
       });
-  },
-
-  fetchSparqlExamples() {
-    fetch('/api/api/getSparqlExamples.groovy')
-        .then(response => response.json())
-        .then(data => {
-            this.exampleSuperclassLabel = data.exampleSuperclassLabel;
-            this.exampleSubclassExpression = this.formatManchesterAxiom(data.exampleSubclassExpression);
-            this.exampleSubclassExpressionText = data.exampleSubclassExpressionText;
-        })
-        .catch(error => console.error('Error fetching SPARQL examples:', error));
   },
   
   // These methods are no longer needed as we're loading real data
