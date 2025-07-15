@@ -136,8 +136,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const dlQueryForm = document.getElementById('dlQueryForm');
     const dlQueryInput = document.getElementById('dlQueryInput');
+    const queryExampleLinks = document.querySelectorAll('.query-example');
     const dlQueryResultsContainer = document.getElementById('dlQueryResultsContainer');
     const dlQueryResultsList = document.getElementById('dlQueryResultsList');
+
+    // Set default query value
+    dlQueryInput.value = "'has part' some nucleus";
+
+    queryExampleLinks.forEach(link => {
+        link.addEventListener('click', (event) => {
+            event.preventDefault();
+            dlQueryInput.value = event.target.innerText;
+        });
+    });
 
     dlQueryForm.addEventListener('submit', async (event) => {
         event.preventDefault();
