@@ -1,13 +1,35 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // Server list elements
     const tableBody = document.getElementById('serversTableBody');
     const searchInput = document.getElementById('searchInput');
     const sortableHeaders = document.querySelectorAll('.sortable');
 
+    // Query UI elements
+    const dlQueryForm = document.getElementById('dlQueryForm');
+    const dlQueryInput = document.getElementById('dlQueryInput');
+    const textSearchForm = document.getElementById('textSearchForm');
+    const textSearchInput = document.getElementById('textSearchInput');
+    const queryExampleLinks = document.querySelectorAll('.query-example');
+
+    // Ontology filter elements
+    const ontologyFilterCheckboxes = document.getElementById('ontologyFilterCheckboxes');
+
+    // Results display elements
+    const resultsContainer = document.getElementById('resultsContainer');
+    const resultsList = document.getElementById('resultsList');
+    const resultsCount = document.getElementById('resultsCount');
+    const resultsFilterInput = document.getElementById('resultsFilterInput');
+    const paginationContainer = document.getElementById('paginationContainer');
+
+    // State variables
     let serversData = [];
     let sortState = {
         column: 'ontology',
         direction: 'asc'
     };
+    let allResults = [];
+    let currentPage = 1;
+    const pageSize = 50;
 
     function renderTable(data) {
         tableBody.innerHTML = '';
@@ -136,27 +158,6 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchServers();
     // Refresh data every 15 seconds
     setInterval(fetchServers, 15000);
-
-    // Query UI elements
-    const dlQueryForm = document.getElementById('dlQueryForm');
-    const dlQueryInput = document.getElementById('dlQueryInput');
-    const textSearchForm = document.getElementById('textSearchForm');
-    const textSearchInput = document.getElementById('textSearchInput');
-    const queryExampleLinks = document.querySelectorAll('.query-example');
-
-    // Ontology filter elements
-    const ontologyFilterCheckboxes = document.getElementById('ontologyFilterCheckboxes');
-
-    // Results display elements
-    const resultsContainer = document.getElementById('resultsContainer');
-    const resultsList = document.getElementById('resultsList');
-    const resultsCount = document.getElementById('resultsCount');
-    const resultsFilterInput = document.getElementById('resultsFilterInput');
-    const paginationContainer = document.getElementById('paginationContainer');
-
-    let allResults = [];
-    let currentPage = 1;
-    const pageSize = 50;
 
     // Set default query value for DL query
     dlQueryInput.value = "'has part' some nucleus";
