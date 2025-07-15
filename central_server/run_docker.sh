@@ -38,7 +38,7 @@ docker network create aberowl-net || true
 
 if [ "$RESET_FLAG" = true ]; then
     echo "Resetting all data..."
-    docker compose run --rm central-server python /app/main.py --reset
+    docker compose run --rm central-server python /app/app/main.py --reset
     echo "Data reset complete."
 fi
 
