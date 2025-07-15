@@ -24,6 +24,7 @@ Alpine.data('ontologyApp', () => ({
       home_page: '',
       documentation: '',
       publication: '',
+      creators: [],
       has_ontology_language: 'OWL',
       license: '',
       default_namespace: '',
@@ -192,6 +193,7 @@ Alpine.data('ontologyApp', () => ({
             this.ontology.submission.home_page = stats.home_page || '';
             this.ontology.submission.documentation = stats.documentation || '';
             this.ontology.submission.publication = stats.publication || '';
+            this.ontology.submission.creators = stats.creators || [];
             this.ontology.submission.license = stats.license || '';
             this.ontology.submission.default_namespace = stats.default_namespace || '';
             this.ontology.submission.obo_format_version = stats.obo_format_version || '';
@@ -555,7 +557,7 @@ Alpine.data('ontologyApp', () => ({
       ['TBox axiom count', submission.tbox_axiom_count],
       ['ABox axiom count', submission.abox_axiom_count],
       ['RBox axiom count', submission.rbox_axiom_count],
-      // ['Authors', 'The Pizza Ontology Working Group'],
+      ['Authors', submission.creators.join(', ')],
       // ['Contact', '<a href="mailto:pizza@example.org">pizza@example.org</a>']
     ];
   },
