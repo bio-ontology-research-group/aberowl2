@@ -77,6 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const filtered = filterData(serversData, searchTerm);
         const sorted = sortData(filtered, sortState.column, sortState.direction);
         renderTable(sorted);
+        populateOntologyFilter();
     }
 
     function updateSortIcons() {
@@ -139,6 +140,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const queryExampleLinks = document.querySelectorAll('.query-example');
     const dlQueryResultsContainer = document.getElementById('dlQueryResultsContainer');
     const dlQueryResultsList = document.getElementById('dlQueryResultsList');
+    const dlQueryResultsCount = document.getElementById('dlQueryResultsCount');
+    const dlQueryFilterInput = document.getElementById('dlQueryFilterInput');
+    const dlQueryOntologyFilter = document.getElementById('dlQueryOntologyFilter');
+    const dlQueryPaginationContainer = document.getElementById('dlQueryPaginationContainer');
+
+    let dlQueryResults = [];
+    let dlQueryCurrentPage = 1;
+    const dlQueryPageSize = 50;
 
     // Set default query value
     dlQueryInput.value = "'has part' some nucleus";
@@ -148,6 +157,27 @@ document.addEventListener('DOMContentLoaded', () => {
             event.preventDefault();
             dlQueryInput.value = event.target.dataset.query;
         });
+    });
+
+    function populateOntologyFilter() {
+        const uniqueOntologies = [...new Set(serversData.map(s => s.ontology))].sort();
+        dlQueryOntologyFilter.innerHTML = '';
+        uniqueOntologies.forEach(ontology => {
+            const option = document.createElement('option');
+            option.value = ontology;
+            option.textContent = ontology;
+            dlQueryOntologyFilter.appendChild(option);
+        });
+    }
+
+    dlQueryFilterInput.addEventListener('input', () => {
+        dlQueryCurrentPage = 1;
+        renderDlQueryResults();
+    });
+
+    dlQueryOntologyFilter.addEventListener('change', () => {
+        dlQueryCurrentPage = 1;
+        renderDlQueryResults();
     });
 
     dlQueryForm.addEventListener('submit', async (event) => {
@@ -171,36 +201,80 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
             }
             const data = await response.json();
-            renderDlQueryResults(data.result);
+            dlQueryResults = data.result || [];
+            dlQueryCurrentPage = 1;
+            renderDlQueryResults();
         } catch (error) {
             console.error('Error executing DL query:', error);
             dlQueryResultsList.innerHTML = `<li class="list-group-item list-group-item-danger">Error: ${error.message}</li>`;
+            dlQueryResultsCount.textContent = '0';
         }
     });
 
-    function renderDlQueryResults(results) {
+    function renderDlQueryResults() {
+        const filterText = dlQueryFilterInput.value.toLowerCase();
+        const selectedOntologies = Array.from(dlQueryOntologyFilter.selectedOptions).map(opt => opt.value);
+
+        const filteredResults = dlQueryResults.filter(item => {
+            const label = (item.label || item.owlClass || '').toLowerCase();
+            const ontology = item.ontology || '';
+            const textMatch = !filterText || label.includes(filterText);
+            const ontologyMatch = selectedOntologies.length === 0 || selectedOntologies.includes(ontology);
+            return textMatch && ontologyMatch;
+        });
+
+        dlQueryResultsCount.textContent = filteredResults.length;
         dlQueryResultsList.innerHTML = '';
-        if (!results || results.length === 0) {
+
+        if (filteredResults.length === 0) {
             dlQueryResultsList.innerHTML = '<li class="list-group-item">No results found.</li>';
+            renderDlQueryPagination(0, 1);
             return;
         }
 
-        results.forEach(item => {
+        const totalPages = Math.ceil(filteredResults.length / dlQueryPageSize);
+        const start = (dlQueryCurrentPage - 1) * dlQueryPageSize;
+        const end = start + dlQueryPageSize;
+        const paginatedResults = filteredResults.slice(start, end);
+
+        paginatedResults.forEach(item => {
             const li = document.createElement('li');
             li.className = 'list-group-item';
-            // The result from groovy script has 'label', 'owlClass', and now 'ontology'
             const label = item.label || item.owlClass;
             const ontology = item.ontology || 'Unknown';
-            // Link to the individual server's browse page
             const server = serversData.find(s => s.ontology === ontology);
             let link = label;
             if (server && item.owlClass) {
                 const browseUrl = `${server.url}#/Browse/${encodeURIComponent(item.owlClass)}`;
                 link = `<a href="${browseUrl}" target="_blank">${label}</a>`;
             }
-            
             li.innerHTML = `${link} <span class="label label-info pull-right">${ontology}</span>`;
             dlQueryResultsList.appendChild(li);
         });
+
+        renderDlQueryPagination(totalPages, dlQueryCurrentPage);
+    }
+
+    function renderDlQueryPagination(totalPages, currentPage) {
+        const paginationUl = dlQueryPaginationContainer.querySelector('.pagination');
+        paginationUl.innerHTML = '';
+
+        if (totalPages <= 1) return;
+
+        for (let i = 1; i <= totalPages; i++) {
+            const li = document.createElement('li');
+            li.className = `page-item ${i === currentPage ? 'active' : ''}`;
+            const a = document.createElement('a');
+            a.className = 'page-link';
+            a.href = '#';
+            a.textContent = i;
+            a.addEventListener('click', (e) => {
+                e.preventDefault();
+                dlQueryCurrentPage = i;
+                renderDlQueryResults();
+            });
+            li.appendChild(a);
+            paginationUl.appendChild(li);
+        }
     }
 });
