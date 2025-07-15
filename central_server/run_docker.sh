@@ -6,6 +6,7 @@ echo "Starting AberOWL Central Server..."
 # Argument parsing
 BUILD_FLAG=""
 DETACH_FLAG=""
+RESET_FLAG=false
 while [[ "$1" == -* ]]; do
     case "$1" in
         --build)
@@ -14,6 +15,10 @@ while [[ "$1" == -* ]]; do
             ;;
         -d|--detach)
             DETACH_FLAG="-d"
+            shift
+            ;;
+        --reset)
+            RESET_FLAG=true
             shift
             ;;
         *)
@@ -30,6 +35,12 @@ done
 # Create a shared network for inter-container communication
 echo "Ensuring 'aberowl-net' Docker network exists..."
 docker network create aberowl-net || true
+
+if [ "$RESET_FLAG" = true ]; then
+    echo "Resetting all data..."
+    docker compose run --rm central_server python -m central_server.app.main --reset
+    echo "Data reset complete."
+fi
 
 docker compose up ${BUILD_FLAG} ${DETACH_FLAG}
 
