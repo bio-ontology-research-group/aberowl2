@@ -40,7 +40,12 @@ def versionIRI = ""
 def license = ""
 def defaultNamespace = ""
 def oboFormatVersion = ""
+def homePage = ""
+def documentation = ""
+def publication = ""
 def licenseIRI = IRI.create("http://purl.org/dc/terms/license")
+def homePageIRI = IRI.create("http://xmlns.com/foaf/0.1/homepage")
+def publicationIRI = IRI.create("http://purl.org/dc/terms/bibliographicCitation")
 def defaultNamespaceIRI = IRI.create("http://www.geneontology.org/formats/oboInOwl#default-namespace")
 def oboFormatVersionIRI = IRI.create("http://www.geneontology.org/formats/oboInOwl#hasOBOFormatVersion")
 
@@ -78,6 +83,20 @@ for (OWLAnnotation annotation : annotations) {
         if (value instanceof OWLLiteral) {
             oboFormatVersion = ((OWLLiteral) value).getLiteral()
         }
+    } else if (propertyIRI.equals(homePageIRI)) {
+        if (value instanceof IRI) {
+            homePage = value.toString()
+        }
+    } else if (propertyIRI.equals(OWLRDFVocabulary.RDFS_SEE_ALSO.getIRI())) {
+        if (value instanceof IRI) {
+            documentation = value.toString()
+        } else if (value instanceof OWLLiteral) {
+            documentation = ((OWLLiteral) value).getLiteral()
+        }
+    } else if (propertyIRI.equals(publicationIRI)) {
+        if (value instanceof OWLLiteral) {
+            publication = ((OWLLiteral) value).getLiteral()
+        }
     }
 }
 
@@ -109,6 +128,9 @@ def result = [
     "license": license,
     "default_namespace": defaultNamespace,
     "obo_format_version": oboFormatVersion,
+    "home_page": homePage,
+    "documentation": documentation,
+    "publication": publication,
     "dl_expressivity": dlExpressivity,
     "class_count": classCount,
     "property_count": propertyCount,

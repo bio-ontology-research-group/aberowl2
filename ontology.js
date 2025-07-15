@@ -189,6 +189,9 @@ Alpine.data('ontologyApp', () => ({
             this.ontology.submission.description = stats.description || '';
             this.ontology.submission.version = stats.version_info || '';
             this.ontology.submission.version_iri = stats.version_iri || '';
+            this.ontology.submission.home_page = stats.home_page || '';
+            this.ontology.submission.documentation = stats.documentation || '';
+            this.ontology.submission.publication = stats.publication || '';
             this.ontology.submission.license = stats.license || '';
             this.ontology.submission.default_namespace = stats.default_namespace || '';
             this.ontology.submission.obo_format_version = stats.obo_format_version || '';
@@ -539,9 +542,9 @@ Alpine.data('ontologyApp', () => ({
       ['Version', submission.version],
       ['Version IRI', submission.version_iri ? `<a href="${submission.version_iri}" target="_blank">${submission.version_iri}</a>` : ''],
       ['Release date', submission.date_released],
-      // ['Homepage', `<a href="${submission.home_page}" target="_blank">${submission.home_page}</a>`],
-      // ['Documentation', `<a href="${submission.documentation}" target="_blank">${submission.documentation}</a>`],
-      // ['Publication', submission.publication],
+      ['Homepage', submission.home_page ? `<a href="${submission.home_page}" target="_blank">${submission.home_page}</a>` : ''],
+      ['Documentation', submission.documentation ? `<a href="${submission.documentation}" target="_blank">${submission.documentation}</a>` : ''],
+      ['Publication', submission.publication],
       ['Ontology language', submission.has_ontology_language],
       ['License', submission.license ? `<a href="${submission.license}" target="_blank">${submission.license}</a>` : ''],
       ['Default namespace', submission.default_namespace],
