@@ -26,6 +26,8 @@ Alpine.data('ontologyApp', () => ({
       publication: '',
       has_ontology_language: 'OWL',
       license: '',
+      default_namespace: '',
+      obo_format_version: '',
       nb_classes: 'N/A',
       nb_properties: 'N/A',
       nb_object_properties: 'N/A',
@@ -188,6 +190,8 @@ Alpine.data('ontologyApp', () => ({
             this.ontology.submission.version = stats.version_info || '';
             this.ontology.submission.version_iri = stats.version_iri || '';
             this.ontology.submission.license = stats.license || '';
+            this.ontology.submission.default_namespace = stats.default_namespace || '';
+            this.ontology.submission.obo_format_version = stats.obo_format_version || '';
             this.ontology.submission.nb_classes = stats.class_count ?? 'N/A';
             this.ontology.submission.nb_properties = stats.property_count ?? 'N/A';
             this.ontology.submission.nb_object_properties = stats.object_property_count ?? 'N/A';
@@ -540,6 +544,14 @@ Alpine.data('ontologyApp', () => ({
       // ['Publication', submission.publication],
       ['Ontology language', submission.has_ontology_language],
       ['License', submission.license ? `<a href="${submission.license}" target="_blank">${submission.license}</a>` : ''],
+      ['Default namespace', submission.default_namespace],
+      ['OBO format version', submission.obo_format_version],
+      ['Axiom count', submission.axiom_count],
+      ['Logical axiom count', submission.logical_axiom_count],
+      ['Declaration axiom count', submission.declaration_axiom_count],
+      ['TBox axiom count', submission.tbox_axiom_count],
+      ['ABox axiom count', submission.abox_axiom_count],
+      ['RBox axiom count', submission.rbox_axiom_count],
       // ['Authors', 'The Pizza Ontology Working Group'],
       // ['Contact', '<a href="mailto:pizza@example.org">pizza@example.org</a>']
     ];
