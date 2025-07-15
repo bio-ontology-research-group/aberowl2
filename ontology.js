@@ -540,6 +540,7 @@ Alpine.data('ontologyApp', () => ({
     
     const submission = this.ontology.submission;
     return [
+      ['Title', this.ontology.name],
       ['Description', submission.description],
       ['Version', submission.version],
       ['Version IRI', submission.version_iri ? `<a href="${submission.version_iri}" target="_blank">${submission.version_iri}</a>` : ''],

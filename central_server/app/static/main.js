@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderTable(data) {
         tableBody.innerHTML = '';
         if (data.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="6" class="text-center">No servers found.</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="7" class="text-center">No servers found.</td></tr>';
             return;
         }
 
@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const description = server.description || (server.submission ? server.submission.description : '') || '';
             row.innerHTML = `
                 <td>${server.ontology || 'N/A'}</td>
+                <td>${server.title || ''}</td>
                 <td>${description}</td>
                 <td>${server.class_count || 'N/A'}</td>
                 <td>${server.property_count || 'N/A'}</td>
@@ -66,6 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const description = server.description || (server.submission ? server.submission.description : '') || '';
             return (
                 (server.ontology && server.ontology.toLowerCase().includes(term)) ||
+                (server.title && server.title.toLowerCase().includes(term)) ||
                 (description && description.toLowerCase().includes(term)) ||
                 (server.url && server.url.toLowerCase().includes(term))
             );
