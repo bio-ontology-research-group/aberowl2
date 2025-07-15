@@ -14,44 +14,62 @@
 
         <div class="panel panel-default">
             <div class="panel-heading">
-                <h3 class="panel-title">Cross-Ontology DL Query</h3>
+                <ul class="nav nav-tabs" id="queryTabs">
+                    <li class="active"><a href="#dlQueryTab" data-toggle="tab">DL Query</a></li>
+                    <li><a href="#textSearchTab" data-toggle="tab">Text Search</a></li>
+                </ul>
             </div>
             <div class="panel-body">
-                <form id="dlQueryForm" onsubmit="return false;">
-                    <div class="form-group">
-                        <label for="dlQueryInput">Manchester Syntax Query:</label>
-                        <input type="text" id="dlQueryInput" class="form-control" placeholder="e.g., 'has part' some 'cell nucleus'">
-                        <p class="help-block">
-                            Try: 
-                            <a href="#" class="query-example" data-query="'has part' some nucleus">'has part' some nucleus</a>,
-                            <a href="#" class="query-example" data-query="'part of' some 'apoptotic process'">'part of' some 'apoptotic process'</a>,
-                            <a href="#" class="query-example" data-query="regulates some 'calcium ion transport'">regulates some 'calcium ion transport'</a>
-                        </p>
+                <div class="tab-content">
+                    <div class="tab-pane active" id="dlQueryTab">
+                        <form id="dlQueryForm" onsubmit="return false;">
+                            <div class="form-group">
+                                <label for="dlQueryInput">Manchester Syntax Query:</label>
+                                <input type="text" id="dlQueryInput" class="form-control" placeholder="e.g., 'has part' some 'cell nucleus'">
+                                <p class="help-block">
+                                    Try:
+                                    <a href="#" class="query-example" data-query="'has part' some nucleus">'has part' some nucleus</a>,
+                                    <a href="#" class="query-example" data-query="'part of' some 'apoptotic process'">'part of' some 'apoptotic process'</a>,
+                                    <a href="#" class="query-example" data-query="regulates some 'calcium ion transport'">regulates some 'calcium ion transport'</a>
+                                </p>
+                            </div>
+                            <div class="btn-group" role="group">
+                                <button type="submit" name="type" value="subclass" class="btn btn-primary">Subclasses</button>
+                                <button type="submit" name="type" value="superclass" class="btn btn-primary">Superclasses</button>
+                                <button type="submit" name="type" value="equivalent" class="btn btn-primary">Equivalent</button>
+                            </div>
+                        </form>
                     </div>
-                    <div class="btn-group" role="group">
-                        <button type="submit" name="type" value="subclass" class="btn btn-primary">Subclasses</button>
-                        <button type="submit" name="type" value="superclass" class="btn btn-primary">Superclasses</button>
-                        <button type="submit" name="type" value="equivalent" class="btn btn-primary">Equivalent</button>
+                    <div class="tab-pane" id="textSearchTab">
+                        <form id="textSearchForm" onsubmit="return false;">
+                            <div class="form-group">
+                                <label for="textSearchInput">Search Term:</label>
+                                <input type="text" id="textSearchInput" class="form-control" placeholder="e.g., cell, apoptosis">
+                            </div>
+                            <button type="submit" class="btn btn-primary">Search</button>
+                        </form>
                     </div>
-                </form>
+                </div>
             </div>
-            <div id="dlQueryResultsContainer" style="display: none;">
-                <div class="panel-footer">
-                    <h4>Query Results <span id="dlQueryResultsCount" class="badge">0</span></h4>
-                    <div class="row" style="margin-bottom: 15px;">
-                        <div class="col-md-6">
-                            <input type="text" id="dlQueryFilterInput" class="form-control" placeholder="Filter results by text...">
-                        </div>
-                        <div class="col-md-6">
-                            <select id="dlQueryOntologyFilter" class="form-control" multiple>
-                                <!-- Ontology options will be populated here -->
-                            </select>
-                        </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-3">
+                <h4>Filter by Ontology</h4>
+                <div id="ontologyFilterCheckboxes" class="ontology-filter-container">
+                    <!-- Ontology checkboxes will be populated here -->
+                </div>
+            </div>
+            <div class="col-md-9">
+                <div id="resultsContainer" style="display: none;">
+                    <h4>Query Results <span id="resultsCount" class="badge">0</span></h4>
+                    <div class="form-group">
+                        <input type="text" id="resultsFilterInput" class="form-control" placeholder="Filter results by text...">
                     </div>
-                    <ul id="dlQueryResultsList" class="list-group">
+                    <ul id="resultsList" class="list-group">
                         <!-- Results will be inserted here -->
                     </ul>
-                    <nav id="dlQueryPaginationContainer">
+                    <nav id="paginationContainer">
                         <ul class="pagination">
                             <!-- Pagination links will be inserted here -->
                         </ul>
@@ -82,6 +100,8 @@
         </table>
     </div>
 
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
     <script src="/static/main.js"></script>
 </body>
 </html>

@@ -137,21 +137,28 @@ document.addEventListener('DOMContentLoaded', () => {
     // Refresh data every 15 seconds
     setInterval(fetchServers, 15000);
 
+    // Query UI elements
     const dlQueryForm = document.getElementById('dlQueryForm');
     const dlQueryInput = document.getElementById('dlQueryInput');
+    const textSearchForm = document.getElementById('textSearchForm');
+    const textSearchInput = document.getElementById('textSearchInput');
     const queryExampleLinks = document.querySelectorAll('.query-example');
-    const dlQueryResultsContainer = document.getElementById('dlQueryResultsContainer');
-    const dlQueryResultsList = document.getElementById('dlQueryResultsList');
-    const dlQueryResultsCount = document.getElementById('dlQueryResultsCount');
-    const dlQueryFilterInput = document.getElementById('dlQueryFilterInput');
-    const dlQueryOntologyFilter = document.getElementById('dlQueryOntologyFilter');
-    const dlQueryPaginationContainer = document.getElementById('dlQueryPaginationContainer');
 
-    let dlQueryResults = [];
-    let dlQueryCurrentPage = 1;
-    const dlQueryPageSize = 50;
+    // Ontology filter elements
+    const ontologyFilterCheckboxes = document.getElementById('ontologyFilterCheckboxes');
 
-    // Set default query value
+    // Results display elements
+    const resultsContainer = document.getElementById('resultsContainer');
+    const resultsList = document.getElementById('resultsList');
+    const resultsCount = document.getElementById('resultsCount');
+    const resultsFilterInput = document.getElementById('resultsFilterInput');
+    const paginationContainer = document.getElementById('paginationContainer');
+
+    let allResults = [];
+    let currentPage = 1;
+    const pageSize = 50;
+
+    // Set default query value for DL query
     dlQueryInput.value = "'has part' some nucleus";
 
     queryExampleLinks.forEach(link => {
@@ -161,26 +168,80 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // Use event delegation for ontology filter checkboxes
+    ontologyFilterCheckboxes.addEventListener('change', (event) => {
+        if (event.target.type === 'checkbox') {
+            currentPage = 1;
+            renderResults();
+        }
+    });
+
     function populateOntologyFilter() {
-        const uniqueOntologies = [...new Set(serversData.map(s => s.ontology))].sort();
-        dlQueryOntologyFilter.innerHTML = '';
+        const ontologyMap = new Map();
+        serversData.forEach(s => {
+            if (s.ontology && !ontologyMap.has(s.ontology)) {
+                ontologyMap.set(s.ontology, s.title || s.ontology);
+            }
+        });
+
+        const uniqueOntologies = Array.from(ontologyMap.entries())
+            .map(([id, title]) => ({ id, title }))
+            .sort((a, b) => a.title.localeCompare(b.title));
+
+        const checkedOntologies = new Set(
+            Array.from(ontologyFilterCheckboxes.querySelectorAll('input:checked')).map(cb => cb.value)
+        );
+
+        ontologyFilterCheckboxes.innerHTML = '';
         uniqueOntologies.forEach(ontology => {
-            const option = document.createElement('option');
-            option.value = ontology;
-            option.textContent = ontology;
-            dlQueryOntologyFilter.appendChild(option);
+            const isFirstLoad = checkedOntologies.size === 0;
+            const isChecked = isFirstLoad || checkedOntologies.has(ontology.id);
+            const checkboxDiv = document.createElement('div');
+            checkboxDiv.className = 'checkbox';
+            checkboxDiv.innerHTML = `
+                <label>
+                    <input type="checkbox" value="${ontology.id}" ${isChecked ? 'checked' : ''}>
+                    ${ontology.title} (${ontology.id})
+                </label>
+            `;
+            ontologyFilterCheckboxes.appendChild(checkboxDiv);
         });
     }
 
-    dlQueryFilterInput.addEventListener('input', () => {
-        dlQueryCurrentPage = 1;
-        renderDlQueryResults();
+    resultsFilterInput.addEventListener('input', () => {
+        currentPage = 1;
+        renderResults();
     });
 
-    dlQueryOntologyFilter.addEventListener('change', () => {
-        dlQueryCurrentPage = 1;
-        renderDlQueryResults();
-    });
+    async function executeQuery(endpoint, params) {
+        resultsList.innerHTML = '<li class="list-group-item">Loading...</li>';
+        resultsContainer.style.display = 'block';
+        resultsCount.textContent = '0';
+
+        const selectedOntologies = Array.from(ontologyFilterCheckboxes.querySelectorAll('input:checked')).map(cb => cb.value);
+        if (selectedOntologies.length === 0) {
+            allResults = [];
+            renderResults();
+            return;
+        }
+        params.append('ontologies', selectedOntologies.join(','));
+
+        try {
+            const response = await fetch(`${endpoint}?${params}`);
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+            }
+            const data = await response.json();
+            allResults = data.result || [];
+            currentPage = 1;
+            renderResults();
+        } catch (error) {
+            console.error('Error executing query:', error);
+            resultsList.innerHTML = `<li class="list-group-item list-group-item-danger">Error: ${error.message}</li>`;
+            resultsCount.textContent = '0';
+        }
+    }
 
     dlQueryForm.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -192,92 +253,100 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        dlQueryResultsList.innerHTML = '<li class="list-group-item">Loading...</li>';
-        dlQueryResultsContainer.style.display = 'block';
-
-        try {
-            const params = new URLSearchParams({ query, type: queryType });
-            const response = await fetch(`/api/dlquery_all?${params}`);
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
-            }
-            const data = await response.json();
-            dlQueryResults = data.result || [];
-            dlQueryCurrentPage = 1;
-            renderDlQueryResults();
-        } catch (error) {
-            console.error('Error executing DL query:', error);
-            dlQueryResultsList.innerHTML = `<li class="list-group-item list-group-item-danger">Error: ${error.message}</li>`;
-            dlQueryResultsCount.textContent = '0';
-        }
+        const params = new URLSearchParams({ query, type: queryType });
+        executeQuery('/api/dlquery_all', params);
     });
 
-    function renderDlQueryResults() {
-        const filterText = dlQueryFilterInput.value.toLowerCase();
-        const selectedOntologies = Array.from(dlQueryOntologyFilter.selectedOptions).map(opt => opt.value);
+    textSearchForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const query = textSearchInput.value.trim();
 
-        const filteredResults = dlQueryResults.filter(item => {
-            const label = (item.label || item.owlClass || '').toLowerCase();
-            const ontology = item.ontology || '';
-            const textMatch = !filterText || label.includes(filterText);
-            const ontologyMatch = selectedOntologies.length === 0 || selectedOntologies.includes(ontology);
-            return textMatch && ontologyMatch;
-        });
-
-        dlQueryResultsCount.textContent = filteredResults.length;
-        dlQueryResultsList.innerHTML = '';
-
-        if (filteredResults.length === 0) {
-            dlQueryResultsList.innerHTML = '<li class="list-group-item">No results found.</li>';
-            renderDlQueryPagination(0, 1);
+        if (!query) {
+            alert('Please enter a search term.');
             return;
         }
 
-        const totalPages = Math.ceil(filteredResults.length / dlQueryPageSize);
-        const start = (dlQueryCurrentPage - 1) * dlQueryPageSize;
-        const end = start + dlQueryPageSize;
+        const params = new URLSearchParams({ query });
+        executeQuery('/api/search_all', params);
+    });
+
+    function renderResults() {
+        const filterText = resultsFilterInput.value.toLowerCase();
+        const selectedOntologies = Array.from(ontologyFilterCheckboxes.querySelectorAll('input:checked')).map(cb => cb.value);
+
+        const filteredResults = allResults.filter(item => {
+            const label = (item.label || item.owlClass || item.iri || '').toLowerCase();
+            const ontology = item.ontology || '';
+            const textMatch = !filterText || label.includes(filterText);
+            const ontologyMatch = selectedOntologies.includes(ontology);
+            return textMatch && ontologyMatch;
+        });
+
+        resultsCount.textContent = filteredResults.length;
+        resultsList.innerHTML = '';
+
+        if (filteredResults.length === 0) {
+            resultsList.innerHTML = '<li class="list-group-item">No results found.</li>';
+            renderPagination(0, 1);
+            return;
+        }
+
+        const totalPages = Math.ceil(filteredResults.length / pageSize);
+        const start = (currentPage - 1) * pageSize;
+        const end = start + pageSize;
         const paginatedResults = filteredResults.slice(start, end);
 
         paginatedResults.forEach(item => {
             const li = document.createElement('li');
             li.className = 'list-group-item';
-            const label = item.label || item.owlClass;
+            const label = item.label || item.owlClass || item.iri;
+            const owlClass = item.owlClass || item.iri;
             const ontology = item.ontology || 'Unknown';
+            const ontologyTitle = item.ontology_title || ontology;
             const server = serversData.find(s => s.ontology === ontology);
-            const title = server ? server.title : '';
+
             let link = label;
-            if (server && item.owlClass) {
-                const browseUrl = `${server.url}#/Browse/${encodeURIComponent(item.owlClass)}`;
+            if (server && owlClass) {
+                const browseUrl = `${server.url}#/Browse/${encodeURIComponent(owlClass)}`;
                 link = `<a href="${browseUrl}" target="_blank">${label}</a>`;
             }
-            li.innerHTML = `${link} <span class="label label-info pull-right" title="${title}">${ontology}</span>`;
-            dlQueryResultsList.appendChild(li);
+            li.innerHTML = `${link} <span class="label label-info pull-right" title="${ontologyTitle}">${ontologyTitle} (${ontology})</span>`;
+            resultsList.appendChild(li);
         });
 
-        renderDlQueryPagination(totalPages, dlQueryCurrentPage);
+        renderPagination(totalPages, currentPage);
     }
 
-    function renderDlQueryPagination(totalPages, currentPage) {
-        const paginationUl = dlQueryPaginationContainer.querySelector('.pagination');
+    function renderPagination(totalPages, page) {
+        const paginationUl = paginationContainer.querySelector('.pagination');
         paginationUl.innerHTML = '';
 
         if (totalPages <= 1) return;
 
         for (let i = 1; i <= totalPages; i++) {
             const li = document.createElement('li');
-            li.className = `page-item ${i === currentPage ? 'active' : ''}`;
+            li.className = `page-item ${i === page ? 'active' : ''}`;
             const a = document.createElement('a');
             a.className = 'page-link';
             a.href = '#';
             a.textContent = i;
             a.addEventListener('click', (e) => {
                 e.preventDefault();
-                dlQueryCurrentPage = i;
-                renderDlQueryResults();
+                currentPage = i;
+                renderResults();
             });
             li.appendChild(a);
             paginationUl.appendChild(li);
         }
     }
+
+    // Clear results when switching tabs
+    document.querySelectorAll('#queryTabs a[data-toggle="tab"]').forEach(tab => {
+        tab.addEventListener('shown.bs.tab', () => {
+            allResults = [];
+            currentPage = 1;
+            renderResults();
+            resultsContainer.style.display = 'none';
+        });
+    });
 });
