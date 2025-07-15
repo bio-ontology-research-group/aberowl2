@@ -13,6 +13,14 @@ import org.semanticweb.owlapi.vocab.OWLRDFVocabulary
 import org.semanticweb.owlapi.model.OWLAnnotation
 import org.semanticweb.owlapi.model.OWLLiteral
 import org.semanticweb.owlapi.model.IRI
+import org.semanticweb.owlapi.model.OWLClass
+import org.semanticweb.owlapi.model.OWLAnnotationAssertionAxiom
+import org.semanticweb.owlapi.model.OWLObjectIntersectionOf
+import org.semanticweb.owlapi.model.OWLEquivalentClassesAxiom
+import org.semanticweb.owlapi.model.OWLClassExpression
+import uk.ac.manchester.cs.owl.owlapi.mansyntaxrenderer.ManchesterOWLSyntaxObjectRenderer
+import org.semanticweb.owlapi.util.SimpleShortFormProvider
+import java.io.StringWriter
 
 response.setContentType("application/json")
 
@@ -126,6 +134,48 @@ def declarationAxiomsCount = ontology.getAxioms(AxiomType.DECLARATION, true).siz
 def checker = new DLExpressivity(ontology)
 def dlExpressivity = checker.getValue()
 
+def exampleSuperclassLabel = ""
+def exampleSubclassExpression = ""
+def exampleSubclassExpressionText = ""
+
+// Find a class with a label for the superclass example
+outerloop1:
+for (OWLClass cls : ontology.getClassesInSignature(true)) {
+    if (cls.isBuiltIn()) continue
+    for (OWLAnnotationAssertionAxiom annAxiom : ontology.getAnnotationAssertionAxioms(cls.getIRI())) {
+        if (annAxiom.getProperty().isLabel()) {
+            if (annAxiom.getValue() instanceof OWLLiteral) {
+                def label = ((OWLLiteral) annAxiom.getValue()).getLiteral()
+                if (label) {
+                    exampleSuperclassLabel = label
+                    break outerloop1
+                }
+            }
+        }
+    }
+}
+
+// Find a class with an intersection for the subclass example
+outerloop2:
+for (OWLClass cls : ontology.getClassesInSignature(true)) {
+    if (cls.isBuiltIn()) continue
+    for (OWLEquivalentClassesAxiom axiom : ontology.getEquivalentClassesAxioms(cls)) {
+        for (OWLClassExpression ce : axiom.getClassExpressions()) {
+            if (ce instanceof OWLObjectIntersectionOf) {
+                def writer = new StringWriter()
+                def renderer = new ManchesterOWLSyntaxObjectRenderer(writer, new SimpleShortFormProvider())
+                renderer.setUseWrapping(false)
+                ce.accept(renderer)
+                
+                exampleSubclassExpressionText = writer.toString()
+                exampleSubclassExpression = writer.toString() // No HTML version for now
+                
+                break outerloop2
+            }
+        }
+    }
+}
+
 def result = [
     "title": title,
     "description": description,
@@ -138,6 +188,9 @@ def result = [
     "documentation": documentation,
     "publication": publication,
     "creators": creators,
+    "exampleSuperclassLabel": exampleSuperclassLabel,
+    "exampleSubclassExpression": exampleSubclassExpression,
+    "exampleSubclassExpressionText": exampleSubclassExpressionText,
     "dl_expressivity": dlExpressivity,
     "class_count": classCount,
     "property_count": propertyCount,
