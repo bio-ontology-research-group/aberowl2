@@ -146,7 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
     queryExampleLinks.forEach(link => {
         link.addEventListener('click', (event) => {
             event.preventDefault();
-            dlQueryInput.value = event.target.innerText;
+            dlQueryInput.value = event.target.dataset.query;
         });
     });
 
