@@ -8,6 +8,11 @@ import org.semanticweb.owlapi.model.parameters.Imports
 import org.semanticweb.owlapi.util.DLExpressivityChecker
 import org.semanticweb.owlapi.metrics.*
 import java.util.Collections
+import org.semanticweb.owlapi.vocab.DublinCoreVocabulary
+import org.semanticweb.owlapi.vocab.OWLRDFVocabulary
+import org.semanticweb.owlapi.model.OWLAnnotation
+import org.semanticweb.owlapi.model.OWLLiteral
+import org.semanticweb.owlapi.model.IRI
 
 response.setContentType("application/json")
 
@@ -25,6 +30,38 @@ if (ontology == null) {
     response.setStatus(503) // Service Unavailable
     out << JsonOutput.toJson([status: "error", message: "OWLOntology object not available."])
     return
+}
+
+def annotations = ontology.getAnnotations()
+def title = ""
+def description = ""
+def versionInfo = ""
+def license = ""
+def licenseIRI = IRI.create("http://purl.org/dc/terms/license")
+
+for (OWLAnnotation annotation : annotations) {
+    def propertyIRI = annotation.getProperty().getIRI()
+    def value = annotation.getValue()
+
+    if (propertyIRI.equals(DublinCoreVocabulary.TITLE.getIRI())) {
+        if (value instanceof OWLLiteral) {
+            title = ((OWLLiteral) value).getLiteral()
+        }
+    } else if (propertyIRI.equals(DublinCoreVocabulary.DESCRIPTION.getIRI())) {
+        if (value instanceof OWLLiteral) {
+            description = ((OWLLiteral) value).getLiteral()
+        }
+    } else if (propertyIRI.equals(OWLRDFVocabulary.OWL_VERSION_INFO.getIRI())) {
+        if (value instanceof OWLLiteral) {
+            versionInfo = ((OWLLiteral) value).getLiteral()
+        }
+    } else if (propertyIRI.equals(licenseIRI)) {
+        if (value instanceof IRI) {
+            license = value.toString()
+        } else if (value instanceof OWLLiteral) {
+            license = ((OWLLiteral) value).getLiteral()
+        }
+    }
 }
 
 def classCount = ontology.getClassesInSignature(true).size()
@@ -48,6 +85,10 @@ def checker = new DLExpressivity(ontology)
 def dlExpressivity = checker.getValue()
 
 def result = [
+    "title": title,
+    "description": description,
+    "version_info": versionInfo,
+    "license": license,
     "dl_expressivity": dlExpressivity,
     "class_count": classCount,
     "property_count": propertyCount,

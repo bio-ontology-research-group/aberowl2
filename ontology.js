@@ -24,6 +24,7 @@ Alpine.data('ontologyApp', () => ({
       documentation: '',
       publication: '',
       has_ontology_language: 'OWL',
+      license: '',
       nb_classes: 'N/A',
       nb_properties: 'N/A',
       nb_object_properties: 'N/A',
@@ -174,51 +175,14 @@ Alpine.data('ontologyApp', () => ({
   fetchOntologyData() {
     this.isLoading = true;
 
-    // Fetch ontology metadata
-    const sparqlQuery = `
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX dc: <http://purl.org/dc/elements/1.1/>
-        PREFIX dcterms: <http://purl.org/dc/terms/>
-        PREFIX vann: <http://purl.org/vocab/vann/>
-        SELECT ?p ?o
-        WHERE {
-          ?s a owl:Ontology .
-          ?s ?p ?o .
-          FILTER(isLiteral(?o))
-        }
-    `;
-    const sparqlUrl = `/api/api/runSparqlQuery.groovy?query=${encodeURIComponent(sparqlQuery)}`;
-    fetch(sparqlUrl, { headers: { 'Accept': 'application/sparql-results+json' } })
-        .then(response => response.json())
-        .then(data => {
-            const metadata = {};
-            data.results.bindings.forEach(binding => {
-                const prop = binding.p.value.split('#').pop().split('/').pop();
-                const value = binding.o.value;
-                if (!metadata[prop]) {
-                    metadata[prop] = [];
-                }
-                metadata[prop].push(value);
-            });
-
-            const first = (arr) => arr && arr.length > 0 ? arr[0] : undefined;
-
-            this.ontology.name = first(metadata.title) || 'Ontology';
-            this.ontology.acronym = first(metadata.preferredNamespacePrefix) || '';
-            this.ontology.submission.description = first(metadata.description) || first(metadata.comment) || '';
-            this.ontology.submission.version = first(metadata.versionInfo) || '';
-            this.ontology.submission.date_released = first(metadata.date) || '';
-            this.ontology.submission.home_page = first(metadata.homepage) || '';
-        })
-        .catch(error => {
-            console.error('Error fetching ontology metadata:', error);
-        });
-
     // Fetch ontology statistics from the new endpoint
     fetch('/api/api/getStatistics.groovy')
         .then(response => response.json())
         .then(stats => {
+            this.ontology.name = stats.title || 'Ontology';
+            this.ontology.submission.description = stats.description || '';
+            this.ontology.submission.version = stats.version_info || '';
+            this.ontology.submission.license = stats.license || '';
             this.ontology.submission.nb_classes = stats.class_count ?? 'N/A';
             this.ontology.submission.nb_properties = stats.property_count ?? 'N/A';
             this.ontology.submission.nb_object_properties = stats.object_property_count ?? 'N/A';
@@ -566,7 +530,7 @@ Alpine.data('ontologyApp', () => ({
       // ['Documentation', `<a href="${submission.documentation}" target="_blank">${submission.documentation}</a>`],
       // ['Publication', submission.publication],
       ['Ontology language', submission.has_ontology_language],
-      // ['License', 'CC-BY 4.0'],
+      ['License', submission.license ? `<a href="${submission.license}" target="_blank">${submission.license}</a>` : ''],
       // ['Authors', 'The Pizza Ontology Working Group'],
       // ['Contact', '<a href="mailto:pizza@example.org">pizza@example.org</a>']
     ];
