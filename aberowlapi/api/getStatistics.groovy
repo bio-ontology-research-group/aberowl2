@@ -38,7 +38,11 @@ def description = ""
 def versionInfo = ""
 def versionIRI = ""
 def license = ""
+def defaultNamespace = ""
+def oboFormatVersion = ""
 def licenseIRI = IRI.create("http://purl.org/dc/terms/license")
+def defaultNamespaceIRI = IRI.create("http://www.geneontology.org/formats/oboInOwl#default-namespace")
+def oboFormatVersionIRI = IRI.create("http://www.geneontology.org/formats/oboInOwl#hasOBOFormatVersion")
 
 for (OWLAnnotation annotation : annotations) {
     def propertyIRI = annotation.getProperty().getIRI()
@@ -65,6 +69,14 @@ for (OWLAnnotation annotation : annotations) {
             license = value.toString()
         } else if (value instanceof OWLLiteral) {
             license = ((OWLLiteral) value).getLiteral()
+        }
+    } else if (propertyIRI.equals(defaultNamespaceIRI)) {
+        if (value instanceof OWLLiteral) {
+            defaultNamespace = ((OWLLiteral) value).getLiteral()
+        }
+    } else if (propertyIRI.equals(oboFormatVersionIRI)) {
+        if (value instanceof OWLLiteral) {
+            oboFormatVersion = ((OWLLiteral) value).getLiteral()
         }
     }
 }
@@ -95,6 +107,8 @@ def result = [
     "version_info": versionInfo,
     "version_iri": versionIRI,
     "license": license,
+    "default_namespace": defaultNamespace,
+    "obo_format_version": oboFormatVersion,
     "dl_expressivity": dlExpressivity,
     "class_count": classCount,
     "property_count": propertyCount,
