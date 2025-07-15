@@ -6,6 +6,7 @@ import org.semanticweb.owlapi.model.OWLOntology
 import org.semanticweb.owlapi.model.AxiomType
 import org.semanticweb.owlapi.model.parameters.Imports
 import org.semanticweb.owlapi.util.DLExpressivityChecker
+import org.semanticweb.owlapi.metrics.*
 import java.util.Collections
 
 response.setContentType("application/json")
@@ -42,8 +43,9 @@ def rboxAxiomsCount = ontology.getRBoxAxioms(Imports.INCLUDED).size()
 
 def declarationAxiomsCount = ontology.getAxioms(AxiomType.DECLARATION, true).size()
 
-def checker = new DLExpressivityChecker(Collections.singleton(ontology))
-def dlExpressivity = checker.getDescriptionLogicName()
+//def checker = new DLExpressivityChecker(Collections.singleton(ontology))
+def checker = new DLExpressivity(ontology)
+def dlExpressivity = checker.getValue()
 
 def result = [
     "dl_expressivity": dlExpressivity,
