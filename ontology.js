@@ -38,7 +38,10 @@ Alpine.data('ontologyApp', () => ({
       dl_expressivity: 'N/A',
       axiom_count: 'N/A',
       logical_axiom_count: 'N/A',
-      declaration_axiom_count: 'N/A'
+      declaration_axiom_count: 'N/A',
+      tbox_axiom_count: 'N/A',
+      abox_axiom_count: 'N/A',
+      rbox_axiom_count: 'N/A'
     }
   },
   classesMap: new Map(),
@@ -194,6 +197,9 @@ Alpine.data('ontologyApp', () => ({
             this.ontology.submission.axiom_count = stats.axiom_count ?? 'N/A';
             this.ontology.submission.logical_axiom_count = stats.logical_axiom_count ?? 'N/A';
             this.ontology.submission.declaration_axiom_count = stats.declaration_axiom_count ?? 'N/A';
+            this.ontology.submission.tbox_axiom_count = stats.tbox_axiom_count ?? 'N/A';
+            this.ontology.submission.abox_axiom_count = stats.abox_axiom_count ?? 'N/A';
+            this.ontology.submission.rbox_axiom_count = stats.rbox_axiom_count ?? 'N/A';
             this.ontology.submission.dl_expressivity = stats.dl_expressivity ?? 'N/A';
         })
         .catch(error => {
