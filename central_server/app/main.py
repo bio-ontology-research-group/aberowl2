@@ -165,11 +165,63 @@ async def register_server(payload: RegistrationRequest):
     return response_payload
 
 
+@app.get("/api/search_all")
+async def search_all(request: Request):
+    """Runs a text search query across all registered online servers."""
+    query = request.query_params.get("query")
+    ontologies_to_query_str = request.query_params.get("ontologies")
+
+    if not query:
+        return {"error": "Missing 'query' parameter"}, 400
+
+    server_data_json = await redis_client.hvals("registered_servers")
+    all_servers = [json.loads(s) for s in server_data_json]
+    online_servers = [s for s in all_servers if s.get("status") == "online"]
+
+    if ontologies_to_query_str:
+        ontologies_to_query = ontologies_to_query_str.split(',')
+        online_servers = [s for s in online_servers if s.get("ontology") in ontologies_to_query]
+
+    async def query_one_server(server, session):
+        ontology_name = server.get("ontology")
+        ontology_title = server.get("title", ontology_name)
+        api_url = f"{str(server.get('url')).rstrip('/')}/api/class/_find"
+        params = {"query": query}
+        
+        try:
+            async with session.get(api_url, params=params, timeout=20) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    # Annotate results with ontology name and title
+                    results = data.get("result", [])
+                    for item in results:
+                        if isinstance(item, dict):
+                            item["ontology"] = ontology_name
+                            item["ontology_title"] = ontology_title
+                    return results
+                else:
+                    logger.warning(f"Search query failed for {ontology_name}: Status {response.status}")
+                    return []
+        except Exception as e:
+            logger.error(f"Error search querying {ontology_name}: {e}")
+            return []
+
+    all_results = []
+    async with aiohttp.ClientSession() as session:
+        tasks = [query_one_server(server, session) for server in online_servers]
+        results_from_servers = await asyncio.gather(*tasks)
+        for res_list in results_from_servers:
+            all_results.extend(res_list)
+
+    return {"result": all_results}
+
+
 @app.get("/api/dlquery_all")
 async def dl_query_all(request: Request):
     """Runs a DL query across all registered online servers."""
     query = request.query_params.get("query")
     query_type = request.query_params.get("type")
+    ontologies_to_query_str = request.query_params.get("ontologies")
 
     if not query or not query_type:
         return {"error": "Missing 'query' or 'type' parameter"}, 400
@@ -178,8 +230,13 @@ async def dl_query_all(request: Request):
     all_servers = [json.loads(s) for s in server_data_json]
     online_servers = [s for s in all_servers if s.get("status") == "online"]
 
+    if ontologies_to_query_str:
+        ontologies_to_query = ontologies_to_query_str.split(',')
+        online_servers = [s for s in online_servers if s.get("ontology") in ontologies_to_query]
+
     async def query_one_server(server, session):
         ontology_name = server.get("ontology")
+        ontology_title = server.get("title", ontology_name)
         api_url = f"{str(server.get('url')).rstrip('/')}/api/api/runQuery.groovy"
         params = {"query": query, "type": query_type, "labels": "true"}
         
@@ -191,6 +248,7 @@ async def dl_query_all(request: Request):
                     for item in data.get("result", []):
                         if isinstance(item, dict):
                             item["ontology"] = ontology_name
+                            item["ontology_title"] = ontology_title
                     return data.get("result", [])
                 else:
                     logger.warning(f"Query failed for {ontology_name}: Status {response.status}")
