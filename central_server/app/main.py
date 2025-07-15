@@ -221,3 +221,21 @@ async def get_servers():
 async def read_root(request: Request):
     """Serves the main HTML page."""
     return templates.TemplateResponse("index.html", {"request": request})
+
+
+async def _reset_all_data():
+    """Connects to Redis and flushes the current database."""
+    logger.info("Connecting to Redis to reset data...")
+    try:
+        redis_client_local = redis.from_url("redis://redis", decode_responses=True)
+        await redis_client_local.ping()
+        await redis_client_local.flushdb()
+        await redis_client_local.close()
+        logger.info("Successfully reset all data in Redis.")
+    except Exception as e:
+        logger.error(f"Failed to connect to Redis or reset data: {e}")
+
+if __name__ == "__main__":
+    import sys
+    if "--reset" in sys.argv:
+        asyncio.run(_reset_all_data())
