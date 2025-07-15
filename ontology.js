@@ -19,6 +19,7 @@ Alpine.data('ontologyApp', () => ({
     submission: {
       description: '',
       version: '',
+      version_iri: '',
       date_released: '',
       home_page: '',
       documentation: '',
@@ -182,6 +183,7 @@ Alpine.data('ontologyApp', () => ({
             this.ontology.name = stats.title || 'Ontology';
             this.ontology.submission.description = stats.description || '';
             this.ontology.submission.version = stats.version_info || '';
+            this.ontology.submission.version_iri = stats.version_iri || '';
             this.ontology.submission.license = stats.license || '';
             this.ontology.submission.nb_classes = stats.class_count ?? 'N/A';
             this.ontology.submission.nb_properties = stats.property_count ?? 'N/A';
@@ -525,6 +527,7 @@ Alpine.data('ontologyApp', () => ({
     return [
       ['Description', submission.description],
       ['Version', submission.version],
+      ['Version IRI', submission.version_iri ? `<a href="${submission.version_iri}" target="_blank">${submission.version_iri}</a>` : ''],
       ['Release date', submission.date_released],
       // ['Homepage', `<a href="${submission.home_page}" target="_blank">${submission.home_page}</a>`],
       // ['Documentation', `<a href="${submission.documentation}" target="_blank">${submission.documentation}</a>`],

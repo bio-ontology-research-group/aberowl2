@@ -36,6 +36,7 @@ def annotations = ontology.getAnnotations()
 def title = ""
 def description = ""
 def versionInfo = ""
+def versionIRI = ""
 def license = ""
 def licenseIRI = IRI.create("http://purl.org/dc/terms/license")
 
@@ -54,6 +55,10 @@ for (OWLAnnotation annotation : annotations) {
     } else if (propertyIRI.equals(OWLRDFVocabulary.OWL_VERSION_INFO.getIRI())) {
         if (value instanceof OWLLiteral) {
             versionInfo = ((OWLLiteral) value).getLiteral()
+        }
+    } else if (propertyIRI.equals(OWLRDFVocabulary.OWL_VERSION_IRI.getIRI())) {
+        if (value instanceof IRI) {
+            versionIRI = value.toString()
         }
     } else if (propertyIRI.equals(licenseIRI)) {
         if (value instanceof IRI) {
@@ -88,6 +93,7 @@ def result = [
     "title": title,
     "description": description,
     "version_info": versionInfo,
+    "version_iri": versionIRI,
     "license": license,
     "dl_expressivity": dlExpressivity,
     "class_count": classCount,
