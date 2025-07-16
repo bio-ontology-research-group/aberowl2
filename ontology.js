@@ -760,9 +760,9 @@ Alpine.data('ontologyApp', () => ({
 
     setSubclassExampleQuery(event) {
         if (event) event.preventDefault();
-        if (!this.exampleSubclassExpressionText) return;
+        if (!this.exampleSubclassExpression) return;
         // Clean up the expression text to remove any HTML artifacts
-        let cleanExpression = this.exampleSubclassExpressionText;
+        let cleanExpression = this.exampleSubclassExpression;
         
         // Parse HTML if it contains HTML tags
         if (cleanExpression.includes('<') && cleanExpression.includes('>')) {
@@ -781,9 +781,6 @@ Alpine.data('ontologyApp', () => ({
             .trim();
         
         // Apply consistent formatting
-        if (!cleanExpression.includes("'") && !cleanExpression.includes(" ")) {
-            cleanExpression = `'${cleanExpression}'`;
-        }
         
         const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
                       "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n" +
