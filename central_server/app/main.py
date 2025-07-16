@@ -4,6 +4,7 @@ import logging
 import uuid
 from contextlib import asynccontextmanager
 from typing import Dict, Any, Optional
+from urllib.parse import urlparse
 
 import aiohttp
 import redis.asyncio as redis
@@ -185,22 +186,43 @@ async def search_all(request: Request):
     async def query_one_server(server, session):
         ontology_name = server.get("ontology")
         ontology_title = server.get("title", ontology_name)
-        api_url = f"{str(server.get('url')).rstrip('/')}/api/class/_find"
-        params = {"query": query}
+        
+        server_url = server.get("url")
+        parsed_url = urlparse(server_url)
+        port = parsed_url.port
+        if not port:
+            port = 80 if parsed_url.scheme == 'http' else 443
+        
+        index_name = f"class_index_{port}"
+        api_url = f"{str(server_url).rstrip('/')}/elastic/{index_name}/_search"
+        
+        es_query = {
+            "query": {
+                "bool": {
+                    "should": [
+                        {"match": {"label": {"query": query.lower(), "boost": 2}}},
+                        {"match_bool_prefix": {"label": query.lower()}}
+                    ]
+                }
+            },
+            "_source": {"excludes": ["embedding_vector"]},
+            "size": 100
+        }
         
         try:
-            async with session.get(api_url, params=params, timeout=20) as response:
+            async with session.post(api_url, json=es_query, timeout=20) as response:
                 if response.status == 200:
                     data = await response.json()
-                    # Annotate results with ontology name and title
-                    results = data.get("result", [])
+                    hits = data.get("hits", {}).get("hits", [])
+                    results = [hit.get("_source") for hit in hits if hit.get("_source")]
+                    
                     for item in results:
                         if isinstance(item, dict):
                             item["ontology"] = ontology_name
                             item["ontology_title"] = ontology_title
                     return results
                 else:
-                    logger.warning(f"Search query failed for {ontology_name}: Status {response.status}")
+                    logger.warning(f"Search query failed for {ontology_name}: Status {response.status} {await response.text()}")
                     return []
         except Exception as e:
             logger.error(f"Error search querying {ontology_name}: {e}")
