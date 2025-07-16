@@ -743,9 +743,8 @@ Alpine.data('ontologyApp', () => ({
         if (!this.exampleSuperclassLabel) return;
         // Remove any existing quotes and add single quotes only if the label contains spaces
         let labelForQuery = this.exampleSuperclassLabel.replace(/^'|'$/g, '');
-        if (labelForQuery.includes(' ')) {
-            labelForQuery = `'${labelForQuery}'`;
-        }
+        // Always quote labels
+        labelForQuery = `'${labelForQuery}'`;
         
         const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
                       "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n" +
@@ -782,6 +781,9 @@ Alpine.data('ontologyApp', () => ({
             .trim();
         
         // Apply consistent formatting
+        if (!cleanExpression.includes("'") && !cleanExpression.includes(" ")) {
+            cleanExpression = `'${cleanExpression}'`;
+        }
         
         const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
                       "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n" +
