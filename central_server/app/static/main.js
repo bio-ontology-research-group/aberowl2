@@ -300,17 +300,33 @@ document.addEventListener('DOMContentLoaded', () => {
         paginatedResults.forEach(item => {
             const li = document.createElement('li');
             li.className = 'list-group-item';
-            const label = item.label || item.owlClass || item.iri;
+
+            let primaryLabel;
+            let synonyms = [];
+            if (Array.isArray(item.label) && item.label.length > 0) {
+                primaryLabel = item.label[0];
+                synonyms = item.label.slice(1);
+            } else {
+                primaryLabel = item.label || item.owlClass || item.iri;
+            }
+
             const owlClass = item.owlClass || item.iri;
             const ontology = item.ontology || 'Unknown';
             const ontologyTitle = item.ontology_title || ontology;
             const server = serversData.find(s => s.ontology === ontology);
 
-            let link = label;
+            let link;
             if (server && owlClass) {
                 const browseUrl = `${server.url}#/Browse/${encodeURIComponent(owlClass)}`;
-                link = `<a href="${browseUrl}" target="_blank">${label}</a>`;
+                link = `<a href="${browseUrl}" target="_blank">${primaryLabel}</a>`;
+            } else {
+                link = primaryLabel;
             }
+
+            if (synonyms.length > 0) {
+                link += ` <small class="text-muted">(${synonyms.join(', ')})</small>`;
+            }
+
             li.innerHTML = `${link} <span class="label label-info pull-right" title="${ontologyTitle}">${ontologyTitle} (${ontology})</span>`;
             resultsList.appendChild(li);
         });
