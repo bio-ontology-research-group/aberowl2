@@ -19,7 +19,7 @@ import org.semanticweb.owlapi.model.OWLObjectIntersectionOf
 import org.semanticweb.owlapi.model.OWLEquivalentClassesAxiom
 import org.semanticweb.owlapi.model.OWLClassExpression
 import uk.ac.manchester.cs.owl.owlapi.mansyntaxrenderer.ManchesterOWLSyntaxObjectRenderer
-import org.semanticweb.owlapi.util.SimpleShortFormProvider
+import src.NewShortFormProvider
 import java.io.StringWriter
 
 response.setContentType("application/json")
@@ -163,7 +163,7 @@ for (OWLClass cls : ontology.getClassesInSignature(true)) {
         for (OWLClassExpression ce : axiom.getClassExpressions()) {
             if (ce instanceof OWLObjectIntersectionOf) {
                 def writer = new StringWriter()
-                def renderer = new ManchesterOWLSyntaxObjectRenderer(writer, new SimpleShortFormProvider())
+                def renderer = new ManchesterOWLSyntaxObjectRenderer(writer, new NewShortFormProvider(Collections.singleton(ontology)))
                 renderer.setUseWrapping(false)
                 ce.accept(renderer)
                 
