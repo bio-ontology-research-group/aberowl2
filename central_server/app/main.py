@@ -198,8 +198,11 @@ async def search_all(request: Request):
         
         es_query = {
             "query": {
-                "match": {
-                    "label": query
+                "bool": {
+                    "should": [
+                        {"match": {"label": {"query": query.lower(), "boost": 2}}},
+                        {"match_bool_prefix": {"label": query.toLowerCase()}}
+                    ]
                 }
             },
             "_source": {"excludes": ["embedding_vector"]},
