@@ -201,7 +201,7 @@ async def search_all(request: Request):
                 "bool": {
                     "should": [
                         {"match": {"label": {"query": query.lower(), "boost": 2}}},
-                        {"match_bool_prefix": {"label": query.toLowerCase()}}
+                        {"match_bool_prefix": {"label": query.lower()}}
                     ]
                 }
             },
