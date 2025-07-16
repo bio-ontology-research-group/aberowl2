@@ -276,7 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const selectedOntologies = Array.from(ontologyFilterCheckboxes.querySelectorAll('input:checked')).map(cb => cb.value);
 
         const filteredResults = allResults.filter(item => {
-            const label = (item.label || item.owlClass || item.iri || '').toLowerCase();
+            const label = String(item.label || item.owlClass || item.iri || '').toLowerCase();
             const ontology = item.ontology || '';
             const textMatch = !filterText || label.includes(filterText);
             const ontologyMatch = selectedOntologies.includes(ontology);
