@@ -7,6 +7,7 @@ echo "Starting AberOWL Central Server..."
 BUILD_FLAG=""
 DETACH_FLAG=""
 RESET_FLAG=false
+STOP_FLAG=false
 while [[ "$1" == -* ]]; do
     case "$1" in
         --build)
@@ -21,12 +22,23 @@ while [[ "$1" == -* ]]; do
             RESET_FLAG=true
             shift
             ;;
+        --stop)
+            STOP_FLAG=true
+            shift
+            ;;
         *)
             echo "Unknown option: $1" >&2
             exit 1
             ;;
     esac
 done
+
+if [ "$STOP_FLAG" = true ]; then
+    echo "Stopping AberOWL Central Server..."
+    docker compose down
+    echo "Server stopped."
+    exit 0
+fi
 
 # You can set the port by exporting CENTRAL_SERVER_PORT, e.g.:
 # export CENTRAL_SERVER_PORT=8001
