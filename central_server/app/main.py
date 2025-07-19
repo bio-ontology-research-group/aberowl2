@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -18,8 +19,51 @@ from pydantic import BaseModel, HttpUrl
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+SERVERS_FILE_PATH = "servers.json"
+
 # Redis client instance will be managed in the lifespan context
 redis_client: redis.Redis = None
+
+
+async def _write_servers_to_file():
+    """Writes the current list of registered servers from Redis to a JSON file."""
+    logger.info(f"Writing servers to {SERVERS_FILE_PATH}")
+    try:
+        server_data_json = await redis_client.hvals("registered_servers")
+        servers = [json.loads(s) for s in server_data_json]
+        with open(SERVERS_FILE_PATH, "w") as f:
+            json.dump(servers, f, indent=4)
+        logger.info(f"Successfully wrote {len(servers)} servers to {SERVERS_FILE_PATH}")
+    except Exception as e:
+        logger.error(f"Failed to write servers to file: {e}")
+
+
+async def _load_servers_from_file():
+    """Loads servers from the JSON file into Redis if Redis is empty."""
+    if not os.path.exists(SERVERS_FILE_PATH):
+        logger.info(f"{SERVERS_FILE_PATH} not found, skipping load from file.")
+        return
+
+    # Check if servers are already in Redis
+    if await redis_client.exists("registered_servers"):
+        logger.info("Redis already contains server data, skipping load from file.")
+        return
+
+    logger.info(f"Loading servers from {SERVERS_FILE_PATH} into Redis.")
+    try:
+        with open(SERVERS_FILE_PATH, "r") as f:
+            servers = json.load(f)
+        
+        for server in servers:
+            ontology_name = server.get("ontology")
+            if ontology_name:
+                # Set status to unknown, as we don't know if it's online until we check
+                server['status'] = 'unknown'
+                await redis_client.hset("registered_servers", ontology_name, json.dumps(server))
+        logger.info(f"Successfully loaded {len(servers)} servers into Redis.")
+    except Exception as e:
+        logger.error(f"Failed to load servers from file: {e}")
+
 
 async def fetch_and_update_server_metadata(server: Dict[str, Any]):
     """Fetches metadata for a single server and updates Redis."""
@@ -47,6 +91,7 @@ async def fetch_and_update_server_metadata(server: Dict[str, Any]):
     
     # Update the server data in Redis
     await redis_client.hset("registered_servers", ontology, json.dumps(server))
+    await _write_servers_to_file()
 
 
 async def _fetch_and_update_all_servers():
@@ -83,6 +128,9 @@ async def lifespan(app: FastAPI):
     redis_client = redis.from_url("redis://redis", decode_responses=True)
     await redis_client.ping()
     logger.info("Successfully connected to Redis.")
+    
+    # Load servers from file before fetching metadata
+    await _load_servers_from_file()
     
     # Perform initial metadata fetch on startup
     asyncio.create_task(_fetch_and_update_all_servers())
@@ -156,6 +204,7 @@ async def register_server(payload: RegistrationRequest):
         logger.info(f"Registered new server for ontology: {ontology_name} at {server_url}")
 
     await redis_client.hset("registered_servers", ontology_name, json.dumps(server_data))
+    await _write_servers_to_file()
     
     # Trigger an immediate metadata fetch for the newly registered/updated server
     asyncio.create_task(fetch_and_update_server_metadata(server_data))
