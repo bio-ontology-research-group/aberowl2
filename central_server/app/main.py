@@ -179,6 +179,12 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
 
+@app.get("/about", response_class=HTMLResponse)
+async def about_page(request: Request):
+    """Serves the about page."""
+    return templates.TemplateResponse("about.html", {"request": request})
+
+
 class RegistrationRequest(BaseModel):
     ontology: str
     url: HttpUrl
@@ -444,12 +450,6 @@ async def get_catalogue_info(
     return JSONResponse(content=catalogue_info)
 
 
-@app.get("/about", response_class=HTMLResponse)
-async def about_page(request: Request):
-    """Serves the about page."""
-    return templates.TemplateResponse("about.html", {"request": request})
-
-
 @app.get("/records")
 async def get_catalogue_records(
     request: Request,
@@ -580,36 +580,6 @@ async def get_catalogue_record(
         return HTMLResponse(content=f"<html><body><h1>Record: {artefact_id}</h1></body></html>")
     
     return JSONResponse(content=record)
-
-
-@app.get("/doc/api")
-async def get_api_documentation():
-    """Get the API documentation."""
-    return HTMLResponse(content="""
-    <html>
-    <head>
-        <title>AberOWL FAIR API Documentation</title>
-    </head>
-    <body>
-        <h1>AberOWL FAIR API Documentation</h1>
-        <p>This API implements the MOD (Metadata for Ontology Description and Publication) specification. For more details, see the <a href="https://fair-impact.github.io/MOD-API/">official documentation</a> and the <a href="https://github.com/FAIR-IMPACT/MOD-API">GitHub repository</a>.</p>
-        <h2>Available Endpoints:</h2>
-        <ul>
-            <li><code>GET /</code> - Get information about the semantic artefact catalogue</li>
-            <li><code>GET /records</code> - Get all catalog records</li>
-            <li><code>GET /records/{artefactID}</code> - Get a specific catalog record</li>
-            <li><code>GET /artefacts</code> - Get all semantic artefacts</li>
-            <li><code>GET /artefacts/{artefactID}</code> - Get a specific semantic artefact</li>
-            <li><code>GET /artefacts/{artefactID}/distributions</code> - Get distributions for an artefact</li>
-            <li><code>GET /artefacts/{artefactID}/resources</code> - Get resources within an artefact</li>
-            <li><code>GET /search</code> - Search metadata and content</li>
-            <li><code>GET /search/content</code> - Search content only</li>
-            <li><code>GET /search/metadata</code> - Search metadata only</li>
-        </ul>
-        <p>For detailed API specification, see the OpenAPI documentation.</p>
-    </body>
-    </html>
-    """)
 
 
 @app.get("/artefacts")
