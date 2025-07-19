@@ -304,21 +304,18 @@ async def get_all_servers():
     return [json.loads(s) for s in server_data_json]
 
 
-@app.get("/index", response_class=HTMLResponse)
-async def read_root(request: Request):
-    """Serves the main HTML page."""
-    return templates.TemplateResponse("index.html", {"request": request})
-
-
 # FAIR API Endpoints
 
 @app.get("/")
 async def get_catalogue_info(
     request: Request,
-    format: str = Query(default="jsonld", enum=["html", "jsonld", "ttl", "rdfxml"]),
+    format: str = Query(default="html", enum=["html", "jsonld", "ttl", "rdfxml"]),
     display: List[str] = Query(default=None)
 ):
-    """Get information about the semantic artefact catalogue."""
+    """Serves the main HTML page and provides catalogue info for other formats."""
+    if format == "html":
+        return templates.TemplateResponse("index.html", {"request": request})
+
     catalogue_info = {
         "@context": {
             "mod": "https://w3id.org/mod#",
@@ -343,9 +340,6 @@ async def get_catalogue_info(
             "@type": "dcat:DataService"
         }
     }
-    
-    if format == "html":
-        return HTMLResponse(content="<html><body><h1>AberOWL Central Catalogue</h1></body></html>")
     
     return JSONResponse(content=catalogue_info)
 
