@@ -20,9 +20,37 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 SERVERS_FILE_PATH = "servers.json"
+CATALOGUE_CONFIG_PATH = "catalogue_config.json"
 
 # Redis client instance will be managed in the lifespan context
 redis_client: redis.Redis = None
+catalogue_config: Dict[str, Any] = {}
+
+
+async def _load_catalogue_config():
+    """Loads catalogue configuration from a JSON file."""
+    global catalogue_config
+    default_config = {
+        "title": "Default Catalogue Title",
+        "description": "A default description of the catalogue.",
+        "publisher": "Default Publisher"
+    }
+    if os.path.exists(CATALOGUE_CONFIG_PATH):
+        logger.info(f"Loading catalogue config from {CATALOGUE_CONFIG_PATH}")
+        try:
+            with open(CATALOGUE_CONFIG_PATH, "r") as f:
+                catalogue_config = json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to load {CATALOGUE_CONFIG_PATH}: {e}. Using default config.")
+            catalogue_config = default_config
+    else:
+        logger.warning(f"{CATALOGUE_CONFIG_PATH} not found. Using default config and creating file.")
+        catalogue_config = default_config
+        try:
+            with open(CATALOGUE_CONFIG_PATH, "w") as f:
+                json.dump(default_config, f, indent=4)
+        except Exception as e:
+            logger.error(f"Failed to create default config file {CATALOGUE_CONFIG_PATH}: {e}")
 
 
 async def _write_servers_to_file():
@@ -128,6 +156,8 @@ async def lifespan(app: FastAPI):
     redis_client = redis.from_url("redis://redis", decode_responses=True)
     await redis_client.ping()
     logger.info("Successfully connected to Redis.")
+    
+    await _load_catalogue_config()
     
     # Load servers from file before fetching metadata
     await _load_servers_from_file()
@@ -398,13 +428,13 @@ async def get_catalogue_info(
         "@type": ["mod:SemanticArtefactCatalog", "dcat:Catalog"],
         "dcterms:title": {
             "@type": "rdfs:Literal",
-            "@value": "AberOWL Ontology Repository"
+            "@value": catalogue_config.get("title", "AberOWL Ontology Repository")
         },
         "dcterms:description": {
             "@type": "rdfs:Literal", 
-            "@value": "An ontology repository with active reasoning support"
+            "@value": catalogue_config.get("description", "An ontology repository with active reasoning support")
         },
-        "dcterms:publisher": "AberOWL",
+        "dcterms:publisher": catalogue_config.get("publisher", "AberOWL"),
         "dcat:service": {
             "@id": f"{request.url.scheme}://{request.url.netloc}/api",
             "@type": "dcat:DataService"
