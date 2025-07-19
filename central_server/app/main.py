@@ -217,7 +217,7 @@ async def register_server(payload: RegistrationRequest):
 
 
 @app.get("/api/search_all")
-async def search_all(request: Request):
+async def search_all_api(request: Request):
     """Runs a text search query across all registered online servers."""
     query = request.query_params.get("query")
     ontologies_to_query_str = request.query_params.get("ontologies")
@@ -353,6 +353,27 @@ async def get_all_servers():
     return [json.loads(s) for s in server_data_json]
 
 
+async def _find_server_by_id(artefact_id: str) -> Optional[Dict[str, Any]]:
+    """Finds a server by artefact_id, matching against ontology name (case-insensitive, with/without .owl extension)."""
+    servers = await get_all_servers()
+    artefact_id_lower = artefact_id.lower()
+    for server in servers:
+        ontology_key = server.get("ontology", "")
+        if not ontology_key:
+            continue
+        
+        ontology_key_lower = ontology_key.lower()
+        # Direct match (case-insensitive)
+        if ontology_key_lower == artefact_id_lower:
+            return server
+        
+        # Match without extension (case-insensitive)
+        if os.path.splitext(ontology_key_lower)[0] == artefact_id_lower:
+            return server
+            
+    return None
+
+
 # FAIR API Endpoints
 
 @app.get("/")
@@ -482,10 +503,8 @@ async def get_catalogue_record(
     display: List[str] = Query(default=None)
 ):
     """Get information about a semantic artefact catalog record."""
-    servers = await get_all_servers()
-    
     # Find the server with matching ontology ID
-    server = next((s for s in servers if s["ontology"] == artefact_id), None)
+    server = await _find_server_by_id(artefact_id)
     if not server:
         raise HTTPException(status_code=404, detail="Artefact not found")
     
@@ -537,7 +556,7 @@ async def get_api_documentation():
     </head>
     <body>
         <h1>AberOWL FAIR API Documentation</h1>
-        <p>This API implements the MOD (Metadata for Ontology Description and Publication) specification.</p>
+        <p>This API implements the MOD (Metadata for Ontology Description and Publication) specification. For more details, see the <a href="https://fair-impact.github.io/MOD-API/">official documentation</a> and the <a href="https://github.com/FAIR-IMPACT/MOD-API">GitHub repository</a>.</p>
         <h2>Available Endpoints:</h2>
         <ul>
             <li><code>GET /</code> - Get information about the semantic artefact catalogue</li>
@@ -657,10 +676,8 @@ async def get_artefact(
     display: List[str] = Query(default=None)
 ):
     """Get information about a semantic artefact."""
-    servers = await get_all_servers()
-    
     # Find the server with matching ontology ID
-    server = next((s for s in servers if s["ontology"] == artefact_id), None)
+    server = await _find_server_by_id(artefact_id)
     if not server:
         raise HTTPException(status_code=404, detail="Artefact not found")
     
@@ -731,10 +748,8 @@ async def get_artefact_distributions(
     display: List[str] = Query(default=None)
 ):
     """Get information about a semantic artefact's distributions."""
-    servers = await get_all_servers()
-    
     # Find the server with matching ontology ID
-    server = next((s for s in servers if s["ontology"] == artefact_id), None)
+    server = await _find_server_by_id(artefact_id)
     if not server:
         raise HTTPException(status_code=404, detail="Artefact not found")
     
@@ -793,10 +808,8 @@ async def get_artefact_latest_distribution(
     display: List[str] = Query(default=None)
 ):
     """Get information about a semantic artefact's latest distribution."""
-    servers = await get_all_servers()
-    
     # Find the server with matching ontology ID
-    server = next((s for s in servers if s["ontology"] == artefact_id), None)
+    server = await _find_server_by_id(artefact_id)
     if not server:
         raise HTTPException(status_code=404, detail="Artefact not found")
     
@@ -884,10 +897,8 @@ async def get_artefact_resources(
     pagesize: int = Query(default=50, ge=1, le=200)
 ):
     """Get a list of all the resources within an artefact."""
-    servers = await get_all_servers()
-    
     # Find the server with matching ontology ID
-    server = next((s for s in servers if s["ontology"] == artefact_id), None)
+    server = await _find_server_by_id(artefact_id)
     if not server:
         raise HTTPException(status_code=404, detail="Artefact not found")
     
@@ -938,6 +949,10 @@ async def get_artefact_classes(
     pagesize: int = Query(default=50, ge=1, le=200)
 ):
     """Get a list of all owl:Classes within an artefact."""
+    server = await _find_server_by_id(artefact_id)
+    if not server:
+        raise HTTPException(status_code=404, detail="Artefact not found")
+
     # This would need to query the actual ontology server for classes
     # For now, return empty collection
     response = {
@@ -974,6 +989,10 @@ async def get_artefact_concepts(
     pagesize: int = Query(default=50, ge=1, le=200)
 ):
     """Get a list of all skos:Concept within an artefact."""
+    server = await _find_server_by_id(artefact_id)
+    if not server:
+        raise HTTPException(status_code=404, detail="Artefact not found")
+
     # This would need to query the actual ontology server
     response = {
         "@context": {
@@ -1009,6 +1028,10 @@ async def get_artefact_properties(
     pagesize: int = Query(default=50, ge=1, le=200)
 ):
     """Get a list of all the rdf:Property within an artefact."""
+    server = await _find_server_by_id(artefact_id)
+    if not server:
+        raise HTTPException(status_code=404, detail="Artefact not found")
+
     # This would need to query the actual ontology server for properties
     response = {
         "@context": {
@@ -1044,6 +1067,9 @@ async def get_artefact_individuals(
     pagesize: int = Query(default=50, ge=1, le=200)
 ):
     """Get a list of all the instances (owl named individual) within an artefact."""
+    server = await _find_server_by_id(artefact_id)
+    if not server:
+        raise HTTPException(status_code=404, detail="Artefact not found")
     response = {
         "@context": {
             "hydra": "http://www.w3.org/ns/hydra/core#",
@@ -1078,6 +1104,9 @@ async def get_artefact_schemes(
     pagesize: int = Query(default=50, ge=1, le=200)
 ):
     """Get a list of all the skos:ConceptScheme within an artefact."""
+    server = await _find_server_by_id(artefact_id)
+    if not server:
+        raise HTTPException(status_code=404, detail="Artefact not found")
     response = {
         "@context": {
             "hydra": "http://www.w3.org/ns/hydra/core#",
@@ -1112,6 +1141,9 @@ async def get_artefact_collections(
     pagesize: int = Query(default=50, ge=1, le=200)
 ):
     """Get a list of all the skos:Collection within an artefact."""
+    server = await _find_server_by_id(artefact_id)
+    if not server:
+        raise HTTPException(status_code=404, detail="Artefact not found")
     response = {
         "@context": {
             "hydra": "http://www.w3.org/ns/hydra/core#",
@@ -1146,6 +1178,9 @@ async def get_artefact_labels(
     pagesize: int = Query(default=50, ge=1, le=200)
 ):
     """Get a list of all the skos-xl:Label within an artefact."""
+    server = await _find_server_by_id(artefact_id)
+    if not server:
+        raise HTTPException(status_code=404, detail="Artefact not found")
     response = {
         "@context": {
             "hydra": "http://www.w3.org/ns/hydra/core#",
@@ -1172,7 +1207,7 @@ async def get_artefact_labels(
 
 
 @app.get("/search")
-async def search_all(
+async def search_all_fair(
     request: Request,
     q: str = Query(..., description="The search query"),
     format: str = Query(default="jsonld", enum=["html", "jsonld", "ttl", "rdfxml"]),
@@ -1267,7 +1302,7 @@ async def search_content(
         "query_string": f"query={q}".encode(),
         "headers": []
     })
-    results = await search_all(search_request)
+    results = await search_all_api(search_request)
     
     # Transform results to focus on content (classes, properties, etc.)
     content_results = []
@@ -1323,7 +1358,7 @@ async def search_metadata(
 ):
     """Search all of the metadata in a catalogue."""
     # This is the same as the general search but focused on metadata only
-    return await search_all(request, q=q, format=format, page=page, pagesize=pagesize, display=display)
+    return await search_all_fair(request, q=q, format=format, page=page, pagesize=pagesize, display=display)
 
 
 async def _reset_all_data():
