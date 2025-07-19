@@ -444,6 +444,12 @@ async def get_catalogue_info(
     return JSONResponse(content=catalogue_info)
 
 
+@app.get("/about", response_class=HTMLResponse)
+async def about_page(request: Request):
+    """Serves the about page."""
+    return templates.TemplateResponse("about.html", {"request": request})
+
+
 @app.get("/records")
 async def get_catalogue_records(
     request: Request,
