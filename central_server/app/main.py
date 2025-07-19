@@ -19,8 +19,8 @@ from pydantic import BaseModel, HttpUrl
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-SERVERS_FILE_PATH = "servers.json"
-CATALOGUE_CONFIG_PATH = "catalogue_config.json"
+SERVERS_FILE_PATH = "app/servers.json"
+CATALOGUE_CONFIG_PATH = "app/catalogue_config.json"
 
 # Redis client instance will be managed in the lifespan context
 redis_client: redis.Redis = None
