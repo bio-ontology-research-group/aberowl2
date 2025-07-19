@@ -4,9 +4,29 @@ set -e
 # Script to reload the Virtuoso docker container with a new ontology
 # and trigger Elasticsearch indexing.
 
+show_help() {
+    echo "Usage: $0 [OPTIONS] <path_to_ontology_file> <nginx_port>"
+    echo "       $0 --stop <nginx_port>"
+    echo ""
+    echo "Script to manage AberOWL services using Docker Compose."
+    echo ""
+    echo "Options:"
+    echo "  --build              Force a rebuild of the Docker images."
+    echo "  -d, --detach         Run containers in detached mode."
+    echo "  --stop               Stop the services for the specified port."
+    echo "  --help               Show this help message and exit."
+    echo ""
+    echo "Examples:"
+    echo "  $0 --build -d data/pizza.owl 8080"
+    echo "  $0 --stop 8080"
+    echo ""
+    echo "Set ABEROWL_REGISTER=true and ABEROWL_CENTRAL_URL to enable registration with a central server."
+}
+
 # Argument parsing
 BUILD_FLAG=""
 DETACH_FLAG=""
+STOP_FLAG=""
 while [[ "$1" == -* ]]; do
     case "$1" in
         --build)
@@ -17,18 +37,50 @@ while [[ "$1" == -* ]]; do
             DETACH_FLAG="-d"
             shift
             ;;
+        --stop)
+            STOP_FLAG="true"
+            shift
+            ;;
+        --help)
+            show_help
+            exit 0
+            ;;
         *)
             echo "Unknown option: $1" >&2
+            show_help
             exit 1
             ;;
     esac
 done
 
-# Check if ontology file is provided
+# --- Stop Logic ---
+if [[ "$STOP_FLAG" == "true" ]]; then
+    if [ $# -lt 1 ]; then
+        echo "Error: Missing nginx_port for --stop operation." >&2
+        show_help
+        exit 1
+    fi
+    NGINX_PORT=$1
+    PROJECT_NAME="aberowl_${NGINX_PORT}"
+    ENV_DIR="env_files"
+    ENV_FILE="${ENV_DIR}/${PROJECT_NAME}.env"
+
+    if [ ! -f "$ENV_FILE" ]; then
+        echo "Error: Env file $ENV_FILE not found. Cannot stop services." >&2
+        echo "Please ensure you are using the correct port for a project started with this script." >&2
+        exit 1
+    fi
+
+    echo "Stopping and removing existing containers, networks, and volumes for project ${PROJECT_NAME}..."
+    docker compose --env-file "$ENV_FILE" down -v --remove-orphans
+    echo "Services for project ${PROJECT_NAME} stopped."
+    exit 0
+fi
+
+# Check if ontology file and port are provided for start/reload
 if [ $# -lt 2 ]; then
-    echo "Usage: $0 [--build] [-d|--detach] <path_to_ontology_file> <nginx_port>"
-    echo "Example: $0 --build -d data/pizza.owl 8080"
-    echo "Set ABEROWL_REGISTER=true and ABEROWL_CENTRAL_URL to enable registration with a central server."
+    echo "Error: Missing arguments for start/reload operation." >&2
+    show_help
     exit 1
 fi
 
