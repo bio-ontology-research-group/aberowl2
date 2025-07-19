@@ -398,11 +398,11 @@ async def get_catalogue_info(
         "@type": ["mod:SemanticArtefactCatalog", "dcat:Catalog"],
         "dcterms:title": {
             "@type": "rdfs:Literal",
-            "@value": "AberOWL Central Semantic Artefact Catalogue"
+            "@value": "AberOWL Ontology Repository"
         },
         "dcterms:description": {
             "@type": "rdfs:Literal", 
-            "@value": "A central catalogue aggregating semantic artefacts from multiple AberOWL servers"
+            "@value": "An ontology repository with active reasoning support"
         },
         "dcterms:publisher": "AberOWL",
         "dcat:service": {
