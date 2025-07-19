@@ -13,20 +13,23 @@ show_help() {
     echo "Options:"
     echo "  --build              Force a rebuild of the Docker images."
     echo "  -d, --detach         Run containers in detached mode."
+    echo "  --register <url>     Enable registration with a central server at the given URL."
     echo "  --stop               Stop the services for the specified port."
     echo "  --help               Show this help message and exit."
     echo ""
     echo "Examples:"
     echo "  $0 --build -d data/pizza.owl 8080"
+    echo "  $0 --register http://localhost:8000 -d data/go.owl 8080"
     echo "  $0 --stop 8080"
     echo ""
-    echo "Set ABEROWL_REGISTER=true and ABEROWL_CENTRAL_URL to enable registration with a central server."
+    echo "The --register option can also be configured with ABEROWL_REGISTER=true and ABEROWL_CENTRAL_URL environment variables."
 }
 
 # Argument parsing
 BUILD_FLAG=""
 DETACH_FLAG=""
 STOP_FLAG=""
+REGISTER_URL=""
 while [[ "$1" == -* ]]; do
     case "$1" in
         --build)
@@ -36,6 +39,15 @@ while [[ "$1" == -* ]]; do
         -d|--detach)
             DETACH_FLAG="-d"
             shift
+            ;;
+        --register)
+            if [ -z "$2" ] || [[ "$2" == -* ]]; then
+                echo "Error: --register option requires a URL." >&2
+                show_help
+                exit 1
+            fi
+            REGISTER_URL="$2"
+            shift 2
             ;;
         --stop)
             STOP_FLAG="true"
@@ -52,6 +64,13 @@ while [[ "$1" == -* ]]; do
             ;;
     esac
 done
+
+# Handle registration from command line option
+if [ -n "$REGISTER_URL" ]; then
+    export ABEROWL_REGISTER="true"
+    export ABEROWL_CENTRAL_URL="$REGISTER_URL"
+    echo "Registration enabled via --register flag. Central URL set to: $ABEROWL_CENTRAL_URL"
+fi
 
 # --- Stop Logic ---
 if [[ "$STOP_FLAG" == "true" ]]; then
