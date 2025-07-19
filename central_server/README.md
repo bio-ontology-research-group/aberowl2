@@ -11,11 +11,10 @@ This version, AberOWL 2, has been re-engineered for scalability and modern stand
 ### Development Team
 
 AberOWL 2 was developed by:
-- Maxat Kulmanov (lead, <maxat.kulmanov@kaust.edu.sa>)
+- Maxat Kulmanov (lead since 2017, <maxat.kulmanov@kaust.edu.sa>)
 - Fernando Zhapa Camacho (<fernando.zhapacamacho@kaust.edu.sa>)
 - Olga Mashkova (<olga.mashkova@kaust.edu.sa>)
-
-All work was supervised by Robert Hoehndorf (<robert.hoehndorf@kaust.edu.sa>) and Maxat Kulmanov.
+- Robert Hoehndorf (<robert.hoehndorf@kaust.edu.sa>)
 
 ## Running the Central Server
 

@@ -141,13 +141,22 @@ public class RequestManager {
 	// def ontology = lManager.loadOntologyFromOntologyDocument(IRI.create(this.ontIRI));
 	// def ont_file = new File(this.ontIRI)
 	// println "Loading ontology from ${ont_file.absolutePath}"
-	def ontology = lManager.loadOntologyFromOntologyDocument(new File(this.ontIRI));
-	OWLOntologyImportsClosureSetProvider provider = new OWLOntologyImportsClosureSetProvider(lManager, ontology);
-	OWLOntologyMerger merger = new OWLOntologyMerger(provider, false);
-	ontology = merger.createMergedOntology(lManager, IRI.create("http://merged.owl"));
+	def originalOntology = lManager.loadOntologyFromOntologyDocument(new File(this.ontIRI))
+	IRI originalOntologyIRI = originalOntology.getOntologyID().getOntologyIRI().orNull()
+	Set<OWLAnnotation> originalAnnotations = originalOntology.getAnnotations().collect()
 
-	this.ontology = ontology
-	this.oManager = lManager
+	// Perform merge
+	OWLOntologyImportsClosureSetProvider provider = new OWLOntologyImportsClosureSetProvider(lManager, originalOntology)
+	OWLOntologyMerger merger = new OWLOntologyMerger(provider, false)
+//	def mergedOntology = merger.createMergedOntology(lManager, IRI.create("http://merged.owl"))	
+	def mergedOntology = merger.createMergedOntology(lManager, originalOntologyIRI ?: IRI.create("http://merged.owl"))
+	
+	originalAnnotations.each { annotation ->
+            lManager.applyChange(new AddOntologyAnnotation(mergedOntology, annotation))
+	}
+    
+	this.ontology = mergedOntology
+	this.oManager = lManager	
     }
 
     /**
