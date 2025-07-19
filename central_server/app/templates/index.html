@@ -9,6 +9,9 @@
 </head>
 <body>
     <div class="container">
+        <button type="button" class="btn btn-info btn-sm pull-right" data-toggle="modal" data-target="#documentationModal" style="margin-top: 20px;">
+            API Documentation
+        </button>
         <h1>AberOWL Ontology Servers</h1>
         <p>A list of currently registered and active AberOWL ontology instances.</p>
 
@@ -17,7 +20,6 @@
                 <ul class="nav nav-tabs" id="queryTabs">
                     <li class="active"><a href="#dlQueryTab" data-toggle="tab">DL Query</a></li>
                     <li><a href="#textSearchTab" data-toggle="tab">Text Search</a></li>
-                    <li><a href="#documentationTab" data-toggle="tab">Documentation</a></li>
                 </ul>
             </div>
             <div class="panel-body">
@@ -49,79 +51,6 @@
                             </div>
                             <button type="submit" class="btn btn-primary">Search</button>
                         </form>
-                    </div>
-                    <div class="tab-pane" id="documentationTab">
-                        <h3>API Documentation</h3>
-                        <p>This document provides information about the AberOWL Central Server API, including the FAIR API (MOD-API).</p>
-                        
-                        <div class="panel panel-info">
-                            <div class="panel-heading"><strong>Server Management API</strong></div>
-                            <div class="panel-body">
-                                <p><strong>POST /register</strong></p>
-                                <p>Register an ontology server. Returns a secret key for updates.</p>
-                                <pre><code>curl -X POST -H "Content-Type: application/json" -d '{"ontology": "MYONT", "url": "http://my.server.com/ontology"}' {{ request.url.scheme }}://{{ request.url.netloc }}/register</code></pre>
-                            </div>
-                        </div>
-
-                        <div class="panel panel-info">
-                            <div class="panel-heading"><strong>Query API</strong></div>
-                            <div class="panel-body">
-                                <p><strong>GET /api/servers</strong></p>
-                                <p>Get a list of all registered servers and their metadata.</p>
-                                <p>Example: <a href="/api/servers" target="_blank">/api/servers</a></p>
-                                <hr>
-                                <p><strong>GET /api/search_all</strong></p>
-                                <p>Run a text search across all online servers.</p>
-                                <p>Parameters: <code>query</code> (required), <code>ontologies</code> (optional, comma-separated).</p>
-                                <p>Example: <a href="/api/search_all?query=cell" target="_blank">/api/search_all?query=cell</a></p>
-                                <hr>
-                                <p><strong>GET /api/dlquery_all</strong></p>
-                                <p>Run a DL query across all online servers.</p>
-                                <p>Parameters: <code>query</code> (required), <code>type</code> (required, e.g., subclass), <code>ontologies</code> (optional, comma-separated).</p>
-                                <p>Example: <a href="/api/dlquery_all?query='has part' some nucleus&type=subclass" target="_blank">/api/dlquery_all?query='has part' some nucleus&type=subclass</a></p>
-                            </div>
-                        </div>
-
-                        <div class="panel panel-info">
-                            <div class="panel-heading"><strong>FAIR API (MOD-API)</strong></div>
-                            <div class="panel-body">
-                                <h4>Catalogue</h4>
-                                <p><strong>GET /</strong>: Get information about the semantic artefact catalogue.</p>
-                                <p>Example: <a href="/?format=jsonld" target="_blank">/?format=jsonld</a></p>
-                                
-                                <h4>Records</h4>
-                                <p><strong>GET /records</strong>: Get all catalog records.</p>
-                                <p>Example: <a href="/records?format=jsonld" target="_blank">/records?format=jsonld</a></p>
-                                <p><strong>GET /records/{artefact_id}</strong>: Get a specific catalog record.</p>
-                                <p>Example: <a href="/records/GO?format=jsonld" target="_blank">/records/GO?format=jsonld</a> (replace GO with a registered ontology)</p>
-
-                                <h4>Artefacts</h4>
-                                <p><strong>GET /artefacts</strong>: Get all semantic artefacts.</p>
-                                <p>Example: <a href="/artefacts?format=jsonld" target="_blank">/artefacts?format=jsonld</a></p>
-                                <p><strong>GET /artefacts/{artefact_id}</strong>: Get a specific semantic artefact.</p>
-                                <p>Example: <a href="/artefacts/GO?format=jsonld" target="_blank">/artefacts/GO?format=jsonld</a> (replace GO with a registered ontology)</p>
-
-                                <h4>Distributions</h4>
-                                <p><strong>GET /artefacts/{artefact_id}/distributions</strong>: Get distributions for an artefact.</p>
-                                <p>Example: <a href="/artefacts/GO/distributions?format=jsonld" target="_blank">/artefacts/GO/distributions?format=jsonld</a> (replace GO with a registered ontology)</p>
-                                <p><strong>GET /artefacts/{artefact_id}/distributions/latest</strong>: Get the latest distribution.</p>
-                                <p>Example: <a href="/artefacts/GO/distributions/latest?format=jsonld" target="_blank">/artefacts/GO/distributions/latest?format=jsonld</a> (replace GO with a registered ontology)</p>
-
-                                <h4>Resources (Partially Implemented)</h4>
-                                <p>These endpoints provide information about resources within an artefact. Most will return empty collections.</p>
-                                <p><strong>GET /artefacts/{artefact_id}/resources</strong>: <a href="/artefacts/GO/resources" target="_blank">Example</a> (replace GO with a registered ontology)</p>
-                                <p><strong>GET /artefacts/{artefact_id}/resources/classes</strong>: <a href="/artefacts/GO/resources/classes" target="_blank">Example</a> (replace GO with a registered ontology)</p>
-                                <p><strong>GET /artefacts/{artefact_id}/resources/properties</strong>: <a href="/artefacts/GO/resources/properties" target="_blank">Example</a> (replace GO with a registered ontology)</p>
-
-                                <h4>Search</h4>
-                                <p><strong>GET /search</strong>: Search metadata and content.</p>
-                                <p>Example: <a href="/search?q=gene&format=jsonld" target="_blank">/search?q=gene&format=jsonld</a></p>
-                                <p><strong>GET /search/content</strong>: Search content only.</p>
-                                <p>Example: <a href="/search/content?q=cell&format=jsonld" target="_blank">/search/content?q=cell&format=jsonld</a></p>
-                                <p><strong>GET /search/metadata</strong>: Search metadata only.</p>
-                                <p>Example: <a href="/search/metadata?q=biological&format=jsonld" target="_blank">/search/metadata?q=biological&format=jsonld</a></p>
-                            </div>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -177,5 +106,92 @@
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
     <script src="/static/main.js"></script>
+
+    <!-- Documentation Modal -->
+    <div class="modal fade" id="documentationModal" tabindex="-1" role="dialog" aria-labelledby="documentationModalLabel">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                    <h4 class="modal-title" id="documentationModalLabel">API Documentation</h4>
+                </div>
+                <div class="modal-body">
+                    <p>This document provides information about the AberOWL Central Server API, including the FAIR API (MOD-API).</p>
+                    
+                    <div class="panel panel-info">
+                        <div class="panel-heading"><strong>Server Management API</strong></div>
+                        <div class="panel-body">
+                            <p><strong>POST /register</strong></p>
+                            <p>Register an ontology server. Returns a secret key for updates.</p>
+                            <pre><code>curl -X POST -H "Content-Type: application/json" -d '{"ontology": "MYONT", "url": "http://my.server.com/ontology"}' {{ request.url.scheme }}://{{ request.url.netloc }}/register</code></pre>
+                        </div>
+                    </div>
+
+                    <div class="panel panel-info">
+                        <div class="panel-heading"><strong>Query API</strong></div>
+                        <div class="panel-body">
+                            <p><strong>GET /api/servers</strong></p>
+                            <p>Get a list of all registered servers and their metadata.</p>
+                            <p>Example: <a href="/api/servers" target="_blank">/api/servers</a></p>
+                            <hr>
+                            <p><strong>GET /api/search_all</strong></p>
+                            <p>Run a text search across all online servers.</p>
+                            <p>Parameters: <code>query</code> (required), <code>ontologies</code> (optional, comma-separated).</p>
+                            <p>Example: <a href="/api/search_all?query=cell" target="_blank">/api/search_all?query=cell</a></p>
+                            <hr>
+                            <p><strong>GET /api/dlquery_all</strong></p>
+                            <p>Run a DL query across all online servers.</p>
+                            <p>Parameters: <code>query</code> (required), <code>type</code> (required, e.g., subclass), <code>ontologies</code> (optional, comma-separated).</p>
+                            <p>Example: <a href="/api/dlquery_all?query='has part' some nucleus&type=subclass" target="_blank">/api/dlquery_all?query='has part' some nucleus&type=subclass</a></p>
+                        </div>
+                    </div>
+
+                    <div class="panel panel-info">
+                        <div class="panel-heading"><strong>FAIR API (MOD-API)</strong></div>
+                        <div class="panel-body">
+                            <h4>Catalogue</h4>
+                            <p><strong>GET /</strong>: Get information about the semantic artefact catalogue.</p>
+                            <p>Example: <a href="/?format=jsonld" target="_blank">/?format=jsonld</a></p>
+                            
+                            <h4>Records</h4>
+                            <p><strong>GET /records</strong>: Get all catalog records.</p>
+                            <p>Example: <a href="/records?format=jsonld" target="_blank">/records?format=jsonld</a></p>
+                            <p><strong>GET /records/{artefact_id}</strong>: Get a specific catalog record.</p>
+                            <p>Example: <a href="/records/GO?format=jsonld" target="_blank">/records/GO?format=jsonld</a> (replace GO with a registered ontology)</p>
+
+                            <h4>Artefacts</h4>
+                            <p><strong>GET /artefacts</strong>: Get all semantic artefacts.</p>
+                            <p>Example: <a href="/artefacts?format=jsonld" target="_blank">/artefacts?format=jsonld</a></p>
+                            <p><strong>GET /artefacts/{artefact_id}</strong>: Get a specific semantic artefact.</p>
+                            <p>Example: <a href="/artefacts/GO?format=jsonld" target="_blank">/artefacts/GO?format=jsonld</a> (replace GO with a registered ontology)</p>
+
+                            <h4>Distributions</h4>
+                            <p><strong>GET /artefacts/{artefact_id}/distributions</strong>: Get distributions for an artefact.</p>
+                            <p>Example: <a href="/artefacts/GO/distributions?format=jsonld" target="_blank">/artefacts/GO/distributions?format=jsonld</a> (replace GO with a registered ontology)</p>
+                            <p><strong>GET /artefacts/{artefact_id}/distributions/latest</strong>: Get the latest distribution.</p>
+                            <p>Example: <a href="/artefacts/GO/distributions/latest?format=jsonld" target="_blank">/artefacts/GO/distributions/latest?format=jsonld</a> (replace GO with a registered ontology)</p>
+
+                            <h4>Resources (Partially Implemented)</h4>
+                            <p>These endpoints provide information about resources within an artefact. Most will return empty collections.</p>
+                            <p><strong>GET /artefacts/{artefact_id}/resources</strong>: <a href="/artefacts/GO/resources" target="_blank">Example</a> (replace GO with a registered ontology)</p>
+                            <p><strong>GET /artefacts/{artefact_id}/resources/classes</strong>: <a href="/artefacts/GO/resources/classes" target="_blank">Example</a> (replace GO with a registered ontology)</p>
+                            <p><strong>GET /artefacts/{artefact_id}/resources/properties</strong>: <a href="/artefacts/GO/resources/properties" target="_blank">Example</a> (replace GO with a registered ontology)</p>
+
+                            <h4>Search</h4>
+                            <p><strong>GET /search</strong>: Search metadata and content.</p>
+                            <p>Example: <a href="/search?q=gene&format=jsonld" target="_blank">/search?q=gene&format=jsonld</a></p>
+                            <p><strong>GET /search/content</strong>: Search content only.</p>
+                            <p>Example: <a href="/search/content?q=cell&format=jsonld" target="_blank">/search/content?q=cell&format=jsonld</a></p>
+                            <p><strong>GET /search/metadata</strong>: Search metadata only.</p>
+                            <p>Example: <a href="/search/metadata?q=biological&format=jsonld" target="_blank">/search/metadata?q=biological&format=jsonld</a></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
