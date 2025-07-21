@@ -1357,7 +1357,7 @@ const sparqlUrl = `/api/api/runSparqlQuery.groovy?${params.toString()}`;
     const indexName = `class_index_${port}`;
     
     // Direct Elasticsearch query for label matches
-    fetch(`/elastic/${indexName}/_search`, {
+    fetch(`/api/elastic/${indexName}/_search`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
