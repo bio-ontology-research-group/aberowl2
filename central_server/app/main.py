@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 import aiohttp
 import redis.asyncio as redis
 from fastapi import FastAPI, Request, Query, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, HttpUrl
@@ -25,6 +25,7 @@ CATALOGUE_CONFIG_PATH = "app/catalogue_config.json"
 # Redis client instance will be managed in the lifespan context
 redis_client: redis.Redis = None
 catalogue_config: Dict[str, Any] = {}
+ELASTICSEARCH_URL = "http://elasticsearch:9200"
 
 
 async def _load_catalogue_config():
@@ -381,6 +382,39 @@ async def get_servers():
     server_data_json = await redis_client.hvals("registered_servers")
     servers = [json.loads(s) for s in server_data_json]
     return servers
+
+
+@app.api_route("/api/elastic/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def elastic_proxy(request: Request, path: str):
+    """Proxies requests to Elasticsearch."""
+    async with aiohttp.ClientSession() as session:
+        target_url = f"{ELASTICSEARCH_URL}/{path}"
+        
+        data = await request.body()
+        
+        # Forward headers, excluding some that are specific to the incoming request
+        headers = {
+            key: value for key, value in request.headers.items() 
+            if key.lower() not in ['host', 'connection', 'accept-encoding', 'content-length', 'user-agent']
+        }
+        
+        try:
+            async with session.request(
+                method=request.method,
+                url=target_url,
+                params=request.query_params,
+                data=data,
+                headers=headers
+            ) as proxy_response:
+                response_content = await proxy_response.read()
+                return Response(
+                    content=response_content,
+                    status_code=proxy_response.status,
+                    media_type=proxy_response.content_type
+                )
+        except aiohttp.ClientConnectorError as e:
+            logger.error(f"Elasticsearch proxy error: {e}")
+            raise HTTPException(status_code=502, detail=f"Could not connect to Elasticsearch service: {e}")
 
 
 async def get_all_servers():
