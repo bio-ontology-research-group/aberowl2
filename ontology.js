@@ -1364,14 +1364,17 @@ const sparqlUrl = `/api/api/runSparqlQuery.groovy?${params.toString()}`;
       },
       body: JSON.stringify({
         query: {
-            bool: {
-		should: [
-		    {match: {label: {query: search.toLowerCase(), boost: 2}}},
-		    {match_bool_prefix: {label: search.toLowerCase()}}
-		]
-            // must: [	    
-              // {match_bool_prefix: {label: search.toLowerCase()}},
-            // ]
+          bool: {
+            must: {
+              query_string: {
+                query: `*${search.toLowerCase()}*`,
+                fields: ["label", "synonyms"]
+              }
+            },
+            should: [
+              { match_phrase_prefix: { label: { query: search.toLowerCase(), boost: 4 } } },
+              { match_phrase_prefix: { synonyms: { query: search.toLowerCase(), boost: 2 } } }
+            ]
           }
         },
         _source: {excludes: ['embedding_vector',]},

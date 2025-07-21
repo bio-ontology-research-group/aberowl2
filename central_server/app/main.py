@@ -286,9 +286,15 @@ async def search_all_api(request: Request):
         es_query = {
             "query": {
                 "bool": {
+                    "must": {
+                        "query_string": {
+                            "query": f"*{query.lower()}*",
+                            "fields": ["label", "synonyms"]
+                        }
+                    },
                     "should": [
-                        {"match": {"label": {"query": query.lower(), "boost": 2}}},
-                        {"match_bool_prefix": {"label": query.lower()}}
+                        {"match_phrase_prefix": {"label": {"query": query.lower(), "boost": 4}}},
+                        {"match_phrase_prefix": {"synonyms": {"query": query.lower(), "boost": 2}}}
                     ]
                 }
             },
