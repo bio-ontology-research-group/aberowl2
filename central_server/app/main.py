@@ -403,18 +403,30 @@ async def elastic_proxy(request: Request, path: str):
         target_url = f"{ELASTICSEARCH_URL}/{path}"
         
         data = await request.body()
+        params = request.query_params
+        method = request.method
         
         # Forward headers, excluding some that are specific to the incoming request
         headers = {
             key: value for key, value in request.headers.items() 
             if key.lower() not in ['host', 'connection', 'accept-encoding', 'content-length', 'user-agent']
         }
+
+        if method == "POST":
+            method = "GET"
+            if data:
+                # ES can take query in `source` parameter for GET requests
+                new_params = list(params.items())
+                new_params.append(('source', data.decode('utf-8')))
+                new_params.append(('source_content_type', 'application/json'))
+                params = new_params
+                data = None
         
         try:
             async with session.request(
-                method=request.method,
+                method=method,
                 url=target_url,
-                params=request.query_params,
+                params=params,
                 data=data,
                 headers=headers
             ) as proxy_response:
