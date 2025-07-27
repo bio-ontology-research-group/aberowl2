@@ -281,7 +281,7 @@ async def search_all_api(request: Request):
             port = 80 if parsed_url.scheme == 'http' else 443
         
         index_name = f"class_index_{port}"
-        api_url = f"{str(server_url).rstrip('/')}/api/elastic/{index_name}"
+        api_url = f"{str(server_url).rstrip('/')}/api/api/elastic.groovy"
         
         es_query = {
             "query": {
@@ -293,17 +293,23 @@ async def search_all_api(request: Request):
                         }
                     },
                     "should": [
-                        {"match_phrase_prefix": {"label": {"query": query.lower(), "boost": 4}}},
-                        {"match_phrase_prefix": {"synonyms": {"query": query.lower(), "boost": 2}}}
+                        {"prefix": {"label": {"value": query.lower(), "boost": 4}}},
+                        {"prefix": {"synonyms": {"value": query.lower(), "boost": 2}}}
                     ]
                 }
             },
             "_source": {"excludes": ["embedding_vector"]},
             "size": 100
         }
+
+        params = {
+            "index": index_name,
+            "source": json.dumps(es_query),
+            "source_content_type": "application/json"
+        }
         
         try:
-            async with session.post(api_url, json=es_query, timeout=20) as response:
+            async with session.get(api_url, params=params, timeout=20) as response:
                 if response.status == 200:
                     data = await response.json()
                     hits = data.get("hits", {}).get("hits", [])
