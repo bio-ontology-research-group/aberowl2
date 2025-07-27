@@ -18,8 +18,27 @@ if (!indexName) {
     return
 }
 
-// Read the request body
-def requestBody = request.reader.text
+// Handle both GET and POST requests
+def requestBody = ""
+def httpMethod = request.getMethod()
+
+if (httpMethod == "POST") {
+    // Read the request body for POST requests
+    requestBody = request.reader.text
+} else if (httpMethod == "GET") {
+    // For GET requests, build a match_all query
+    requestBody = new JsonBuilder([
+        query: [
+            match_all: [:]
+        ]
+    ]).toString()
+} else {
+    response.setStatus(405)
+    response.setContentType("application/json")
+    def error = [error: "Method not allowed. Only GET and POST are supported."]
+    response.writer.write(new JsonBuilder(error).toString())
+    return
+}
 
 // Forward the request to Elasticsearch
 def esUrl = "http://localhost:9200/${indexName}/_search"
