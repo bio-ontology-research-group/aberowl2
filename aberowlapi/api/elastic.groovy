@@ -46,7 +46,7 @@ if (httpMethod == "POST") {
 }
 
 // Forward the request to Elasticsearch
-def esBaseUrl = System.getenv("ELASTICSEARCH_URL") ?: "http://localhost:9200"
+def esBaseUrl = System.getenv("ELASTICSEARCH_URL") ?: "http://elasticsearch:9200"
 def encodedQuery = URLEncoder.encode(requestBody, "UTF-8")
 def esUrl = "${esBaseUrl}/${indexName}/_search?source=${encodedQuery}&source_content_type=application/json"
 

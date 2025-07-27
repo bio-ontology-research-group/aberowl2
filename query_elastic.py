@@ -3,7 +3,7 @@ import os
 from elasticsearch import Elasticsearch
 
 # Connect to Elasticsearch server
-es_url = os.getenv("ELASTICSEARCH_URL", "http://localhost:9200")
+es_url = os.getenv("ELASTICSEARCH_URL", "http://elasticsearch:9200")
 es = Elasticsearch(es_url)
 
 # Define parameters
