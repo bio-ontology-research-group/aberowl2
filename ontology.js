@@ -1376,12 +1376,13 @@ const sparqlUrl = `/api/api/runSparqlQuery.groovy?${params.toString()}`;
       size: 10
     };
 
-    const params = new URLSearchParams({
-        source: JSON.stringify(esQuery),
-        source_content_type: 'application/json'
-    });
-
-    fetch(`/api/elastic/${indexName}?${params.toString()}`)
+    fetch(`/api/elastic/${indexName}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(esQuery)
+    })
     .then(response => {
       if (!response.ok) throw new Error('Network response was not ok');
       return response.json();
