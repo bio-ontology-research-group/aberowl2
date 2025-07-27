@@ -1367,7 +1367,7 @@ const sparqlUrl = `/api/api/runSparqlQuery.groovy?${params.toString()}`;
             }
           },
           should: [
-            { match_phrase_prefix: { label: { query: search.toLowerCase(), boost: 4 } } },
+            { prefix: { label: { value: search.toLowerCase(), boost: 4 } } },
             { match_phrase_prefix: { synonyms: { query: search.toLowerCase(), boost: 2 } } }
           ]
         }
