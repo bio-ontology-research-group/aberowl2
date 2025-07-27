@@ -14,6 +14,7 @@ show_help() {
     echo "  --build              Force a rebuild of the Docker images."
     echo "  -d, --detach         Run containers in detached mode."
     echo "  --register <url>     Enable registration with a central server at the given URL."
+    echo "  --elasticsearch-url <url> Configure the Elasticsearch URL."
     echo "  --stop               Stop the services for the specified port."
     echo "  --help               Show this help message and exit."
     echo ""
@@ -30,6 +31,7 @@ BUILD_FLAG=""
 DETACH_FLAG=""
 STOP_FLAG=""
 REGISTER_URL=""
+ELASTICSEARCH_URL_OVERRIDE=""
 while [[ "$1" == -* ]]; do
     case "$1" in
         --build)
@@ -47,6 +49,15 @@ while [[ "$1" == -* ]]; do
                 exit 1
             fi
             REGISTER_URL="$2"
+            shift 2
+            ;;
+        --elasticsearch-url)
+            if [ -z "$2" ] || [[ "$2" == -* ]]; then
+                echo "Error: --elasticsearch-url option requires a URL." >&2
+                show_help
+                exit 1
+            fi
+            ELASTICSEARCH_URL_OVERRIDE="$2"
             shift 2
             ;;
         --stop)
@@ -154,7 +165,7 @@ mkdir -p "$ENV_DIR"
 echo "Using env file: $ENV_FILE"
 
 # Elasticsearch settings
-ELASTICSEARCH_URL="http://elasticsearch:9200"
+ELASTICSEARCH_URL=${ELASTICSEARCH_URL_OVERRIDE:-"http://elasticsearch:9200"}
 ONTOLOGY_INDEX_NAME="ontology_index_${NGINX_PORT}"
 CLASS_INDEX_NAME="class_index_${NGINX_PORT}"
 SKIP_EMBEDDING=${SKIP_EMBEDDING:-"True"} # Set to "False" to attempt embedding loading
