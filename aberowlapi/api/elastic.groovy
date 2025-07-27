@@ -7,9 +7,8 @@ import java.net.http.HttpResponse
 import java.net.URI
 import java.net.URLEncoder
 
-// Get the index name from the path
-def pathInfo = request.getPathInfo()
-def indexName = pathInfo ? pathInfo.substring(1) : null // Remove leading slash
+// Get the index name from the query parameter
+def indexName = request.getParameter("index")
 
 if (!indexName) {
     response.setStatus(400)

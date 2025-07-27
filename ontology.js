@@ -1377,11 +1377,12 @@ const sparqlUrl = `/api/api/runSparqlQuery.groovy?${params.toString()}`;
     };
 
     const params = new URLSearchParams({
+        index: indexName,
         source: JSON.stringify(esQuery),
         source_content_type: 'application/json'
     });
 
-    fetch(`/api/api/elastic.groovy/${indexName}?${params.toString()}`, {
+    fetch(`/api/api/elastic.groovy?${params.toString()}`, {
       method: 'GET'
     })
     .then(response => {
