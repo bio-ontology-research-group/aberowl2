@@ -1381,7 +1381,7 @@ const sparqlUrl = `/api/api/runSparqlQuery.groovy?${params.toString()}`;
         source_content_type: 'application/json'
     });
 
-    fetch(`/api/elastic/${indexName}?${params.toString()}`, {
+    fetch(`/api/api/elastic.groovy/${indexName}?${params.toString()}`, {
       method: 'GET'
     })
     .then(response => {
