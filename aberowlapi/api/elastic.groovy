@@ -5,6 +5,7 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.net.URI
+import java.net.URLEncoder
 
 // Get the index name from the path
 def pathInfo = request.getPathInfo()
@@ -26,12 +27,17 @@ if (httpMethod == "POST") {
     // Read the request body for POST requests
     requestBody = request.reader.text
 } else if (httpMethod == "GET") {
-    // For GET requests, build a match_all query
-    requestBody = new JsonBuilder([
-        query: [
-            match_all: [:]
-        ]
-    ]).toString()
+    def source = request.getParameter("source")
+    if (source) {
+        requestBody = source
+    } else {
+        // For GET requests without a source, build a match_all query
+        requestBody = new JsonBuilder([
+            query: [
+                match_all: [:]
+            ]
+        ]).toString()
+    }
 } else {
     response.setStatus(405)
     response.setContentType("application/json")
@@ -41,16 +47,16 @@ if (httpMethod == "POST") {
 }
 
 // Forward the request to Elasticsearch
-def esUrl = "http://localhost:9200/${indexName}/_search"
+def encodedQuery = URLEncoder.encode(requestBody, "UTF-8")
+def esUrl = "http://localhost:9200/${indexName}/_search?source=${encodedQuery}&source_content_type=application/json"
 
 try {
     def client = HttpClient.newHttpClient()
     def esRequest = HttpRequest.newBuilder()
         .uri(URI.create(esUrl))
-        .header("Content-Type", "application/json")
-        .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+        .GET()
         .build()
-    
+
     def esResponse = client.send(esRequest, HttpResponse.BodyHandlers.ofString())
     
     // Forward the response
