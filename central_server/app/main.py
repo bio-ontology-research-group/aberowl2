@@ -301,7 +301,7 @@ async def search_all_api(request: Request):
                 }
             },
             "_source": {"excludes": ["embedding_vector"]},
-            "size": 100
+            "size": 10000
         }
 
         params = {
