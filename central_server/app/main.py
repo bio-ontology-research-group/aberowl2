@@ -283,6 +283,8 @@ async def search_all_api(request: Request):
         index_name = f"class_index_{port}"
         api_url = f"{str(server_url).rstrip('/')}/api/api/elastic.groovy"
         
+        logger.info(f"Querying {ontology_name} for '{query}' at {api_url}")
+
         es_query = {
             "query": {
                 "bool": {
