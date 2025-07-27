@@ -281,7 +281,7 @@ async def search_all_api(request: Request):
             port = 80 if parsed_url.scheme == 'http' else 443
         
         index_name = f"class_index_{port}"
-        api_url = f"{str(server_url).rstrip('/')}/api/elastic/{index_name}/_search"
+        api_url = f"{str(server_url).rstrip('/')}/api/elastic/{index_name}"
         
         es_query = {
             "query": {

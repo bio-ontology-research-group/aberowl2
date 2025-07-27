@@ -1381,7 +1381,7 @@ const sparqlUrl = `/api/api/runSparqlQuery.groovy?${params.toString()}`;
         source_content_type: 'application/json'
     });
 
-    fetch(`/api/elastic/${indexName}/_search?${params.toString()}`)
+    fetch(`/api/elastic/${indexName}?${params.toString()}`)
     .then(response => {
       if (!response.ok) throw new Error('Network response was not ok');
       return response.json();
