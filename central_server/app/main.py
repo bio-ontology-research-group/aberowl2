@@ -303,7 +303,8 @@ async def search_all_api(request: Request):
         }
         
         try:
-            async with session.post(api_url, json=es_query, timeout=20) as response:
+            params = {'source': json.dumps(es_query), 'source_content_type': 'application/json'}
+            async with session.get(api_url, params=params, timeout=20) as response:
                 if response.status == 200:
                     data = await response.json()
                     hits = data.get("hits", {}).get("hits", [])

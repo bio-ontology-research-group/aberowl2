@@ -1357,30 +1357,31 @@ const sparqlUrl = `/api/api/runSparqlQuery.groovy?${params.toString()}`;
     const indexName = `class_index_${port}`;
     
     // Direct Elasticsearch query for label matches
-    fetch(`/api/elastic/${indexName}/_search`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    const esQuery = {
+      query: {
+        bool: {
+          must: {
+            query_string: {
+              query: `*${search.toLowerCase()}*`,
+              fields: ["label", "synonyms"]
+            }
+          },
+          should: [
+            { match_phrase_prefix: { label: { query: search.toLowerCase(), boost: 4 } } },
+            { match_phrase_prefix: { synonyms: { query: search.toLowerCase(), boost: 2 } } }
+          ]
+        }
       },
-      body: JSON.stringify({
-        query: {
-          bool: {
-            must: {
-              query_string: {
-                query: `*${search.toLowerCase()}*`,
-                fields: ["label", "synonyms"]
-              }
-            },
-            should: [
-              { match_phrase_prefix: { label: { query: search.toLowerCase(), boost: 4 } } },
-              { match_phrase_prefix: { synonyms: { query: search.toLowerCase(), boost: 2 } } }
-            ]
-          }
-        },
-        _source: {excludes: ['embedding_vector',]},
-        size: 10
-      })
-    })
+      _source: {excludes: ['embedding_vector',]},
+      size: 10
+    };
+
+    const params = new URLSearchParams({
+        source: JSON.stringify(esQuery),
+        source_content_type: 'application/json'
+    });
+
+    fetch(`/api/elastic/${indexName}/_search?${params.toString()}`)
     .then(response => {
       if (!response.ok) throw new Error('Network response was not ok');
       return response.json();
