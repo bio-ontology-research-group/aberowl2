@@ -79,6 +79,7 @@ def startServer(def ontologyFilePath, def port) {
     context.addServlet(GroovyServlet, '/api/sparql.groovy')
     context.addServlet(GroovyServlet, '/api/runSparqlQuery.groovy')
     context.addServlet(GroovyServlet, '/api/getSparqlExamples.groovy')
+    context.addServlet(GroovyServlet, '/api/elastic.groovy/*')
 
     context.setAttribute('port', port)
     context.setAttribute('version', '0.2')
