@@ -9,3 +9,5 @@ camel-ai
 fastapi
 pillow
 unstructured
+mcp
+fastmcp
