@@ -148,6 +148,37 @@
                     </div>
 
                     <div class="panel panel-info">
+                        <div class="panel-heading"><strong>MCP API (Machine-to-Machine)</strong></div>
+                        <div class="panel-body">
+                            <p>The server also exposes its API via MCP (Machine-to-Machine Communication Protocol), which can be more efficient for programmatic access than HTTP.</p>
+                            <p>To enable the MCP server, set the <code>MCP_SERVER_ADDRESS</code> environment variable, e.g., <code>mcp://0.0.0.0:8001</code>. The Docker Compose setup enables this by default on port 8001.</p>
+                            <p>You can interact with it using an MCP agent. Here is a Python example using the <code>mcp</code> library:</p>
+                            <pre><code>import asyncio
+from mcp import Agent
+
+async def main():
+    client_agent = Agent()
+    server_address = "mcp://127.0.0.1:8001"
+    
+    # Get the list of servers (equivalent to GET /api/servers)
+    servers = await client_agent.arun_endpoint(
+        server_address, "/api/servers"
+    )
+    print("Registered servers:", servers)
+    
+    # Run a DL query (equivalent to GET /api/dlquery_all)
+    dl_query_params = {"query": "'has part' some nucleus", "type": "subclass"}
+    dl_results = await client_agent.arun_endpoint(
+        server_address, "/api/dlquery_all", params=dl_query_params
+    )
+    print("DL Query results:", dl_results)
+
+if __name__ == "__main__":
+    asyncio.run(main())</code></pre>
+                        </div>
+                    </div>
+
+                    <div class="panel panel-info">
                         <div class="panel-heading"><strong>FAIR API (MOD-API)</strong></div>
                         <div class="panel-body">
                             <h4>Catalogue</h4>
