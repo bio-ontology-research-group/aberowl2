@@ -30,7 +30,18 @@ class MCPTestAgent:
         if not mcp_server_url:
             raise ValueError("MCP server URL must be provided.")
         
-        self.mcp_server_url = mcp_server_url
+        # Convert mcp:// URL to ws:// URL
+        if mcp_server_url.startswith("mcp://"):
+            self.mcp_server_url = mcp_server_url.replace("mcp://", "ws://")
+        elif mcp_server_url.startswith("mcps://"):
+            self.mcp_server_url = mcp_server_url.replace("mcps://", "wss://")
+        else:
+            # Assume it's already a WebSocket URL or add ws:// prefix
+            if not mcp_server_url.startswith(("ws://", "wss://")):
+                self.mcp_server_url = f"ws://{mcp_server_url}"
+            else:
+                self.mcp_server_url = mcp_server_url
+        
         self.session = None
         self.stats = {
             "start_time": None,
