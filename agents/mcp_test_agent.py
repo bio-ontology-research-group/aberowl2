@@ -14,8 +14,7 @@ import time
 from typing import Any, Dict, List
 from datetime import datetime
 
-from mcp import ClientSession
-from mcp.client.websocket import websocket_client as mcp_connect
+import websockets
 
 
 class MCPTestAgent:
@@ -42,7 +41,8 @@ class MCPTestAgent:
             else:
                 self.mcp_server_url = mcp_server_url
         
-        self.session = None
+        self.websocket = None
+        self.request_id = 0
         self.stats = {
             "start_time": None,
             "end_time": None,
@@ -54,14 +54,43 @@ class MCPTestAgent:
             "results": {}
         }
     
+    async def send_request(self, method: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Send a JSON-RPC request to the MCP server."""
+        self.request_id += 1
+        request = {
+            "jsonrpc": "2.0",
+            "id": self.request_id,
+            "method": method,
+            "params": params or {}
+        }
+        
+        await self.websocket.send(json.dumps(request))
+        response = await self.websocket.recv()
+        return json.loads(response)
+    
     async def connect(self):
         """Connect to the MCP server."""
         print(f"🔌 Connecting to MCP server at: {self.mcp_server_url}")
         
-        # Create and connect the client session
-        async with mcp_connect(self.mcp_server_url) as session:
-            self.session = session
-            await self.run_tests()
+        # Connect to the WebSocket server
+        self.websocket = await websockets.connect(self.mcp_server_url)
+        
+        # Initialize the session
+        response = await self.send_request("initialize", {
+            "protocolVersion": "0.1.0",
+            "capabilities": {}
+        })
+        
+        if "result" in response:
+            print(f"✅ Connected to MCP server: {response['result'].get('serverInfo', {})}")
+        else:
+            print(f"❌ Failed to initialize: {response}")
+            return
+        
+        await self.run_tests()
+        
+        # Close the connection
+        await self.websocket.close()
     
     async def run_tests(self):
         """Run all tests on the MCP server."""
@@ -97,18 +126,25 @@ class MCPTestAgent:
         print("-" * 40)
         
         try:
-            tools = await self.session.list_tools()
-            self.stats["tools_discovered"] = len(tools)
+            response = await self.send_request("tools/list")
             
-            print(f"✅ Found {len(tools)} tools:")
-            for tool in tools:
-                print(f"  • {tool.name}: {tool.description}")
-            
-            self.stats["results"]["list_tools"] = {
-                "status": "success",
-                "count": len(tools),
-                "tools": [{"name": t.name, "description": t.description} for t in tools]
-            }
+            if "result" in response:
+                tools = response["result"].get("tools", [])
+                self.stats["tools_discovered"] = len(tools)
+                
+                print(f"✅ Found {len(tools)} tools:")
+                for tool in tools:
+                    print(f"  • {tool['name']}: {tool['description']}")
+                
+                self.stats["results"]["list_tools"] = {
+                    "status": "success",
+                    "count": len(tools),
+                    "tools": [{"name": t["name"], "description": t["description"]} for t in tools]
+                }
+            else:
+                print(f"❌ Failed to list tools: {response}")
+                self.stats["errors"].append(f"list_tools: {response}")
+                self.stats["results"]["list_tools"] = {"status": "failed", "error": str(response)}
         except Exception as e:
             print(f"❌ Failed to list tools: {e}")
             self.stats["errors"].append(f"list_tools: {str(e)}")
@@ -121,42 +157,53 @@ class MCPTestAgent:
         
         try:
             start_time = time.time()
-            result = await self.session.call_tool("list_ontology_servers", {})
+            response = await self.send_request("tools/call", {
+                "name": "list_ontology_servers",
+                "arguments": {}
+            })
             elapsed = time.time() - start_time
             
-            self.stats["successful_calls"] += 1
-            self.stats["tools_tested"] += 1
-            
-            # Parse the result
-            if result and len(result) > 0:
-                content = result[0].text if hasattr(result[0], 'text') else str(result[0])
-                # Count servers mentioned
-                online_count = content.count("🟢")
-                offline_count = content.count("🔴")
-                total_count = online_count + offline_count
+            if "result" in response:
+                self.stats["successful_calls"] += 1
+                self.stats["tools_tested"] += 1
                 
-                print(f"✅ Successfully retrieved server list in {elapsed:.2f}s")
-                print(f"  • Total servers: {total_count}")
-                print(f"  • Online: {online_count}")
-                print(f"  • Offline: {offline_count}")
-                
-                # Show first few lines of output
-                lines = content.split('\n')[:10]
-                print("\n  Preview:")
-                for line in lines:
-                    if line.strip():
-                        print(f"    {line[:80]}...")
-                
-                self.stats["results"]["list_ontology_servers"] = {
-                    "status": "success",
-                    "elapsed_time": elapsed,
-                    "total_servers": total_count,
-                    "online": online_count,
-                    "offline": offline_count
-                }
+                # Parse the result
+                result = response["result"]
+                if result and len(result) > 0:
+                    content = result[0].get("text", "")
+                    # Count servers mentioned
+                    online_count = content.count("🟢")
+                    offline_count = content.count("🔴")
+                    total_count = online_count + offline_count
+                    
+                    print(f"✅ Successfully retrieved server list in {elapsed:.2f}s")
+                    print(f"  • Total servers: {total_count}")
+                    print(f"  • Online: {online_count}")
+                    print(f"  • Offline: {offline_count}")
+                    
+                    # Show first few lines of output
+                    lines = content.split('\n')[:10]
+                    print("\n  Preview:")
+                    for line in lines:
+                        if line.strip():
+                            print(f"    {line[:80]}...")
+                    
+                    self.stats["results"]["list_ontology_servers"] = {
+                        "status": "success",
+                        "elapsed_time": elapsed,
+                        "total_servers": total_count,
+                        "online": online_count,
+                        "offline": offline_count
+                    }
+                else:
+                    print("⚠️  No results returned")
+                    self.stats["results"]["list_ontology_servers"] = {"status": "no_results"}
             else:
-                print("⚠️  No results returned")
-                self.stats["results"]["list_ontology_servers"] = {"status": "no_results"}
+                print(f"❌ Failed to list servers: {response}")
+                self.stats["failed_calls"] += 1
+                self.stats["tools_tested"] += 1
+                self.stats["errors"].append(f"list_ontology_servers: {response}")
+                self.stats["results"]["list_ontology_servers"] = {"status": "failed", "error": str(response)}
                 
         except Exception as e:
             print(f"❌ Failed to list servers: {e}")
@@ -176,31 +223,40 @@ class MCPTestAgent:
             print(f"\n  Testing search for: '{query}'")
             try:
                 start_time = time.time()
-                result = await self.session.call_tool("search_ontologies", {"query": query})
+                response = await self.send_request("tools/call", {
+                    "name": "search_ontologies",
+                    "arguments": {"query": query}
+                })
                 elapsed = time.time() - start_time
                 
-                self.stats["successful_calls"] += 1
-                
-                if result and len(result) > 0:
-                    content = result[0].text if hasattr(result[0], 'text') else str(result[0])
+                if "result" in response:
+                    self.stats["successful_calls"] += 1
                     
-                    # Count results
-                    results_line = [line for line in content.split('\n') if 'Found' in line]
-                    if results_line:
-                        print(f"  ✅ {results_line[0]} (in {elapsed:.2f}s)")
+                    result = response["result"]
+                    if result and len(result) > 0:
+                        content = result[0].get("text", "")
+                        
+                        # Count results
+                        results_line = [line for line in content.split('\n') if 'Found' in line]
+                        if results_line:
+                            print(f"  ✅ {results_line[0]} (in {elapsed:.2f}s)")
+                        else:
+                            print(f"  ✅ Search completed in {elapsed:.2f}s")
+                        
+                        if "search_ontologies" not in self.stats["results"]:
+                            self.stats["results"]["search_ontologies"] = []
+                        
+                        self.stats["results"]["search_ontologies"].append({
+                            "query": query,
+                            "status": "success",
+                            "elapsed_time": elapsed
+                        })
                     else:
-                        print(f"  ✅ Search completed in {elapsed:.2f}s")
-                    
-                    if "search_ontologies" not in self.stats["results"]:
-                        self.stats["results"]["search_ontologies"] = []
-                    
-                    self.stats["results"]["search_ontologies"].append({
-                        "query": query,
-                        "status": "success",
-                        "elapsed_time": elapsed
-                    })
+                        print(f"  ⚠️  No results for '{query}'")
                 else:
-                    print(f"  ⚠️  No results for '{query}'")
+                    print(f"  ❌ Failed to search for '{query}': {response}")
+                    self.stats["failed_calls"] += 1
+                    self.stats["errors"].append(f"search_ontologies({query}): {response}")
                     
             except Exception as e:
                 print(f"  ❌ Failed to search for '{query}': {e}")
@@ -223,35 +279,44 @@ class MCPTestAgent:
             print(f"\n  Testing DL query: {test['query']} ({test['type']})")
             try:
                 start_time = time.time()
-                result = await self.session.call_tool("run_dl_query", {
-                    "query": test["query"],
-                    "query_type": test["type"]
+                response = await self.send_request("tools/call", {
+                    "name": "run_dl_query",
+                    "arguments": {
+                        "query": test["query"],
+                        "query_type": test["type"]
+                    }
                 })
                 elapsed = time.time() - start_time
                 
-                self.stats["successful_calls"] += 1
-                
-                if result and len(result) > 0:
-                    content = result[0].text if hasattr(result[0], 'text') else str(result[0])
+                if "result" in response:
+                    self.stats["successful_calls"] += 1
                     
-                    # Count results
-                    results_line = [line for line in content.split('\n') if 'Found' in line]
-                    if results_line:
-                        print(f"  ✅ {results_line[0]} (in {elapsed:.2f}s)")
+                    result = response["result"]
+                    if result and len(result) > 0:
+                        content = result[0].get("text", "")
+                        
+                        # Count results
+                        results_line = [line for line in content.split('\n') if 'Found' in line]
+                        if results_line:
+                            print(f"  ✅ {results_line[0]} (in {elapsed:.2f}s)")
+                        else:
+                            print(f"  ✅ Query completed in {elapsed:.2f}s")
+                        
+                        if "dl_query" not in self.stats["results"]:
+                            self.stats["results"]["dl_query"] = []
+                        
+                        self.stats["results"]["dl_query"].append({
+                            "query": test["query"],
+                            "type": test["type"],
+                            "status": "success",
+                            "elapsed_time": elapsed
+                        })
                     else:
-                        print(f"  ✅ Query completed in {elapsed:.2f}s")
-                    
-                    if "dl_query" not in self.stats["results"]:
-                        self.stats["results"]["dl_query"] = []
-                    
-                    self.stats["results"]["dl_query"].append({
-                        "query": test["query"],
-                        "type": test["type"],
-                        "status": "success",
-                        "elapsed_time": elapsed
-                    })
+                        print(f"  ⚠️  No results for query")
                 else:
-                    print(f"  ⚠️  No results for query")
+                    print(f"  ❌ Failed DL query: {response}")
+                    self.stats["failed_calls"] += 1
+                    self.stats["errors"].append(f"dl_query({test['query']}): {response}")
                     
             except Exception as e:
                 print(f"  ❌ Failed DL query: {e}")
@@ -271,40 +336,49 @@ class MCPTestAgent:
             print(f"\n  Testing info for: {ontology}")
             try:
                 start_time = time.time()
-                result = await self.session.call_tool("get_ontology_info", {
-                    "ontology_name": ontology
+                response = await self.send_request("tools/call", {
+                    "name": "get_ontology_info",
+                    "arguments": {
+                        "ontology_name": ontology
+                    }
                 })
                 elapsed = time.time() - start_time
                 
-                self.stats["successful_calls"] += 1
-                
-                if result and len(result) > 0:
-                    content = result[0].text if hasattr(result[0], 'text') else str(result[0])
+                if "result" in response:
+                    self.stats["successful_calls"] += 1
                     
-                    if "not found" in content.lower():
-                        print(f"  ⚠️  Ontology '{ontology}' not found")
-                    else:
-                        # Extract some stats
-                        lines = content.split('\n')
-                        status_line = [l for l in lines if 'Online' in l or 'Offline' in l]
-                        classes_line = [l for l in lines if 'Classes:' in l]
+                    result = response["result"]
+                    if result and len(result) > 0:
+                        content = result[0].get("text", "")
                         
-                        if status_line:
-                            print(f"  ✅ Retrieved info in {elapsed:.2f}s")
-                            print(f"     Status: {status_line[0].strip()}")
-                        if classes_line:
-                            print(f"     {classes_line[0].strip()}")
-                    
-                    if "get_ontology_info" not in self.stats["results"]:
-                        self.stats["results"]["get_ontology_info"] = []
-                    
-                    self.stats["results"]["get_ontology_info"].append({
-                        "ontology": ontology,
-                        "status": "success" if "not found" not in content.lower() else "not_found",
-                        "elapsed_time": elapsed
-                    })
+                        if "not found" in content.lower():
+                            print(f"  ⚠️  Ontology '{ontology}' not found")
+                        else:
+                            # Extract some stats
+                            lines = content.split('\n')
+                            status_line = [l for l in lines if 'Online' in l or 'Offline' in l]
+                            classes_line = [l for l in lines if 'Classes:' in l]
+                            
+                            if status_line:
+                                print(f"  ✅ Retrieved info in {elapsed:.2f}s")
+                                print(f"     Status: {status_line[0].strip()}")
+                            if classes_line:
+                                print(f"     {classes_line[0].strip()}")
+                        
+                        if "get_ontology_info" not in self.stats["results"]:
+                            self.stats["results"]["get_ontology_info"] = []
+                        
+                        self.stats["results"]["get_ontology_info"].append({
+                            "ontology": ontology,
+                            "status": "success" if "not found" not in content.lower() else "not_found",
+                            "elapsed_time": elapsed
+                        })
+                    else:
+                        print(f"  ⚠️  No info returned for '{ontology}'")
                 else:
-                    print(f"  ⚠️  No info returned for '{ontology}'")
+                    print(f"  ❌ Failed to get info for '{ontology}': {response}")
+                    self.stats["failed_calls"] += 1
+                    self.stats["errors"].append(f"get_ontology_info({ontology}): {response}")
                     
             except Exception as e:
                 print(f"  ❌ Failed to get info for '{ontology}': {e}")

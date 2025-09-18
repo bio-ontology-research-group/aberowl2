@@ -4,6 +4,9 @@ MCP Server for AberOWL Central Server
 
 This server provides MCP (Model Context Protocol) tools for interacting with
 the AberOWL ontology repository.
+
+Note: This is a basic WebSocket server implementation that follows MCP protocol
+without requiring the mcp package.
 """
 
 import asyncio
@@ -12,12 +15,10 @@ import logging
 import os
 import sys
 from typing import Any, Dict, List, Optional
+import uuid
 
 import aiohttp
-from mcp.server import Server
-from mcp.server.models import InitializationOptions
-from mcp.server.websocket import websocket_server
-from mcp.types import Tool, TextContent
+import websockets
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -30,99 +31,171 @@ class AberOWLMCPServer:
     """MCP Server implementation for AberOWL."""
     
     def __init__(self):
-        self.server = Server("aberowl-mcp-server")
-        self.setup_tools()
+        self.session_id = str(uuid.uuid4())
+        self.tools = self.get_tools_list()
     
-    def setup_tools(self):
-        """Register all available tools with the MCP server."""
-        
-        @self.server.list_tools()
-        async def list_tools() -> List[Tool]:
-            """Return the list of available tools."""
-            return [
-                Tool(
-                    name="list_ontology_servers",
-                    description="List all registered ontology servers and their status",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {},
-                        "required": []
-                    }
-                ),
-                Tool(
-                    name="search_ontologies",
-                    description="Search across all ontologies for a given query",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {
-                            "query": {
-                                "type": "string",
-                                "description": "The search query"
-                            }
+    def get_tools_list(self):
+        """Return the list of available tools."""
+        return [
+            {
+                "name": "list_ontology_servers",
+                "description": "List all registered ontology servers and their status",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
+            },
+            {
+                "name": "search_ontologies",
+                "description": "Search across all ontologies for a given query",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "The search query"
+                        }
+                    },
+                    "required": ["query"]
+                }
+            },
+            {
+                "name": "run_dl_query",
+                "description": "Run a Description Logic query across ontologies",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "The DL query in Manchester OWL Syntax"
                         },
-                        "required": ["query"]
-                    }
-                ),
-                Tool(
-                    name="run_dl_query",
-                    description="Run a Description Logic query across ontologies",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {
-                            "query": {
-                                "type": "string",
-                                "description": "The DL query in Manchester OWL Syntax"
-                            },
-                            "query_type": {
-                                "type": "string",
-                                "description": "Type of query: subclass, subeq, equivalent, superclass, supeq",
-                                "enum": ["subclass", "subeq", "equivalent", "superclass", "supeq"]
-                            },
-                            "ontologies": {
-                                "type": "string",
-                                "description": "Comma-separated list of ontology names to query (optional)"
-                            }
+                        "query_type": {
+                            "type": "string",
+                            "description": "Type of query: subclass, subeq, equivalent, superclass, supeq",
+                            "enum": ["subclass", "subeq", "equivalent", "superclass", "supeq"]
                         },
-                        "required": ["query", "query_type"]
-                    }
-                ),
-                Tool(
-                    name="get_ontology_info",
-                    description="Get detailed information about a specific ontology",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {
-                            "ontology_name": {
-                                "type": "string",
-                                "description": "The name/ID of the ontology"
-                            }
-                        },
-                        "required": ["ontology_name"]
-                    }
-                )
-            ]
-        
-        @self.server.call_tool()
-        async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
-            """Handle tool calls."""
+                        "ontologies": {
+                            "type": "string",
+                            "description": "Comma-separated list of ontology names to query (optional)"
+                        }
+                    },
+                    "required": ["query", "query_type"]
+                }
+            },
+            {
+                "name": "get_ontology_info",
+                "description": "Get detailed information about a specific ontology",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "ontology_name": {
+                            "type": "string",
+                            "description": "The name/ID of the ontology"
+                        }
+                    },
+                    "required": ["ontology_name"]
+                }
+            }
+        ]
+    
+    async def handle_message(self, websocket, message):
+        """Handle incoming MCP protocol messages."""
+        try:
+            data = json.loads(message)
+            method = data.get("method")
+            params = data.get("params", {})
+            request_id = data.get("id")
             
-            if name == "list_ontology_servers":
-                return await self.list_ontology_servers()
-            elif name == "search_ontologies":
-                query = arguments.get("query", "")
-                return await self.search_ontologies(query)
-            elif name == "run_dl_query":
-                query = arguments.get("query", "")
-                query_type = arguments.get("query_type", "subclass")
-                ontologies = arguments.get("ontologies", "")
-                return await self.run_dl_query(query, query_type, ontologies)
-            elif name == "get_ontology_info":
-                ontology_name = arguments.get("ontology_name", "")
-                return await self.get_ontology_info(ontology_name)
+            logger.info(f"Received method: {method}")
+            
+            if method == "initialize":
+                response = {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": {
+                        "protocolVersion": "0.1.0",
+                        "capabilities": {
+                            "tools": {}
+                        },
+                        "serverInfo": {
+                            "name": "aberowl-mcp-server",
+                            "version": "1.0.0"
+                        }
+                    }
+                }
+            elif method == "tools/list":
+                response = {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": {
+                        "tools": self.tools
+                    }
+                }
+            elif method == "tools/call":
+                tool_name = params.get("name")
+                arguments = params.get("arguments", {})
+                result = await self.call_tool(tool_name, arguments)
+                response = {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": result
+                }
             else:
-                return [TextContent(type="text", text=f"Unknown tool: {name}")]
+                response = {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {
+                        "code": -32601,
+                        "message": f"Method not found: {method}"
+                    }
+                }
+            
+            await websocket.send(json.dumps(response))
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON: {e}")
+            error_response = {
+                "jsonrpc": "2.0",
+                "id": None,
+                "error": {
+                    "code": -32700,
+                    "message": "Parse error"
+                }
+            }
+            await websocket.send(json.dumps(error_response))
+        except Exception as e:
+            logger.error(f"Error handling message: {e}")
+            error_response = {
+                "jsonrpc": "2.0",
+                "id": request_id if 'request_id' in locals() else None,
+                "error": {
+                    "code": -32603,
+                    "message": f"Internal error: {str(e)}"
+                }
+            }
+            await websocket.send(json.dumps(error_response))
     
-    async def list_ontology_servers(self) -> List[TextContent]:
+    async def call_tool(self, name: str, arguments: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Handle tool calls."""
+        
+        if name == "list_ontology_servers":
+            return await self.list_ontology_servers()
+        elif name == "search_ontologies":
+            query = arguments.get("query", "")
+            return await self.search_ontologies(query)
+        elif name == "run_dl_query":
+            query = arguments.get("query", "")
+            query_type = arguments.get("query_type", "subclass")
+            ontologies = arguments.get("ontologies", "")
+            return await self.run_dl_query(query, query_type, ontologies)
+        elif name == "get_ontology_info":
+            ontology_name = arguments.get("ontology_name", "")
+            return await self.get_ontology_info(ontology_name)
+        else:
+            return [{"type": "text", "text": f"Unknown tool: {name}"}]
+    
+    async def list_ontology_servers(self) -> List[Dict[str, Any]]:
         """List all registered ontology servers."""
         try:
             async with aiohttp.ClientSession() as session:
@@ -147,17 +220,17 @@ class AberOWLMCPServer:
                         
                         result += f"\nSummary: {online_count} online, {offline_count} offline"
                         
-                        return [TextContent(type="text", text=result)]
+                        return [{"type": "text", "text": result}]
                     else:
-                        return [TextContent(type="text", text=f"Failed to fetch servers. Status: {response.status}")]
+                        return [{"type": "text", "text": f"Failed to fetch servers. Status: {response.status}"}]
         except Exception as e:
             logger.error(f"Error listing servers: {e}")
-            return [TextContent(type="text", text=f"Error: {str(e)}")]
+            return [{"type": "text", "text": f"Error: {str(e)}"}]
     
-    async def search_ontologies(self, query: str) -> List[TextContent]:
+    async def search_ontologies(self, query: str) -> List[Dict[str, Any]]:
         """Search across all ontologies."""
         if not query:
-            return [TextContent(type="text", text="Please provide a search query")]
+            return [{"type": "text", "text": "Please provide a search query"}]
         
         try:
             async with aiohttp.ClientSession() as session:
@@ -168,7 +241,7 @@ class AberOWLMCPServer:
                         results = data.get("result", [])
                         
                         if not results:
-                            return [TextContent(type="text", text=f"No results found for '{query}'")]
+                            return [{"type": "text", "text": f"No results found for '{query}'"}]
                         
                         # Format results
                         output = f"Found {len(results)} results for '{query}':\n\n"
@@ -191,17 +264,17 @@ class AberOWLMCPServer:
                             if len(items) > 10:
                                 output += f"  ... and {len(items) - 10} more\n"
                         
-                        return [TextContent(type="text", text=output)]
+                        return [{"type": "text", "text": output}]
                     else:
-                        return [TextContent(type="text", text=f"Search failed. Status: {response.status}")]
+                        return [{"type": "text", "text": f"Search failed. Status: {response.status}"}]
         except Exception as e:
             logger.error(f"Error searching: {e}")
-            return [TextContent(type="text", text=f"Error: {str(e)}")]
+            return [{"type": "text", "text": f"Error: {str(e)}"}]
     
-    async def run_dl_query(self, query: str, query_type: str, ontologies: str = "") -> List[TextContent]:
+    async def run_dl_query(self, query: str, query_type: str, ontologies: str = "") -> List[Dict[str, Any]]:
         """Run a Description Logic query."""
         if not query:
-            return [TextContent(type="text", text="Please provide a DL query")]
+            return [{"type": "text", "text": "Please provide a DL query"}]
         
         try:
             async with aiohttp.ClientSession() as session:
@@ -218,7 +291,7 @@ class AberOWLMCPServer:
                         results = data.get("result", [])
                         
                         if not results:
-                            return [TextContent(type="text", text=f"No results found for DL query: {query}")]
+                            return [{"type": "text", "text": f"No results found for DL query: {query}"}]
                         
                         # Format results
                         output = f"Found {len(results)} results for {query_type} query:\n'{query}'\n\n"
@@ -239,17 +312,17 @@ class AberOWLMCPServer:
                             if len(items) > 15:
                                 output += f"  ... and {len(items) - 15} more\n"
                         
-                        return [TextContent(type="text", text=output)]
+                        return [{"type": "text", "text": output}]
                     else:
-                        return [TextContent(type="text", text=f"DL query failed. Status: {response.status}")]
+                        return [{"type": "text", "text": f"DL query failed. Status: {response.status}"}]
         except Exception as e:
             logger.error(f"Error running DL query: {e}")
-            return [TextContent(type="text", text=f"Error: {str(e)}")]
+            return [{"type": "text", "text": f"Error: {str(e)}"}]
     
-    async def get_ontology_info(self, ontology_name: str) -> List[TextContent]:
+    async def get_ontology_info(self, ontology_name: str) -> List[Dict[str, Any]]:
         """Get information about a specific ontology."""
         if not ontology_name:
-            return [TextContent(type="text", text="Please provide an ontology name")]
+            return [{"type": "text", "text": "Please provide an ontology name"}]
         
         try:
             async with aiohttp.ClientSession() as session:
@@ -266,7 +339,7 @@ class AberOWLMCPServer:
                                 break
                         
                         if not matching:
-                            return [TextContent(type="text", text=f"Ontology '{ontology_name}' not found")]
+                            return [{"type": "text", "text": f"Ontology '{ontology_name}' not found"}]
                         
                         # Format the information
                         output = f"Ontology: {matching.get('ontology', 'Unknown')}\n"
@@ -287,12 +360,24 @@ class AberOWLMCPServer:
                         if matching.get('version_info'):
                             output += f"\nVersion: {matching.get('version_info')}\n"
                         
-                        return [TextContent(type="text", text=output)]
+                        return [{"type": "text", "text": output}]
                     else:
-                        return [TextContent(type="text", text=f"Failed to fetch ontology info. Status: {response.status}")]
+                        return [{"type": "text", "text": f"Failed to fetch ontology info. Status: {response.status}"}]
         except Exception as e:
             logger.error(f"Error getting ontology info: {e}")
-            return [TextContent(type="text", text=f"Error: {str(e)}")]
+            return [{"type": "text", "text": f"Error: {str(e)}"}]
+    
+    async def handle_client(self, websocket, path):
+        """Handle a WebSocket client connection."""
+        logger.info(f"Client connected from {websocket.remote_address}")
+        
+        try:
+            async for message in websocket:
+                await self.handle_message(websocket, message)
+        except websockets.exceptions.ConnectionClosed:
+            logger.info(f"Client disconnected from {websocket.remote_address}")
+        except Exception as e:
+            logger.error(f"Error handling client: {e}")
     
     async def run(self):
         """Run the MCP server."""
@@ -315,7 +400,7 @@ class AberOWLMCPServer:
         logger.info(f"Starting MCP server on {host}:{port}")
         
         # Run the WebSocket server
-        async with websocket_server(self.server, host, port):
+        async with websockets.serve(self.handle_client, host, port):
             logger.info(f"MCP server is running at ws://{host}:{port}")
             # Keep the server running
             await asyncio.Future()  # Run forever
