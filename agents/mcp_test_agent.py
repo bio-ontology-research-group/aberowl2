@@ -15,7 +15,7 @@ from typing import Any, Dict, List
 from datetime import datetime
 
 from mcp import ClientSession
-from mcp.client.websocket import create_client as mcp_connect
+from mcp.client.websocket import websocket_client as mcp_connect
 
 
 class MCPTestAgent:
