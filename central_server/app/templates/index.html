@@ -117,7 +117,7 @@
                     <h4 class="modal-title" id="documentationModalLabel">API Documentation</h4>
                 </div>
                 <div class="modal-body">
-                    <p>This document provides information about the AberOWL Central Server API, including the FAIR API (MOD-API).</p>
+                    <p>This document provides information about the AberOWL Central Server API, including the FAIR API (MOD-API) and Model Context Protocol (MCP) support.</p>
                     
                     <div class="panel panel-info">
                         <div class="panel-heading"><strong>Server Management API</strong></div>
@@ -148,33 +148,48 @@
                     </div>
 
                     <div class="panel panel-info">
-                        <div class="panel-heading"><strong>MCP API (Machine-to-Machine)</strong></div>
+                        <div class="panel-heading"><strong>Model Context Protocol (MCP) Support</strong></div>
                         <div class="panel-body">
-                            <p>The server also exposes its API via MCP (Machine-to-Machine Communication Protocol), which can be more efficient for programmatic access than HTTP.</p>
-                            <p>To enable the MCP server, set the <code>MCP_SERVER_ADDRESS</code> environment variable, e.g., <code>mcp://0.0.0.0:8001</code>. The Docker Compose setup enables this by default on port 8001.</p>
-                            <p>You can interact with it using an MCP agent. Here is a Python example using the <code>mcp</code> library:</p>
-                            <pre><code>import asyncio
-from mcp import Agent
-
-async def main():
-    client_agent = Agent()
-    server_address = "mcp://127.0.0.1:8001"
-    
-    # Get the list of servers (equivalent to GET /api/servers)
-    servers = await client_agent.arun_endpoint(
-        server_address, "/api/servers"
-    )
-    print("Registered servers:", servers)
-    
-    # Run a DL query (equivalent to GET /api/dlquery_all)
-    dl_query_params = {"query": "'has part' some nucleus", "type": "subclass"}
-    dl_results = await client_agent.arun_endpoint(
-        server_address, "/api/dlquery_all", params=dl_query_params
-    )
-    print("DL Query results:", dl_results)
-
-if __name__ == "__main__":
-    asyncio.run(main())</code></pre>
+                            <p>The Model Context Protocol (MCP) is an open standard developed by Anthropic that enables LLM agents to access data sources and tools through a standardized interface. MCP allows AI applications like Claude Desktop, Cursor, and other LLM-powered tools to discover and interact with services in a consistent way.</p>
+                            
+                            <h5>What is MCP?</h5>
+                            <p>MCP provides a standardized way for LLM applications to:</p>
+                            <ul>
+                                <li><strong>Access Resources:</strong> Structured data and content that provides context to the model</li>
+                                <li><strong>Use Tools:</strong> Execute functions and interact with external systems</li>
+                                <li><strong>Apply Prompts:</strong> Use pre-defined templates for common interactions</li>
+                            </ul>
+                            
+                            <h5>MCP Server for AberOWL Central Server</h5>
+                            <p>To enable LLM agents to interact with the AberOWL Central Server, you can run an MCP server alongside it. This MCP server exposes the central server's functionality as tools that LLM agents can discover and use.</p>
+                            
+                            <p>To start the MCP server, set the <code>MCP_SERVER_ENABLED</code> environment variable to <code>true</code> when running the central server. The MCP server will run on port 8001 by default (configurable via <code>MCP_SERVER_PORT</code>).</p>
+                            
+                            <h5>Available MCP Tools</h5>
+                            <p>When the MCP server is running, it exposes the following tools to LLM agents:</p>
+                            <ul>
+                                <li><strong>list_servers:</strong> Get a list of all registered ontology servers</li>
+                                <li><strong>search_ontologies:</strong> Search for terms across all ontologies</li>
+                                <li><strong>run_dl_query:</strong> Execute a Description Logic query across ontologies</li>
+                                <li><strong>get_server_info:</strong> Get detailed information about a specific ontology server</li>
+                            </ul>
+                            
+                            <h5>Connecting LLM Agents</h5>
+                            <p>LLM applications that support MCP (like Claude Desktop) can connect to the MCP server to access these tools. Configure your MCP client to connect to:</p>
+                            <pre><code>stdio://path/to/mcp_server.py</code></pre>
+                            <p>Or if running remotely:</p>
+                            <pre><code>http://your-server:8001/mcp</code></pre>
+                            
+                            <h5>Example Usage in Claude Desktop</h5>
+                            <p>Once connected, you can ask Claude to:</p>
+                            <ul>
+                                <li>"Show me all available ontology servers"</li>
+                                <li>"Search for 'apoptosis' across all ontologies"</li>
+                                <li>"Find all subclasses of 'cell nucleus' using DL query"</li>
+                            </ul>
+                            <p>Claude will automatically use the appropriate MCP tools to fulfill these requests.</p>
+                            
+                            <p>For more information about MCP, see the <a href="https://modelcontextprotocol.io" target="_blank">official MCP documentation</a>.</p>
                         </div>
                     </div>
 
