@@ -4,6 +4,5 @@ jinja2
 aiohttp
 python-multipart
 redis
-mcp
-fastmcp
+fast-mcp
 websockets

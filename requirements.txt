@@ -9,8 +9,7 @@ camel-ai
 fastapi
 pillow
 unstructured
-mcp
-fastmcp
+fast-mcp
 aiohttp
 redis
 websockets
