@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import sys
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -26,6 +27,7 @@ CATALOGUE_CONFIG_PATH = "app/catalogue_config.json"
 redis_client: redis.Redis = None
 catalogue_config: Dict[str, Any] = {}
 ELASTICSEARCH_URL = "http://elasticsearch:9200"
+mcp_process: Optional[asyncio.subprocess.Process] = None
 
 
 async def _load_catalogue_config():
@@ -123,6 +125,33 @@ async def fetch_and_update_server_metadata(server: Dict[str, Any]):
     await _write_servers_to_file()
 
 
+async def start_mcp_server_if_configured():
+    """Checks for MCP_SERVER_ADDRESS env var and starts the MCP server if present."""
+    global mcp_process
+    mcp_server_address = os.getenv("MCP_SERVER_ADDRESS")
+    if mcp_server_address:
+        logger.info(f"MCP_SERVER_ADDRESS is set. Starting MCP server...")
+        
+        mcp_server_script = "mcp_server.py"
+        
+        if not os.path.exists(mcp_server_script):
+            logger.error(f"MCP server script not found at '{mcp_server_script}'. Cannot start MCP server.")
+            return
+
+        try:
+            # We run mcp_server.py as a separate process.
+            # It will pick up the MCP_SERVER_ADDRESS environment variable.
+            mcp_process = await asyncio.create_subprocess_exec(
+                sys.executable,
+                mcp_server_script,
+                stdout=sys.stdout, # pipe to parent stdout/stderr for logging
+                stderr=sys.stderr
+            )
+            logger.info(f"MCP server process started with PID {mcp_process.pid}.")
+        except Exception as e:
+            logger.error(f"Failed to start MCP server: {e}")
+
+
 async def _fetch_and_update_all_servers():
     """Helper to fetch metadata for all servers in Redis."""
     logger.info("Starting metadata fetch for all registered servers.")
@@ -167,10 +196,23 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(_fetch_and_update_all_servers())
     # Start the periodic background task
     asyncio.create_task(periodic_metadata_fetch_task())
+
+    # Start MCP server if configured
+    await start_mcp_server_if_configured()
     
     yield
     
     # Shutdown
+    if mcp_process:
+        logger.info(f"Terminating MCP server process (PID: {mcp_process.pid})...")
+        mcp_process.terminate()
+        try:
+            await asyncio.wait_for(mcp_process.wait(), timeout=5.0)
+            logger.info("MCP server process terminated gracefully.")
+        except asyncio.TimeoutError:
+            logger.warning("MCP server process did not terminate gracefully, killing it.")
+            mcp_process.kill()
+
     await redis_client.close()
     logger.info("Redis connection closed.")
 

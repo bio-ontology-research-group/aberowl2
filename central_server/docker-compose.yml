@@ -4,9 +4,12 @@ services:
     build: .
     ports:
       - "${CENTRAL_SERVER_PORT:-8000}:80"
+    environment:
+      - MCP_SERVER_ADDRESS=${MCP_SERVER_ADDRESS}
     volumes:
       # Mount the app directory for live-reloading during development
       - ./app:/code/app
+      - ./mcp_server.py:/code/mcp_server.py
     restart: always
     container_name: aberowl-central-server
     depends_on:
