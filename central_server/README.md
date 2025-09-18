@@ -1,86 +1,200 @@
 # AberOWL Central Server
 
-The AberOWL Central Server is a component of the AberOWL 2 framework. It acts as a registry for distributed AberOWL ontology servers, provides a unified query interface, and exposes a FAIR API for semantic artefacts.
+The AberOWL Central Server is a registry and query aggregator for distributed AberOWL ontology servers. It provides a unified interface to query multiple ontology servers simultaneously and implements the FAIR MOD-API specification.
 
-## About AberOWL
+## Features
 
-AberOWL is a framework for ontology-based data access in biology. It provides reasoning services for bio-ontologies, enabling semantic access to biological data and literature. The original AberOWL was described in [Hoehndorf et al. (2015)](https://bmcbioinformatics.biomedcentral.com/articles/10.1186/s12859-015-0456-9).
+- **Server Registry**: Ontology servers can register themselves with the central server
+- **Unified Querying**: Run DL queries and text searches across all registered ontologies
+- **FAIR API**: Implements the MOD-API specification for semantic artefact catalogues
+- **MCP Support**: Exposes functionality to LLM agents via Model Context Protocol
+- **Auto-discovery**: Automatically fetches and updates metadata from registered servers
+- **Web Interface**: User-friendly interface for browsing and querying ontologies
 
-This version, AberOWL 2, has been re-engineered for scalability and modern standards, including a distributed architecture and a FAIR-compliant API.
+## Quick Start
 
-### Development Team
+### Using Docker Compose
 
-AberOWL 2 was developed by:
-- Maxat Kulmanov (lead since 2017, <maxat.kulmanov@kaust.edu.sa>)
-- Fernando Zhapa Camacho (<fernando.zhapacamacho@kaust.edu.sa>)
-- Olga Mashkova (<olga.mashkova@kaust.edu.sa>)
-- Robert Hoehndorf (<robert.hoehndorf@kaust.edu.sa>)
+The easiest way to run the central server is using Docker Compose:
 
-## Running the Central Server
+```bash
+cd central_server
+docker compose up -d
+```
 
-The central server is designed to be run with Docker.
+This will start:
+- The central server on port 8000
+- Redis for data storage
+- Elasticsearch for search functionality
 
-### Prerequisites
+### Manual Setup
 
-- Docker and Docker Compose
+If running manually, you'll need:
+- Python 3.8+
+- Redis server
+- Elasticsearch (optional, for enhanced search)
 
-### Quick Start
+Install dependencies:
+```bash
+pip install -r requirements.txt
+```
 
-1.  Navigate to the `central_server` directory.
-2.  Run the server:
-    ```bash
-    docker compose up --build -d
-    ```
-3.  The central server will be available at `http://localhost:8000`.
+Run the server:
+```bash
+cd app
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
 
-### Configuration
+## Model Context Protocol (MCP) Support
 
-The central server can be configured via two JSON files located in the `app/` directory:
+The central server includes an MCP server that allows LLM agents (like Claude Desktop, Cursor, etc.) to interact with AberOWL programmatically.
 
--   `app/catalogue_config.json`: Contains metadata about the catalogue itself, such as its title, description, and publisher. This information is exposed through the FAIR API.
-    ```json
-    {
-        "title": "AberOWL Ontology Repository",
-        "description": "An ontology repository with active reasoning support",
-        "publisher": "AberOWL"
+### Running the MCP Server
+
+The MCP server is a separate process that connects to the central server's API:
+
+```bash
+# Set the central server URL (if not running on localhost:8000)
+export CENTRAL_SERVER_URL=http://your-server:8000
+
+# Run the MCP server
+python central_server/mcp_server.py
+```
+
+### Configuring Claude Desktop
+
+To use AberOWL with Claude Desktop, add this to your Claude Desktop configuration:
+
+```json
+{
+  "mcpServers": {
+    "aberowl": {
+      "command": "python",
+      "args": ["/path/to/central_server/mcp_server.py"],
+      "env": {
+        "CENTRAL_SERVER_URL": "http://localhost:8000"
+      }
     }
-    ```
+  }
+}
+```
 
--   `app/servers.json`: Stores the list of registered AberOWL ontology servers. This file is used to persist server information and can be edited offline. The server will load this file on startup if Redis is empty.
-    ```json
-    [
-        {
-            "ontology": "go.owl",
-            "url": "http://localhost:8080",
-            "status": "unknown",
-            "secret_key": "...",
-            "title": "Gene Ontology",
-            ...
-        }
-    ]
-    ```
+### Available MCP Tools
+
+The MCP server exposes these tools to LLM agents:
+
+- **list_ontology_servers**: Get all registered ontology servers with metadata
+- **search_ontologies**: Search for terms across all ontologies
+- **run_dl_query**: Execute Description Logic queries using Manchester OWL Syntax
+- **get_ontology_info**: Get detailed information about a specific ontology
+
+### Docker Compose with MCP
+
+To run both the central server and MCP server with Docker Compose, use:
+
+```yaml
+services:
+  central-server:
+    build: .
+    ports:
+      - "8000:80"
+    # ... other config ...
+  
+  mcp-server:
+    build: .
+    command: python mcp_server.py
+    environment:
+      - CENTRAL_SERVER_URL=http://central-server:80
+    stdin_open: true
+    tty: true
+    depends_on:
+      - central-server
+```
+
+## API Documentation
+
+### Server Registration
+
+Ontology servers register themselves with:
+
+```bash
+POST /register
+{
+  "ontology": "GO",
+  "url": "http://my-ontology-server.com"
+}
+```
+
+Returns a secret key for future updates.
+
+### Query Endpoints
+
+- `GET /api/servers` - List all registered servers
+- `GET /api/search_all?query=term` - Search across all ontologies
+- `GET /api/dlquery_all?query=expression&type=subclass` - Run DL queries
+
+### FAIR API (MOD-API)
+
+The server implements the MOD-API specification:
+
+- `/records` - Catalog records
+- `/artefacts` - Semantic artefacts
+- `/artefacts/{id}/distributions` - Artefact distributions
+- `/search` - Search functionality
+
+See the web interface documentation for full API details.
+
+## Configuration
+
+### Environment Variables
+
+- `CENTRAL_SERVER_URL`: URL where the central server is accessible (for MCP server)
+- `REDIS_URL`: Redis connection URL (default: `redis://redis`)
+- `ELASTICSEARCH_URL`: Elasticsearch URL (default: `http://elasticsearch:9200`)
+
+### Configuration Files
+
+- `app/servers.json`: Persistent storage of registered servers
+- `app/catalogue_config.json`: Catalogue metadata configuration
+
+## Development
+
+### Running Tests
+
+```bash
+pytest tests/
+```
 
 ### Resetting Data
 
-To clear all registered servers and reset the Redis database, you can run the main application with the `--reset` flag:
+To clear all registered servers and start fresh:
 
 ```bash
-docker compose run --rm app python main.py --reset
+python app/main.py --reset
 ```
 
-## FAIR API (MOD-API)
+Or with Docker:
 
-The central server implements the [Metadata for Ontology Description and Publication (MOD-API)](https://fair-impact.github.io/MOD-API/), providing a standardized way to access metadata about the ontologies (semantic artefacts).
+```bash
+docker exec central-server python app/main.py --reset
+```
 
-The API is available under the `/` path, with different endpoints for accessing catalogue information, records, and artefacts.
+## Architecture
 
-### Key Endpoints
+The central server consists of:
 
--   `GET /`: Get information about the semantic artefact catalogue.
--   `GET /records`: Get all catalog records for the registered ontologies.
--   `GET /records/{artefact_id}`: Get a specific catalog record.
--   `GET /artefacts`: Get all semantic artefacts.
--   `GET /artefacts/{artefact_id}`: Get a specific semantic artefact.
--   `GET /search`: Search across metadata and content of all registered servers.
+1. **FastAPI Application**: Main web server and API
+2. **Redis**: Stores server registry and metadata
+3. **Background Tasks**: Periodically fetches server metadata
+4. **MCP Server**: Separate process exposing tools to LLM agents
 
-For a full list of endpoints and examples, see the API Documentation on the server's homepage.
+## Contributing
+
+Contributions are welcome! Please ensure:
+- Code follows Python style guidelines
+- Tests pass
+- Documentation is updated
+
+## License
+
+This project is part of the AberOWL framework. See the main repository for license information.
