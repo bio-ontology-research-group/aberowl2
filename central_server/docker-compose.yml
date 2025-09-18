@@ -4,6 +4,7 @@ services:
     build: .
     ports:
       - "${CENTRAL_SERVER_PORT:-8000}:80"
+      - "8765:8765"
     environment:
       - MCP_SERVER_ADDRESS=${MCP_SERVER_ADDRESS}
     volumes:
