@@ -14,37 +14,23 @@ import time
 from typing import Any, Dict, List
 from datetime import datetime
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+from mcp import ClientSession
+from mcp.client import connect as mcp_connect
 
 
 class MCPTestAgent:
     """Test agent that connects to the AberOWL MCP server and tests its functionality."""
     
-    def __init__(self, mcp_server_path: str = None):
+    def __init__(self, mcp_server_url: str):
         """Initialize the test agent.
         
         Args:
-            mcp_server_path: Path to the MCP server script. If None, tries to find it automatically.
+            mcp_server_url: URL of the running MCP server.
         """
-        if mcp_server_path is None:
-            # Try to find the MCP server script
-            possible_paths = [
-                "central_server/mcp_server.py",
-                "../central_server/mcp_server.py",
-                "mcp_server.py"
-            ]
-            for path in possible_paths:
-                if os.path.exists(path):
-                    mcp_server_path = path
-                    break
-            
-            if mcp_server_path is None:
-                raise FileNotFoundError(
-                    "Could not find mcp_server.py. Please provide the path explicitly."
-                )
+        if not mcp_server_url:
+            raise ValueError("MCP server URL must be provided.")
         
-        self.mcp_server_path = os.path.abspath(mcp_server_path)
+        self.mcp_server_url = mcp_server_url
         self.session = None
         self.stats = {
             "start_time": None,
@@ -59,22 +45,12 @@ class MCPTestAgent:
     
     async def connect(self):
         """Connect to the MCP server."""
-        print(f"🔌 Connecting to MCP server at: {self.mcp_server_path}")
-        
-        # Set up the server parameters
-        server_params = StdioServerParameters(
-            command="python",
-            args=[self.mcp_server_path],
-            env={
-                "CENTRAL_SERVER_URL": os.getenv("CENTRAL_SERVER_URL", "http://localhost:8000")
-            }
-        )
+        print(f"🔌 Connecting to MCP server at: {self.mcp_server_url}")
         
         # Create and connect the client session
-        async with stdio_client(server_params) as (read, write):
-            async with ClientSession(read, write) as session:
-                self.session = session
-                await self.run_tests()
+        async with mcp_connect(self.mcp_server_url) as session:
+            self.session = session
+            await self.run_tests()
     
     async def run_tests(self):
         """Run all tests on the MCP server."""
@@ -379,19 +355,22 @@ async def main():
     print("🚀 Starting AberOWL MCP Test Agent")
     print(f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
-    # Check if MCP server path is provided as argument
-    mcp_server_path = sys.argv[1] if len(sys.argv) > 1 else None
+    # Get MCP server URL from argument or environment variable
+    mcp_server_url = sys.argv[1] if len(sys.argv) > 1 else os.getenv("MCP_SERVER_URL")
     
-    # Check environment variable for central server URL
-    central_server_url = os.getenv("CENTRAL_SERVER_URL", "http://localhost:8000")
-    print(f"🌐 Central Server URL: {central_server_url}")
+    if not mcp_server_url:
+        print("\n❌ Error: MCP server URL not provided.")
+        print("\nUsage: python mcp_test_agent.py [mcp_server_url]")
+        print("   or set MCP_SERVER_URL environment variable.")
+        sys.exit(1)
+
+    print(f"🌐 MCP Server URL: {mcp_server_url}")
     
     try:
-        agent = MCPTestAgent(mcp_server_path)
+        agent = MCPTestAgent(mcp_server_url)
         await agent.connect()
-    except FileNotFoundError as e:
-        print(f"\n❌ Error: {e}")
-        print("\nUsage: python mcp_test_agent.py [path/to/mcp_server.py]")
+    except ConnectionRefusedError:
+        print(f"\n❌ Connection refused. Is the MCP server running at {mcp_server_url}?")
         sys.exit(1)
     except KeyboardInterrupt:
         print("\n\n⚠️  Test interrupted by user")
