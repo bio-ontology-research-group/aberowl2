@@ -7,6 +7,8 @@ WORKDIR /code
 # Copy the dependencies file to the working directory
 COPY ./requirements.txt /code/requirements.txt
 
+RUN pip install mcp[cli]
+
 # Install any needed packages specified in requirements.txt
 RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
 
