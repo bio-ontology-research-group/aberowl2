@@ -1,6 +1,21 @@
 #!/bin/bash
 set -e
 
+show_help() {
+    echo "Usage: $0 [options]"
+    echo
+    echo "Options:"
+    echo "  --build        Build images before starting containers."
+    echo "  -d, --detach   Run containers in the background."
+    echo "  --reset        Reset all data in Redis before starting."
+    echo "  --stop         Stop and remove the running containers."
+    echo "  -h, --help     Show this help message and exit."
+    echo
+    echo "Environment Variables:"
+    echo "  CENTRAL_SERVER_PORT: Set the port for the central server (default: 8000)."
+    echo "  MCP_SERVER_ADDRESS:  Set the address for the MCP server (e.g., 'mcp://0.0.0.0:8001'). If set, the MCP server will be started."
+}
+
 echo "Starting AberOWL Central Server..."
 
 # Argument parsing
@@ -25,6 +40,10 @@ while [[ "$1" == -* ]]; do
         --stop)
             STOP_FLAG=true
             shift
+            ;;
+        -h|--help)
+            show_help
+            exit 0
             ;;
         *)
             echo "Unknown option: $1" >&2
