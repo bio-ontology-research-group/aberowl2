@@ -367,7 +367,7 @@ class AberOWLMCPServer:
             logger.error(f"Error getting ontology info: {e}")
             return [{"type": "text", "text": f"Error: {str(e)}"}]
     
-    async def handle_client(self, websocket, path):
+    async def handle_client(self, websocket):
         """Handle a WebSocket client connection."""
         logger.info(f"Client connected from {websocket.remote_address}")
         
