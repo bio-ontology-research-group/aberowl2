@@ -10,6 +10,9 @@
 <body>
     <div class="container">
         <a href="/about" class="btn btn-info btn-sm pull-right" style="margin-top: 20px; margin-left: 5px;">About</a>
+        <button type="button" class="btn btn-success btn-sm pull-right" data-toggle="modal" data-target="#mcpModal" style="margin-top: 20px; margin-left: 5px;">
+            MCP Documentation
+        </button>
         <button type="button" class="btn btn-info btn-sm pull-right" data-toggle="modal" data-target="#documentationModal" style="margin-top: 20px;">
             API Documentation
         </button>
@@ -108,7 +111,178 @@
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
     <script src="/static/main.js"></script>
 
-    <!-- Documentation Modal -->
+    <!-- MCP Documentation Modal -->
+    <div class="modal fade" id="mcpModal" tabindex="-1" role="dialog" aria-labelledby="mcpModalLabel">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                    <h4 class="modal-title" id="mcpModalLabel">MCP Documentation for LLM Agents</h4>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-success">
+                        <strong>🤖 Agent Instructions:</strong> This AberOWL Central Server provides MCP (Model Context Protocol) tools for querying ontologies. You can use these tools to search for ontological terms, run Description Logic queries, and retrieve information about registered ontology servers.
+                    </div>
+
+                    <h3>Available MCP Tools</h3>
+                    
+                    <div class="panel panel-primary">
+                        <div class="panel-heading"><strong>1. list_ontology_servers</strong></div>
+                        <div class="panel-body">
+                            <p><strong>Purpose:</strong> Retrieve a comprehensive list of all registered ontology servers with their metadata.</p>
+                            <p><strong>Parameters:</strong> None required</p>
+                            <p><strong>Returns:</strong> List of ontology servers with status (online/offline), title, description, class count, property count, and access URL.</p>
+                            <p><strong>Use when:</strong> User asks about available ontologies, wants to know what ontologies are registered, or needs an overview of the system.</p>
+                            <div class="well">
+                                <strong>Example queries from users:</strong>
+                                <ul>
+                                    <li>"What ontologies are available?"</li>
+                                    <li>"Show me all registered servers"</li>
+                                    <li>"Which ontologies are currently online?"</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel panel-primary">
+                        <div class="panel-heading"><strong>2. search_ontologies</strong></div>
+                        <div class="panel-body">
+                            <p><strong>Purpose:</strong> Search for terms across all registered ontologies using text matching.</p>
+                            <p><strong>Parameters:</strong></p>
+                            <ul>
+                                <li><code>query</code> (required): The search term to look for</li>
+                                <li><code>ontologies</code> (optional): Array of specific ontology names to search in (e.g., ["GO", "CHEBI"])</li>
+                            </ul>
+                            <p><strong>Returns:</strong> Matching terms grouped by ontology, including labels and IRIs.</p>
+                            <p><strong>Use when:</strong> User wants to find terms containing specific text across ontologies.</p>
+                            <div class="well">
+                                <strong>Example queries from users:</strong>
+                                <ul>
+                                    <li>"Search for 'apoptosis' in all ontologies"</li>
+                                    <li>"Find terms related to 'protein' in GO and CHEBI"</li>
+                                    <li>"What terms contain 'cancer'?"</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel panel-primary">
+                        <div class="panel-heading"><strong>3. run_dl_query</strong></div>
+                        <div class="panel-body">
+                            <p><strong>Purpose:</strong> Execute Description Logic queries using Manchester OWL Syntax to find ontology classes based on logical relationships.</p>
+                            <p><strong>Parameters:</strong></p>
+                            <ul>
+                                <li><code>query</code> (required): Manchester OWL Syntax query (e.g., "'has part' some nucleus")</li>
+                                <li><code>query_type</code> (required): One of "subclass", "superclass", or "equivalent"</li>
+                                <li><code>ontologies</code> (optional): Array of specific ontology names to query</li>
+                            </ul>
+                            <p><strong>Returns:</strong> Classes matching the DL query, grouped by ontology.</p>
+                            <p><strong>Use when:</strong> User wants to find classes based on logical relationships and properties.</p>
+                            <div class="well">
+                                <strong>Example queries from users:</strong>
+                                <ul>
+                                    <li>"Find all subclasses of things that have nucleus as a part"</li>
+                                    <li>"What are the superclasses of 'biological process'?"</li>
+                                    <li>"Show me all classes equivalent to 'cell division'"</li>
+                                </ul>
+                                <strong>Common Manchester OWL Syntax patterns:</strong>
+                                <ul>
+                                    <li><code>'has part' some X</code> - things that have X as a part</li>
+                                    <li><code>'part of' some X</code> - things that are part of X</li>
+                                    <li><code>regulates some X</code> - things that regulate X</li>
+                                    <li><code>X and Y</code> - things that are both X and Y</li>
+                                    <li><code>X or Y</code> - things that are either X or Y</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel panel-primary">
+                        <div class="panel-heading"><strong>4. get_ontology_info</strong></div>
+                        <div class="panel-body">
+                            <p><strong>Purpose:</strong> Get detailed information about a specific ontology server.</p>
+                            <p><strong>Parameters:</strong></p>
+                            <ul>
+                                <li><code>ontology_name</code> (required): The name/ID of the ontology (e.g., "GO", "CHEBI", "HP")</li>
+                            </ul>
+                            <p><strong>Returns:</strong> Detailed information including title, description, statistics (class/property/individual counts), status, and access URL.</p>
+                            <p><strong>Use when:</strong> User asks for specific information about a particular ontology.</p>
+                            <div class="well">
+                                <strong>Example queries from users:</strong>
+                                <ul>
+                                    <li>"Tell me about the Gene Ontology"</li>
+                                    <li>"What is CHEBI?"</li>
+                                    <li>"How many classes are in the Human Phenotype Ontology?"</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h3>Query Strategy Guide for Agents</h3>
+                    
+                    <div class="panel panel-info">
+                        <div class="panel-body">
+                            <h4>🎯 Best Practices for Query Handling:</h4>
+                            <ol>
+                                <li><strong>Identify Intent:</strong> Determine if the user wants to search text, run logical queries, or get information.</li>
+                                <li><strong>Choose the Right Tool:</strong>
+                                    <ul>
+                                        <li>Use <code>search_ontologies</code> for text-based searches</li>
+                                        <li>Use <code>run_dl_query</code> for relationship-based queries</li>
+                                        <li>Use <code>get_ontology_info</code> for ontology metadata</li>
+                                        <li>Use <code>list_ontology_servers</code> for system overview</li>
+                                    </ul>
+                                </li>
+                                <li><strong>Handle Ambiguity:</strong> If unclear, start with text search, then refine with DL queries if needed.</li>
+                                <li><strong>Optimize Performance:</strong> When possible, specify target ontologies to reduce query time.</li>
+                            </ol>
+
+                            <h4>📊 Response Formatting Tips:</h4>
+                            <ul>
+                                <li>Group results by ontology for clarity</li>
+                                <li>Show both human-readable labels and technical IRIs</li>
+                                <li>Indicate online/offline status when listing servers</li>
+                                <li>Summarize large result sets (e.g., "Found 150 results across 5 ontologies")</li>
+                            </ul>
+
+                            <h4>🔄 Query Refinement Workflow:</h4>
+                            <ol>
+                                <li>Start with broad search if query is vague</li>
+                                <li>Identify relevant ontologies from initial results</li>
+                                <li>Run targeted queries on specific ontologies</li>
+                                <li>Use DL queries for precise logical relationships</li>
+                            </ol>
+                        </div>
+                    </div>
+
+                    <h3>Common Ontology Abbreviations</h3>
+                    <div class="panel panel-default">
+                        <div class="panel-body">
+                            <ul>
+                                <li><strong>GO:</strong> Gene Ontology</li>
+                                <li><strong>CHEBI:</strong> Chemical Entities of Biological Interest</li>
+                                <li><strong>HP:</strong> Human Phenotype Ontology</li>
+                                <li><strong>MONDO:</strong> Mondo Disease Ontology</li>
+                                <li><strong>UBERON:</strong> Uber-anatomy Ontology</li>
+                                <li><strong>CL:</strong> Cell Ontology</li>
+                                <li><strong>DOID:</strong> Disease Ontology</li>
+                                <li><strong>PATO:</strong> Phenotype And Trait Ontology</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info">
+                        <strong>💡 Pro Tip:</strong> When users ask natural language questions about ontologies, translate them into appropriate MCP tool calls. For example, "What diseases affect the heart?" could be translated to a DL query: <code>run_dl_query("'has location' some heart", "subclass", ["DOID", "MONDO"])</code>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Documentation Modal -->
     <div class="modal fade" id="documentationModal" tabindex="-1" role="dialog" aria-labelledby="documentationModalLabel">
         <div class="modal-dialog modal-lg" role="document">
             <div class="modal-content">
@@ -117,7 +291,7 @@
                     <h4 class="modal-title" id="documentationModalLabel">API Documentation</h4>
                 </div>
                 <div class="modal-body">
-                    <p>This document provides information about the AberOWL Central Server API, including the FAIR API (MOD-API) and Model Context Protocol (MCP) support.</p>
+                    <p>This document provides information about the AberOWL Central Server API and FAIR API (MOD-API).</p>
                     
                     <div class="panel panel-info">
                         <div class="panel-heading"><strong>Server Management API</strong></div>
@@ -144,52 +318,6 @@
                             <p>Run a DL query across all online servers.</p>
                             <p>Parameters: <code>query</code> (required), <code>type</code> (required, e.g., subclass), <code>ontologies</code> (optional, comma-separated).</p>
                             <p>Example: <a href="/api/dlquery_all?query='has part' some nucleus&type=subclass" target="_blank">/api/dlquery_all?query='has part' some nucleus&type=subclass</a></p>
-                        </div>
-                    </div>
-
-                    <div class="panel panel-info">
-                        <div class="panel-heading"><strong>Model Context Protocol (MCP) Support</strong></div>
-                        <div class="panel-body">
-                            <p>The Model Context Protocol (MCP) is an open standard developed by Anthropic that enables LLM agents to access data sources and tools through a standardized interface. MCP allows AI applications like Claude Desktop, Cursor, and other LLM-powered tools to discover and interact with services in a consistent way.</p>
-                            
-                            <h5>What is MCP?</h5>
-                            <p>MCP provides a standardized way for LLM applications to:</p>
-                            <ul>
-                                <li><strong>Access Resources:</strong> Structured data and content that provides context to the model</li>
-                                <li><strong>Use Tools:</strong> Execute functions and interact with external systems</li>
-                                <li><strong>Apply Prompts:</strong> Use pre-defined templates for common interactions</li>
-                            </ul>
-                            
-                            <h5>MCP Server for AberOWL Central Server</h5>
-                            <p>To enable LLM agents to interact with the AberOWL Central Server, you can run an MCP server alongside it. This MCP server exposes the central server's functionality as tools that LLM agents can discover and use.</p>
-                            
-                            <p>To start the MCP server, set the <code>MCP_SERVER_ENABLED</code> environment variable to <code>true</code> when running the central server. The MCP server will run on port 8001 by default (configurable via <code>MCP_SERVER_PORT</code>).</p>
-                            
-                            <h5>Available MCP Tools</h5>
-                            <p>When the MCP server is running, it exposes the following tools to LLM agents:</p>
-                            <ul>
-                                <li><strong>list_servers:</strong> Get a list of all registered ontology servers</li>
-                                <li><strong>search_ontologies:</strong> Search for terms across all ontologies</li>
-                                <li><strong>run_dl_query:</strong> Execute a Description Logic query across ontologies</li>
-                                <li><strong>get_server_info:</strong> Get detailed information about a specific ontology server</li>
-                            </ul>
-                            
-                            <h5>Connecting LLM Agents</h5>
-                            <p>LLM applications that support MCP (like Claude Desktop) can connect to the MCP server to access these tools. Configure your MCP client to connect to:</p>
-                            <pre><code>stdio://path/to/mcp_server.py</code></pre>
-                            <p>Or if running remotely:</p>
-                            <pre><code>http://your-server:8001/mcp</code></pre>
-                            
-                            <h5>Example Usage in Claude Desktop</h5>
-                            <p>Once connected, you can ask Claude to:</p>
-                            <ul>
-                                <li>"Show me all available ontology servers"</li>
-                                <li>"Search for 'apoptosis' across all ontologies"</li>
-                                <li>"Find all subclasses of 'cell nucleus' using DL query"</li>
-                            </ul>
-                            <p>Claude will automatically use the appropriate MCP tools to fulfill these requests.</p>
-                            
-                            <p>For more information about MCP, see the <a href="https://modelcontextprotocol.io" target="_blank">official MCP documentation</a>.</p>
                         </div>
                     </div>
 
