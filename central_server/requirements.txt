@@ -4,5 +4,4 @@ jinja2
 aiohttp
 python-multipart
 redis
-mcp[cli]
 websockets
