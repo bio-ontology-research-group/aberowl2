@@ -1428,14 +1428,18 @@ async def search_metadata(
 
 
 async def _reset_all_data():
-    """Connects to Redis and flushes the current database."""
+    """Connects to Redis, flushes the database, and removes the servers.json cache file."""
     logger.info("Connecting to Redis to reset data...")
     try:
         redis_client_local = redis.from_url("redis://redis", decode_responses=True)
         await redis_client_local.ping()
         await redis_client_local.flushdb()
-        await redis_client_local.close()
+        await redis_client_local.aclose()
         logger.info("Successfully reset all data in Redis.")
+
+        if os.path.exists(SERVERS_FILE_PATH):
+            os.remove(SERVERS_FILE_PATH)
+            logger.info(f"Removed server cache file: {SERVERS_FILE_PATH}")
     except Exception as e:
         logger.error(f"Failed to connect to Redis or reset data: {e}")
 
