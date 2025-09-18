@@ -14,5 +14,3 @@ fastmcp
 aiohttp
 redis
 websockets
-websockets
-websockets
