@@ -345,6 +345,7 @@ public class RequestManager {
         }
 
 	def currentShortFormProvider = (shortform == 'iri') ? this.iriOnlyShortFormProvider : this.shortFormProvider;
+	println "Using short form provider: " + (shortform == 'iri' ? "IRIOnlyShortFormProvider" : "NewShortFormProvider")
 	
         Set resultSet = Sets.newHashSet(Iterables.limit(queryEngine.getClasses(mOwlQuery, requestType, direct, labels), MAX_REASONER_RESULTS))
         resultSet.remove(df.getOWLNothing())
@@ -368,6 +369,7 @@ public class RequestManager {
             }
 
 	    def currentShortFormProvider = (shortform == 'iri') ? this.iriOnlyShortFormProvider : this.shortFormProvider;
+	    println "Using short form provider: " + (shortform == 'iri' ? "IRIOnlyShortFormProvider" : "NewShortFormProvider")
 
             Set resultSet = Sets.newHashSet(Iterables.limit(queryEngine.getClasses(mOwlQuery, requestType, direct, labels), MAX_REASONER_RESULTS))
             resultSet.remove(df.getOWLNothing())
