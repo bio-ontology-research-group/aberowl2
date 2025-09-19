@@ -18,7 +18,36 @@ from typing import Any, Dict, List, Optional
 import uuid
 
 import aiohttp
-...
+import websockets
+
+logging.basicConfig(
+    level=logging.DEBUG, 
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    stream=sys.stdout
+)
+logger = logging.getLogger(__name__)
+
+# Enable detailed logging for the websockets library to debug connection issues
+websockets_logger = logging.getLogger("websockets")
+websockets_logger.setLevel(logging.DEBUG)
+websockets_handler = logging.StreamHandler(sys.stdout)
+websockets_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+websockets_logger.addHandler(websockets_handler)
+
+# Also log websockets.server specifically
+websockets_server_logger = logging.getLogger("websockets.server")
+websockets_server_logger.setLevel(logging.DEBUG)
+websockets_server_logger.addHandler(websockets_handler)
+
+# Also log websockets.protocol
+websockets_protocol_logger = logging.getLogger("websockets.protocol")
+websockets_protocol_logger.setLevel(logging.DEBUG)
+websockets_protocol_logger.addHandler(websockets_handler)
+
+# Get the central server URL from environment or use default
+CENTRAL_SERVER_URL = os.getenv("CENTRAL_SERVER_URL", "http://localhost:80")
+
+logger.info(f"MCP Server starting with CENTRAL_SERVER_URL: {CENTRAL_SERVER_URL}")
 
 
 class AberOWLMCPServer:
@@ -27,6 +56,7 @@ class AberOWLMCPServer:
     def __init__(self):
         self.session_id = str(uuid.uuid4())
         self.tools = self.get_tools_list()
+        logger.info(f"MCP Server initialized with session ID: {self.session_id}")
     
     def get_tools_list(self):
         """Return the list of available tools."""
@@ -96,12 +126,13 @@ class AberOWLMCPServer:
     async def handle_message(self, websocket, message):
         """Handle incoming MCP protocol messages."""
         try:
+            logger.debug(f"Received message: {message[:200]}...")  # Log first 200 chars
             data = json.loads(message)
             method = data.get("method")
             params = data.get("params", {})
             request_id = data.get("id")
             
-            logger.info(f"Received method: {method}")
+            logger.info(f"Processing method: {method} with request_id: {request_id}")
             
             if method == "initialize":
                 response = {
@@ -118,6 +149,7 @@ class AberOWLMCPServer:
                         }
                     }
                 }
+                logger.info("Sending initialize response")
             elif method == "tools/list":
                 response = {
                     "jsonrpc": "2.0",
@@ -126,16 +158,20 @@ class AberOWLMCPServer:
                         "tools": self.tools
                     }
                 }
+                logger.info(f"Sending tools list with {len(self.tools)} tools")
             elif method == "tools/call":
                 tool_name = params.get("name")
                 arguments = params.get("arguments", {})
+                logger.info(f"Calling tool: {tool_name} with arguments: {arguments}")
                 result = await self.call_tool(tool_name, arguments)
                 response = {
                     "jsonrpc": "2.0",
                     "id": request_id,
                     "result": result
                 }
+                logger.info(f"Tool {tool_name} completed successfully")
             else:
+                logger.warning(f"Unknown method requested: {method}")
                 response = {
                     "jsonrpc": "2.0",
                     "id": request_id,
@@ -145,10 +181,13 @@ class AberOWLMCPServer:
                     }
                 }
             
-            await websocket.send(json.dumps(response))
+            response_str = json.dumps(response)
+            logger.debug(f"Sending response: {response_str[:200]}...")  # Log first 200 chars
+            await websocket.send(response_str)
+            logger.debug("Response sent successfully")
             
         except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON: {e}")
+            logger.error(f"Invalid JSON received: {e}")
             error_response = {
                 "jsonrpc": "2.0",
                 "id": None,
@@ -159,7 +198,7 @@ class AberOWLMCPServer:
             }
             await websocket.send(json.dumps(error_response))
         except Exception as e:
-            logger.error(f"Error handling message: {e}")
+            logger.error(f"Error handling message: {e}", exc_info=True)
             error_response = {
                 "jsonrpc": "2.0",
                 "id": request_id if 'request_id' in locals() else None,
@@ -187,15 +226,18 @@ class AberOWLMCPServer:
             ontology_name = arguments.get("ontology_name", "")
             return await self.get_ontology_info(ontology_name)
         else:
+            logger.warning(f"Unknown tool requested: {name}")
             return [{"type": "text", "text": f"Unknown tool: {name}"}]
     
     async def list_ontology_servers(self) -> List[Dict[str, Any]]:
         """List all registered ontology servers."""
+        logger.debug("Listing ontology servers")
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(f"{CENTRAL_SERVER_URL}/api/servers") as response:
                     if response.status == 200:
                         servers = await response.json()
+                        logger.info(f"Retrieved {len(servers)} servers")
                         
                         # Format the server list
                         result = f"Found {len(servers)} registered ontology servers:\n\n"
@@ -216,13 +258,15 @@ class AberOWLMCPServer:
                         
                         return [{"type": "text", "text": result}]
                     else:
+                        logger.error(f"Failed to fetch servers. Status: {response.status}")
                         return [{"type": "text", "text": f"Failed to fetch servers. Status: {response.status}"}]
         except Exception as e:
-            logger.error(f"Error listing servers: {e}")
+            logger.error(f"Error listing servers: {e}", exc_info=True)
             return [{"type": "text", "text": f"Error: {str(e)}"}]
     
     async def search_ontologies(self, query: str) -> List[Dict[str, Any]]:
         """Search across all ontologies."""
+        logger.debug(f"Searching ontologies for: {query}")
         if not query:
             return [{"type": "text", "text": "Please provide a search query"}]
         
@@ -233,6 +277,7 @@ class AberOWLMCPServer:
                     if response.status == 200:
                         data = await response.json()
                         results = data.get("result", [])
+                        logger.info(f"Search returned {len(results)} results")
                         
                         if not results:
                             return [{"type": "text", "text": f"No results found for '{query}'"}]
@@ -260,13 +305,15 @@ class AberOWLMCPServer:
                         
                         return [{"type": "text", "text": output}]
                     else:
+                        logger.error(f"Search failed. Status: {response.status}")
                         return [{"type": "text", "text": f"Search failed. Status: {response.status}"}]
         except Exception as e:
-            logger.error(f"Error searching: {e}")
+            logger.error(f"Error searching: {e}", exc_info=True)
             return [{"type": "text", "text": f"Error: {str(e)}"}]
     
     async def run_dl_query(self, query: str, query_type: str, ontologies: str = "") -> List[Dict[str, Any]]:
         """Run a Description Logic query."""
+        logger.debug(f"Running DL query: {query} (type: {query_type})")
         if not query:
             return [{"type": "text", "text": "Please provide a DL query"}]
         
@@ -283,6 +330,7 @@ class AberOWLMCPServer:
                     if response.status == 200:
                         data = await response.json()
                         results = data.get("result", [])
+                        logger.info(f"DL query returned {len(results)} results")
                         
                         if not results:
                             return [{"type": "text", "text": f"No results found for DL query: {query}"}]
@@ -308,13 +356,15 @@ class AberOWLMCPServer:
                         
                         return [{"type": "text", "text": output}]
                     else:
+                        logger.error(f"DL query failed. Status: {response.status}")
                         return [{"type": "text", "text": f"DL query failed. Status: {response.status}"}]
         except Exception as e:
-            logger.error(f"Error running DL query: {e}")
+            logger.error(f"Error running DL query: {e}", exc_info=True)
             return [{"type": "text", "text": f"Error: {str(e)}"}]
     
     async def get_ontology_info(self, ontology_name: str) -> List[Dict[str, Any]]:
         """Get information about a specific ontology."""
+        logger.debug(f"Getting info for ontology: {ontology_name}")
         if not ontology_name:
             return [{"type": "text", "text": "Please provide an ontology name"}]
         
@@ -333,7 +383,10 @@ class AberOWLMCPServer:
                                 break
                         
                         if not matching:
+                            logger.warning(f"Ontology '{ontology_name}' not found")
                             return [{"type": "text", "text": f"Ontology '{ontology_name}' not found"}]
+                        
+                        logger.info(f"Found ontology '{ontology_name}'")
                         
                         # Format the information
                         output = f"Ontology: {matching.get('ontology', 'Unknown')}\n"
@@ -356,22 +409,34 @@ class AberOWLMCPServer:
                         
                         return [{"type": "text", "text": output}]
                     else:
+                        logger.error(f"Failed to fetch ontology info. Status: {response.status}")
                         return [{"type": "text", "text": f"Failed to fetch ontology info. Status: {response.status}"}]
         except Exception as e:
-            logger.error(f"Error getting ontology info: {e}")
+            logger.error(f"Error getting ontology info: {e}", exc_info=True)
             return [{"type": "text", "text": f"Error: {str(e)}"}]
     
-    async def handle_client(self, websocket):
+    async def handle_client(self, websocket, path):
         """Handle a WebSocket client connection."""
-        logger.info(f"Client connected from {websocket.remote_address}")
+        client_address = websocket.remote_address
+        logger.info(f"New connection attempt from {client_address}")
+        logger.debug(f"WebSocket path: {path}")
+        logger.debug(f"WebSocket headers: {websocket.request_headers}")
+        logger.debug(f"WebSocket subprotocol: {websocket.subprotocol}")
         
         try:
+            logger.info(f"Client connected from {client_address}")
+            logger.debug("Waiting for messages...")
+            
             async for message in websocket:
+                logger.debug(f"Received message from {client_address}")
                 await self.handle_message(websocket, message)
-        except websockets.exceptions.ConnectionClosed:
-            logger.info(f"Client disconnected from {websocket.remote_address}")
+                
+        except websockets.exceptions.ConnectionClosed as e:
+            logger.info(f"Client disconnected from {client_address}: {e}")
         except Exception as e:
-            logger.error(f"Error handling client: {e}")
+            logger.error(f"Error handling client {client_address}: {e}", exc_info=True)
+        finally:
+            logger.info(f"Connection closed for {client_address}")
     
     async def run(self):
         """Run the MCP server."""
@@ -393,24 +458,42 @@ class AberOWLMCPServer:
         
         logger.info(f"Starting MCP server on {host}:{port}")
         
-        # Run the WebSocket server
-        async with websockets.serve(self.handle_client, host, port, subprotocols=["mcp"]):
-            logger.info(f"MCP server is running at ws://{host}:{port} with 'mcp' subprotocol")
-            # Keep the server running
-            await asyncio.Future()  # Run forever
+        try:
+            # Run the WebSocket server with explicit parameters
+            logger.debug(f"Creating WebSocket server with host={host}, port={port}, subprotocols=['mcp']")
+            async with websockets.serve(
+                self.handle_client, 
+                host, 
+                port, 
+                subprotocols=["mcp"],
+                logger=logger,
+                compression=None,  # Disable compression for debugging
+                max_size=10 * 1024 * 1024,  # 10MB max message size
+                ping_interval=20,
+                ping_timeout=10
+            ):
+                logger.info(f"MCP server is running at ws://{host}:{port} with 'mcp' subprotocol")
+                logger.info("Waiting for connections...")
+                # Keep the server running
+                await asyncio.Future()  # Run forever
+        except Exception as e:
+            logger.error(f"Failed to start WebSocket server: {e}", exc_info=True)
+            raise
 
 
 async def main():
     """Main entry point."""
+    logger.info("Starting AberOWL MCP Server")
     server = AberOWLMCPServer()
     await server.run()
 
 
 if __name__ == "__main__":
     try:
+        logger.info("MCP server process starting...")
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("MCP server stopped by user")
     except Exception as e:
-        logger.error(f"MCP server error: {e}")
+        logger.error(f"MCP server error: {e}", exc_info=True)
         sys.exit(1)
