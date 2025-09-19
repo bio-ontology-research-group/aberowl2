@@ -18,12 +18,7 @@ from typing import Any, Dict, List, Optional
 import uuid
 
 import aiohttp
-import websockets
-
 ...
-
-# Get the central server URL from environment or use default
-CENTRAL_SERVER_URL = os.getenv("CENTRAL_SERVER_URL", "http://localhost:80")
 
 
 class AberOWLMCPServer:
