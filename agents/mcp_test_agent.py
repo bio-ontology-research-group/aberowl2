@@ -108,7 +108,9 @@ class MCPTestAgent:
         print(f"🔌 Connecting to MCP server at: {self.mcp_server_url}")
         
         # Connect to the WebSocket server
-        self.websocket = await websockets.connect(self.mcp_server_url)
+        self.websocket = await websockets.connect(
+            self.mcp_server_url, subprotocols=["mcp"]
+        )
         
         # Initialize the session
         response = await self.send_request("initialize", {
