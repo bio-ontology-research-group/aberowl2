@@ -15,6 +15,7 @@ def direct = params.direct
 def labels = params.labels
 def axioms = params.axioms
 def ontology = params.ontology
+def shortform = params.shortform
 def manager = application.manager
 
 if (type == null) {
@@ -30,7 +31,7 @@ response.contentType = 'application/json'
 try {
     def results = new HashMap()
     def start = System.currentTimeMillis()
-    def out = manager.runQuery(query, type, direct, labels, axioms)
+    def out = manager.runQuery(query, type, direct, labels, axioms, shortform)
     def end = System.currentTimeMillis()
     results.put('time', (end - start))
     results.put('result', out)

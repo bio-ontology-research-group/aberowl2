@@ -31,6 +31,7 @@ import groovy.json.*
 import groovy.io.*
 import com.google.common.collect.*
 import org.semanticweb.owlapi.model.UnloadableImportException
+import src.IRIOnlyShortFormProvider
 
 
 
@@ -83,6 +84,7 @@ public class RequestManager {
     ];
 
     NewShortFormProvider shortFormProvider;
+    IRIOnlyShortFormProvider iriOnlyShortFormProvider;
     def exampleSuperclassLabel = null;
     def exampleSubclassExpression = null;
     def exampleSubclassExpressionText = null;
@@ -92,6 +94,7 @@ public class RequestManager {
 	this.ontIRI = ontIRI;
 	// Initialize with null, will be set in createReasoner()
 	this.shortFormProvider = null;
+	this.iriOnlyShortFormProvider = null;
     } 
     
     public static RequestManager create(String ont, String ontIRI) {
@@ -192,6 +195,8 @@ public class RequestManager {
 	
 	this.shortFormProvider = new NewShortFormProvider(
 	    this.aProperties, preferredLanguageMap, manager);
+	this.iriOnlyShortFormProvider = new IRIOnlyShortFormProvider(
+	    manager.getOntologies());
 
 	// dispose of old reasoners, close the threadpool
 	queryEngine?.getoReasoner()?.dispose()
@@ -212,7 +217,7 @@ public class RequestManager {
 	println "Classified $ont"
     }
 
-    def toInfo(OWLEntity c, boolean axioms) {
+    def toInfo(OWLEntity c, boolean axioms, shortFormProvider) {
 	def o = this.ontology;
 	def info = [
 	    "owlClass": c.toString(),
@@ -277,7 +282,7 @@ public class RequestManager {
 
 	if (!hasLabel) {
 	    // The shortFormProvider already applies camel case splitting
-	    info["label"] = this.shortFormProvider.getShortForm(c);
+	    info["label"] = shortFormProvider.getShortForm(c);
 	}
 
 	if (!hasAnnot) {
@@ -288,7 +293,7 @@ public class RequestManager {
 	    // set up the renderer for the axioms
 	    // Use the same ShortFormProvider that's used elsewhere to ensure consistent rendering
 	    def manSyntaxRenderer = new AberOWLSyntaxRendererImpl()
-	    manSyntaxRenderer.setShortFormProvider(this.shortFormProvider)
+	    manSyntaxRenderer.setShortFormProvider(shortFormProvider)
 
 	    /* get the axioms */
 	    EntitySearcher.getSuperClasses(c, o).each {
@@ -307,11 +312,11 @@ public class RequestManager {
 	return info;
     }
 
-    ArrayList<HashMap> classes2info(Set<OWLClass> classes, boolean axioms) {
+    ArrayList<HashMap> classes2info(Set<OWLClass> classes, boolean axioms, shortFormProvider) {
 	ArrayList<HashMap> result = new ArrayList<HashMap>();
 	def o = this.ontology
 	classes.each { c ->
-	    def info = toInfo(c, axioms);
+	    def info = toInfo(c, axioms, shortFormProvider);
 	    if (!info["deprecated"]) {
 		result.add(info);
 	    }
@@ -326,7 +331,7 @@ public class RequestManager {
      * @param requestType Type of class match to be performed. Valid values are: subclass, superclass, equivalent or all.
      * @return Set of OWL Classes.
      */
-    Set runQuery(OWLClassExpression mOwlQuery, String type, boolean direct, boolean labels, boolean axioms) {
+    Set runQuery(OWLClassExpression mOwlQuery, String type, boolean direct, boolean labels, boolean axioms, String shortform) {
         type = type.toLowerCase()
         def requestType
         switch (type) {
@@ -339,14 +344,16 @@ public class RequestManager {
             default: requestType = RequestType.SUBEQ; break;
         }
 
+	def currentShortFormProvider = (shortform == 'iri') ? this.iriOnlyShortFormProvider : this.shortFormProvider;
+	
         Set resultSet = Sets.newHashSet(Iterables.limit(queryEngine.getClasses(mOwlQuery, requestType, direct, labels), MAX_REASONER_RESULTS))
         resultSet.remove(df.getOWLNothing())
         resultSet.remove(df.getOWLThing())
-        def classes = classes2info(resultSet, axioms);
+        def classes = classes2info(resultSet, axioms, currentShortFormProvider);
         return classes.sort {x, y -> x["label"].compareTo(y["label"])};
     }
     
-    Set runQuery(String mOwlQuery, String type, boolean direct, boolean labels, boolean axioms) {
+    Set runQuery(String mOwlQuery, String type, boolean direct, boolean labels, boolean axioms, String shortform) {
         if (mOwlQuery.startsWith("http") || mOwlQuery.startsWith("<")) {
             type = type.toLowerCase()
             def requestType
@@ -360,10 +367,12 @@ public class RequestManager {
                 default: requestType = RequestType.SUBEQ; break;
             }
 
+	    def currentShortFormProvider = (shortform == 'iri') ? this.iriOnlyShortFormProvider : this.shortFormProvider;
+
             Set resultSet = Sets.newHashSet(Iterables.limit(queryEngine.getClasses(mOwlQuery, requestType, direct, labels), MAX_REASONER_RESULTS))
             resultSet.remove(df.getOWLNothing())
             resultSet.remove(df.getOWLThing())
-            def classes = classes2info(resultSet, axioms);
+            def classes = classes2info(resultSet, axioms, currentShortFormProvider);
             return classes.sort {x, y -> x["label"].compareTo(y["label"])};
         } else {
             def ont = this.getOntology()
@@ -376,13 +385,17 @@ public class RequestManager {
             parser.setStringToParse(mOwlQuery)
             parser.setOWLEntityChecker(checker)
             def expression = parser.parseClassExpression()
-            return runQuery(expression, type, direct, labels, axioms)
+            return runQuery(expression, type, direct, labels, axioms, shortform)
         }
     }
 
 
+    Set runQuery(String mOwlQuery, String type, boolean direct, boolean labels, boolean axioms) {
+        return runQuery(mOwlQuery, type, direct, labels, axioms, null)
+    }
+
     Set runQuery(String mOwlQuery, String type) {
-        return runQuery(mOwlQuery, type, false)
+        return runQuery(mOwlQuery, type, false, false, false, null)
     }
 
     /** This returns the direct R-successors of a class C in O
@@ -404,7 +417,7 @@ public class RequestManager {
 	    def subResult = queryEngine.getClasses(query2, RequestType.SUBCLASS, true, false)
 	    mainResult = mainResult - subResult
 	}
-	classes.addAll(classes2info(mainResult, ont))
+	classes.addAll(classes2info(mainResult, false, this.shortFormProvider))
 	return classes
     }
 
@@ -466,7 +479,7 @@ public class RequestManager {
 	for (def expression: subProps) {
 	    def objProp = expression.getNamedProperty()
 	    if (!used.contains(objProp)) {
-		result.add(toInfo(objProp, false));
+		result.add(toInfo(objProp, false, this.shortFormProvider));
 		used.add(objProp);
 	    }
 	}
