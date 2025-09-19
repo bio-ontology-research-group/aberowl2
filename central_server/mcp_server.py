@@ -419,15 +419,16 @@ class AberOWLMCPServer:
         """Handle a WebSocket client connection.
         
         Note: In newer versions of websockets library, the handler receives only
-        the websocket connection. The path is available as websocket.path.
+        the websocket connection. The path and headers are available on the
+        `websocket.request` object.
         """
         # Get connection details from the websocket object
         client_address = websocket.remote_address
-        path = getattr(websocket, 'path', '/')  # Get path from websocket object
+        path = websocket.request.path
         
         logger.info(f"New connection attempt from {client_address}")
         logger.debug(f"WebSocket path: {path}")
-        logger.debug(f"WebSocket headers: {websocket.request_headers}")
+        logger.debug(f"WebSocket headers: {websocket.request.headers}")
         logger.debug(f"WebSocket subprotocol: {websocket.subprotocol}")
         
         try:
