@@ -5,3 +5,5 @@ aiohttp
 python-multipart
 redis
 websockets
+websockets
+websockets
