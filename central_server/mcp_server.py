@@ -456,14 +456,22 @@ class AberOWLMCPServer:
             host = address_part
             port = 8765
         
-        logger.info(f"Starting MCP server on {host}:{port}")
+        # IMPORTANT: When running in Docker, we need to bind to 0.0.0.0 to accept external connections
+        # Even if the MCP_SERVER_ADDRESS says localhost, we bind to 0.0.0.0 inside the container
+        if host in ["localhost", "127.0.0.1", "::1"]:
+            bind_host = "0.0.0.0"
+            logger.info(f"Converting localhost binding to 0.0.0.0 for Docker container")
+        else:
+            bind_host = host
+        
+        logger.info(f"Starting MCP server on {bind_host}:{port} (advertised as {host}:{port})")
         
         try:
             # Run the WebSocket server with explicit parameters
-            logger.debug(f"Creating WebSocket server with host={host}, port={port}, subprotocols=['mcp']")
+            logger.debug(f"Creating WebSocket server with host={bind_host}, port={port}, subprotocols=['mcp']")
             async with websockets.serve(
                 self.handle_client, 
-                host, 
+                bind_host,  # Use the bind_host which is 0.0.0.0 for Docker
                 port, 
                 subprotocols=["mcp"],
                 logger=logger,
@@ -472,7 +480,7 @@ class AberOWLMCPServer:
                 ping_interval=20,
                 ping_timeout=10
             ):
-                logger.info(f"MCP server is running at ws://{host}:{port} with 'mcp' subprotocol")
+                logger.info(f"MCP server is running at ws://{bind_host}:{port} (accessible as ws://{host}:{port}) with 'mcp' subprotocol")
                 logger.info("Waiting for connections...")
                 # Keep the server running
                 await asyncio.Future()  # Run forever
