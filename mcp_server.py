@@ -400,8 +400,8 @@ class AberOWLMCPServer:
         logger.info(f"Starting MCP server on {host}:{port}")
         
         # Run the WebSocket server
-        async with websockets.serve(self.handle_client, host, port):
-            logger.info(f"MCP server is running at ws://{host}:{port}")
+        async with websockets.serve(self.handle_client, host, port, subprotocols=["mcp"]):
+            logger.info(f"MCP server is running at ws://{host}:{port} with 'mcp' subprotocol")
             # Keep the server running
             await asyncio.Future()  # Run forever
 
