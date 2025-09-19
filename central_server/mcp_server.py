@@ -415,9 +415,16 @@ class AberOWLMCPServer:
             logger.error(f"Error getting ontology info: {e}", exc_info=True)
             return [{"type": "text", "text": f"Error: {str(e)}"}]
     
-    async def handle_client(self, websocket, path):
-        """Handle a WebSocket client connection."""
+    async def handle_client(self, websocket):
+        """Handle a WebSocket client connection.
+        
+        Note: In newer versions of websockets library, the handler receives only
+        the websocket connection. The path is available as websocket.path.
+        """
+        # Get connection details from the websocket object
         client_address = websocket.remote_address
+        path = getattr(websocket, 'path', '/')  # Get path from websocket object
+        
         logger.info(f"New connection attempt from {client_address}")
         logger.debug(f"WebSocket path: {path}")
         logger.debug(f"WebSocket headers: {websocket.request_headers}")
