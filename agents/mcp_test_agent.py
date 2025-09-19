@@ -19,6 +19,41 @@ import websockets
 
 class MCPTestAgent:
     """Test agent that connects to the AberOWL MCP server and tests its functionality."""
+
+    TOOL_DOCUMENTATION = {
+        "list_ontology_servers": {
+            "guidelines": "Invoke this tool when the user wants to see a list of all available ontology servers, their status (online/offline), and basic statistics like the number of classes and properties.",
+            "prompts": [
+                "List all ontology servers.",
+                "Show me the available ontologies and their status.",
+                "Which ontologies are currently online?"
+            ]
+        },
+        "search_ontologies": {
+            "guidelines": "Use this tool when the user wants to find classes or entities across all ontologies based on a keyword search. This is useful for initial exploration or when the exact ontology is not known.",
+            "prompts": [
+                "Search for 'cell' across all ontologies.",
+                "Find everything related to 'protein'.",
+                "Where can I find information about 'monogenic diabetes'?"
+            ]
+        },
+        "run_dl_query": {
+            "guidelines": "This is a powerful tool for answering complex questions about relationships between classes using Description Logic (DL). Invoke this when the user asks for subclasses, superclasses, or other relationships, often using terms like 'what is a type of', 'what are parts of', or logical operators like 'and'/'or'. The query should be in Manchester OWL Syntax.",
+            "prompts": [
+                "What are the subclasses of 'biological process'?",
+                "Find things that are 'part of' some 'nucleus'.",
+                "Show me subclasses of 'apoptosis' that are also related to 'immune system'."
+            ]
+        },
+        "get_ontology_info": {
+            "guidelines": "Invoke this tool when the user asks for detailed information about a specific ontology, identified by its acronym (e.g., 'GO', 'CHEBI'). This provides metadata, version, and statistics for that single ontology.",
+            "prompts": [
+                "Get information about the GO ontology.",
+                "Show me the details for CHEBI.",
+                "What version of the Human Phenotype Ontology (HP) are you using?"
+            ]
+        }
+    }
     
     def __init__(self, mcp_server_url: str):
         """Initialize the test agent.
@@ -121,9 +156,9 @@ class MCPTestAgent:
         self.print_statistics()
     
     async def test_list_tools(self):
-        """Test listing available tools."""
-        print("\n📋 Test 1: Listing Available Tools")
-        print("-" * 40)
+        """Test listing available tools and print extended documentation."""
+        print("\n📋 Test 1: Listing Available Tools & Usage Documentation")
+        print("-" * 60)
         
         try:
             response = await self.send_request("tools/list")
@@ -132,9 +167,25 @@ class MCPTestAgent:
                 tools = response["result"].get("tools", [])
                 self.stats["tools_discovered"] = len(tools)
                 
-                print(f"✅ Found {len(tools)} tools:")
+                print(f"✅ Found {len(tools)} tools. See below for usage guidelines.")
+                
                 for tool in tools:
-                    print(f"  • {tool['name']}: {tool['description']}")
+                    tool_name = tool['name']
+                    print("\n" + "="*50)
+                    print(f"Tool: {tool_name}")
+                    print(f"Description: {tool['description']}")
+                    print("="*50)
+                    
+                    if tool_name in self.TOOL_DOCUMENTATION:
+                        doc = self.TOOL_DOCUMENTATION[tool_name]
+                        print("\n  When to use:")
+                        print(f"    {doc['guidelines']}")
+                        
+                        print("\n  Example Natural Language Prompts:")
+                        for prompt in doc['prompts']:
+                            print(f"    - \"{prompt}\"")
+                    else:
+                        print("\n  (No additional documentation available for this tool)")
                 
                 self.stats["results"]["list_tools"] = {
                     "status": "success",
