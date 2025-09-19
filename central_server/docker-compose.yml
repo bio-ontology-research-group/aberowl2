@@ -11,7 +11,7 @@ services:
       # Mount the app directory for live-reloading during development
       - ./app:/code/app
       # Mount the MCP server file correctly (source:destination)
-      - ../mcp_server.py:/code/mcp_server.py
+      - ./mcp_server.py:/code/mcp_server.py
     restart: always
     container_name: aberowl-central-server
     depends_on:

@@ -132,7 +132,8 @@ async def start_mcp_server_if_configured():
     if mcp_server_address:
         logger.info(f"MCP_SERVER_ADDRESS is set. Starting MCP server...")
         
-        mcp_server_script = "mcp_server.py"
+        # The mcp_server.py script is mounted at the root of the /code directory
+        mcp_server_script = "/code/mcp_server.py"
         
         if not os.path.exists(mcp_server_script):
             logger.error(f"MCP server script not found at '{mcp_server_script}'. Cannot start MCP server.")
