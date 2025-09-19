@@ -20,13 +20,7 @@ import uuid
 import aiohttp
 import websockets
 
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
-
-# Enable detailed logging for the websockets library
-websockets_logger = logging.getLogger("websockets")
-websockets_logger.setLevel(logging.DEBUG)
-websockets_logger.addHandler(logging.StreamHandler(sys.stdout))
+...
 
 # Get the central server URL from environment or use default
 CENTRAL_SERVER_URL = os.getenv("CENTRAL_SERVER_URL", "http://localhost:80")
