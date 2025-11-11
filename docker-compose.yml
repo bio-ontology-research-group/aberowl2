@@ -38,8 +38,6 @@ services:
     networks:
       - default
       - aberowl-net
-    depends_on:
-      - virtuoso
     restart: unless-stopped
 
   elasticsearch:
@@ -94,10 +92,8 @@ services:
     ports:
       - "${NGINX_PORT}:80"  # Expose configurable nginx port to the outside world
     depends_on:
-      - virtuoso
       - ontology-api
       - elasticsearch
-      - llm
     volumes:
       # Optional: Mount the frontend files if you're serving them via nginx
       - ./:/usr/share/nginx/html

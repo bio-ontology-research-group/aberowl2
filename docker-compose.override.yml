@@ -1,0 +1,5 @@
+services:
+  elasticsearch:
+    container_name: elasticsearch_8081
+  indexer:
+    container_name: indexer_8081
