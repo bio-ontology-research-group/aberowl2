@@ -146,13 +146,13 @@ ABEROWL_REGISTER=${ABEROWL_REGISTER:-"false"}
 echo "Ensuring 'aberowl-net' Docker network exists..."
 docker network create aberowl-net || true
 
-if [[ "$ABEROWL_REGISTER" == "true" ]]; then
-    echo "Registration is enabled. Overriding ABEROWL_CENTRAL_URL for container-to-container communication."
-    # The ontology-api container will use the service name 'central-server' to connect over the shared Docker network.
-    # The port is 80, which is the internal port of the central-server container.
-    export ABEROWL_CENTRAL_URL="http://central-server:80"
-    echo "Registration URL for container set to: $ABEROWL_CENTRAL_URL"
-fi
+# if [[ "$ABEROWL_REGISTER" == "true" ]]; then
+#     echo "Registration is enabled. Overriding ABEROWL_CENTRAL_URL for container-to-container communication."
+#     # The ontology-api container will use the service name 'central-server' to connect over the shared Docker network.
+#     # The port is 80, which is the internal port of the central-server container.
+#     export ABEROWL_CENTRAL_URL="http://central-server:80"
+#     echo "Registration URL for container set to: $ABEROWL_CENTRAL_URL"
+# fi
 
 # Create a unique project name based on the port number
 PROJECT_NAME="aberowl_${NGINX_PORT}"
