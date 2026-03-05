@@ -180,7 +180,7 @@ Alpine.data('ontologyApp', () => ({
     this.isLoading = true;
 
     // Fetch ontology statistics from the new endpoint
-    fetch('/api/api/getStatistics.groovy')
+    fetch('/api/getStatistics.groovy')
         .then(response => response.json())
         .then(stats => {
             this.ontology.name = stats.title || 'Ontology';
@@ -228,7 +228,7 @@ Alpine.data('ontologyApp', () => ({
         });
     
     // Fetch the ontology classes and properties from the backend
-    fetch('/api/api/runQuery.groovy?type=subclass&direct=true&query=<http://www.w3.org/2002/07/owl%23Thing>')
+    fetch('/api/runQuery.groovy?type=subclass&direct=true&query=<http://www.w3.org/2002/07/owl%23Thing>')
       .then(response => {
         if (!response.ok) {
           throw new Error('Network response was not ok');
@@ -256,7 +256,7 @@ Alpine.data('ontologyApp', () => ({
         }));
       });
     // Fetch the ontology properties
-    fetch('/api/api/getObjectProperties.groovy')
+    fetch('/api/getObjectProperties.groovy')
       .then(response => {
         if (!response.ok) {
           throw new Error('Network response was not ok');
@@ -305,6 +305,16 @@ Alpine.data('ontologyApp', () => ({
     }
   },
   
+  quoteIfSpaces(text) {
+    if (!text) return text;
+    if (text.startsWith('<') && text.endsWith('>')) return text; // Already an IRI
+    if (text.startsWith("'") && text.endsWith("'")) return text; // Already quoted
+    if (text.includes(' ')) {
+      return `'${text}'`;
+    }
+    return text;
+  },
+
   handleClassNavigation(tab, owlClass, query) {
     if (tab === 'Browse' && owlClass) {
       if (this.classesMap.has(owlClass)) {
@@ -328,7 +338,7 @@ Alpine.data('ontologyApp', () => ({
         this.isLoading = true;
         
         // Fetch the class hierarchy from the backend
-        fetch(`/api/api/findRoot.groovy?query=${encodeURIComponent(owlClass)}`)
+        fetch(`/api/findRoot.groovy?query=${encodeURIComponent(owlClass)}`)
           .then(response => {
             if (!response.ok) {
               throw new Error('Network response was not ok');
@@ -358,9 +368,12 @@ Alpine.data('ontologyApp', () => ({
         this.selectedClass = this.classesMap.get(owlClass)
       }
       
+      const formattedOwlClass = this.quoteIfSpaces(owlClass);
+      this.dlQueryExp = formattedOwlClass;
+
       if (query) {
           this.dlQuery = query;
-          this.executeDLQuery(owlClass, query);
+          this.executeDLQuery(formattedOwlClass, query);
       }
     } else if (tab === 'Property' && owlClass) {
       if (this.propsMap.has(owlClass)) {
@@ -390,12 +403,11 @@ Alpine.data('ontologyApp', () => ({
   executeDLQuery(owlClass, queryType, labels = true) {
       this.isLoading = true;
 
-      const formattedQuery = owlClass;
-      // Check if the query is a class label and format it properly for the Manchester OWL Syntax parser
+      const formattedQuery = this.quoteIfSpaces(owlClass);
       
       console.log('Executing DL query for class:', formattedQuery, 'with type:', queryType, 'and labels:', labels);
     // Make a real API call to the backend
-    fetch(`/api/api/runQuery.groovy?query=${encodeURIComponent(formattedQuery)}&type=${queryType}&labels=${labels}`)
+    fetch(`/api/runQuery.groovy?query=${encodeURIComponent(formattedQuery)}&type=${queryType}&labels=${labels}`)
       .then(response => {
         if (!response.ok) {
           throw new Error('Network response was not ok');
@@ -694,14 +706,17 @@ Alpine.data('ontologyApp', () => ({
   setDLQuery(owlClass, queryType) {
     this.dlQuery = queryType;
     
+    // Quote if needed
+    const formattedOwlClass = this.quoteIfSpaces(owlClass);
+
     // Store the original query for display purposes
-    this.dlQueryExp = owlClass;
+    this.dlQueryExp = formattedOwlClass;
     
     // Update URL hash
-    window.location.hash = `/DLQuery/${encodeURIComponent(owlClass)}/${queryType}`;
+    window.location.hash = `/DLQuery/${encodeURIComponent(formattedOwlClass)}/${queryType}`;
     
     // Execute the query with the potentially formatted class
-    this.executeDLQuery(owlClass, queryType);
+    this.executeDLQuery(formattedOwlClass, queryType);
   },
   
   // Execute DL query when a class is selected in Browse view
@@ -896,7 +911,7 @@ const params = new URLSearchParams();
 params.append('query', this.query.trim());
 params.append('endpoint', this.endpoint);
 
-const sparqlUrl = `/api/api/runSparqlQuery.groovy?${params.toString()}`;
+const sparqlUrl = `/api/runSparqlQuery.groovy?${params.toString()}`;
 
 	fetch(sparqlUrl, {
 	    method: 'GET',
@@ -1161,7 +1176,7 @@ const sparqlUrl = `/api/api/runSparqlQuery.groovy?${params.toString()}`;
       // If the class is not in the map, fetch it from the backend
       // this.isLoading = true;
       
-      fetch(`/api/api/findRoot.groovy?query=${encodeURIComponent(owlClass)}`)
+      fetch(`/api/findRoot.groovy?query=${encodeURIComponent(owlClass)}`)
         .then(response => {
           if (!response.ok) {
             throw new Error('Network response was not ok');
@@ -1216,9 +1231,8 @@ const sparqlUrl = `/api/api/runSparqlQuery.groovy?${params.toString()}`;
     
     // Set DL query expression based on class label
     if (this.selectedClass) {
-      // Use the class label directly without modification
-      // Our improved executeDLQuery will handle the conversion
-      this.dlQueryExp = this.selectedClass.label;
+      // Use the class label directly, but quote it if it has spaces
+      this.dlQueryExp = this.quoteIfSpaces(this.selectedClass.label);
     }
   },
   
@@ -1226,7 +1240,7 @@ const sparqlUrl = `/api/api/runSparqlQuery.groovy?${params.toString()}`;
   loadChildrenForClass(owlClass) {
     // this.isLoading = true;
     
-    fetch(`/api/api/runQuery.groovy?direct=true&axioms=true&query=${encodeURIComponent(owlClass)}&type=subclass`)
+    fetch(`/api/runQuery.groovy?direct=true&axioms=true&query=${encodeURIComponent(owlClass)}&type=subclass`)
       .then(response => {
         if (!response.ok) {
           throw new Error('Network response was not ok');
@@ -1382,7 +1396,7 @@ const sparqlUrl = `/api/api/runSparqlQuery.groovy?${params.toString()}`;
         source_content_type: 'application/json'
     });
 
-    fetch(`/api/api/elastic.groovy?${params.toString()}`, {
+    fetch(`/api/elastic.groovy?${params.toString()}`, {
       method: 'GET'
     })
     .then(response => {
@@ -1480,7 +1494,7 @@ const sparqlUrl = `/api/api/runSparqlQuery.groovy?${params.toString()}`;
     }
     
     this.isLoading = true;
-    const dlQueryUrl = "/api/api/runQuery.groovy";
+    const dlQueryUrl = "/api/runQuery.groovy";
     
     // First detect parameters from natural language
     this.detectNLParams()

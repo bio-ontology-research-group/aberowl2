@@ -1,33 +1,235 @@
 import asyncio
+import base64
 import json
 import logging
 import os
+import secrets
+import subprocess
 import sys
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime
-from typing import Dict, Any, Optional, List
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Dict, Any, Optional, List, Set
 from urllib.parse import urlparse
 
 import aiohttp
 import redis.asyncio as redis
-from fastapi import FastAPI, Request, Query, HTTPException
+from fastapi import FastAPI, Request, Query, HTTPException, Depends
 from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, HttpUrl
 
-logging.basicConfig(level=logging.INFO)
+from app.virtuoso_manager import CentralVirtuosoManager
+from app.es_manager import CentralESManager
+from app.intake.obofoundry import fetch_obofoundry_ontologies
+from app.intake.bioportal import fetch_bioportal_ontologies
+from app.intake import updater as update_pipeline
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Enable detailed logging for the websockets library to debug connection issues
+websockets_logger = logging.getLogger("websockets.server")
+websockets_logger.setLevel(logging.DEBUG)
+websockets_logger.addHandler(logging.StreamHandler(sys.stdout))
 
 SERVERS_FILE_PATH = "app/servers.json"
 CATALOGUE_CONFIG_PATH = "app/catalogue_config.json"
+MANUAL_ONTOLOGIES_PATH = "config/manual_ontologies.json"
+REGISTRY_KEY = "ontology_registry"
 
 # Redis client instance will be managed in the lifespan context
 redis_client: redis.Redis = None
 catalogue_config: Dict[str, Any] = {}
-ELASTICSEARCH_URL = "http://elasticsearch:9200"
+ELASTICSEARCH_URL = os.getenv("CENTRAL_ES_URL", "http://elasticsearch:9200")
 mcp_process: Optional[asyncio.subprocess.Process] = None
+
+# Central service managers (initialised in lifespan)
+virtuoso_mgr: Optional[CentralVirtuosoManager] = None
+es_mgr: Optional[CentralESManager] = None
+
+# HTTP Basic Auth for admin endpoints
+_security = HTTPBasic()
+ADMIN_USER = os.getenv("ADMIN_USER", "admin")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "changeme")
+
+# Scheduling intervals
+SOURCE_SYNC_INTERVAL = int(os.getenv("SOURCE_SYNC_INTERVAL_SECONDS", "86400"))
+UPDATE_CHECK_INTERVAL = int(os.getenv("UPDATE_CHECK_INTERVAL_SECONDS", "86400"))
+ONTOLOGIES_BASE_PATH = os.getenv("ONTOLOGIES_HOST_PATH", "/data/ontologies")
+ABEROWL_REPO_PATH = os.getenv("ABEROWL_REPO_PATH", "/opt/aberowl")
+
+
+def _require_admin(credentials: HTTPBasicCredentials = Depends(_security)):
+    """HTTP Basic Auth guard for admin endpoints."""
+    ok = (
+        secrets.compare_digest(credentials.username.encode(), ADMIN_USER.encode())
+        and secrets.compare_digest(credentials.password.encode(), ADMIN_PASSWORD.encode())
+    )
+    if not ok:
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return credentials
+
+
+# ---------------------------------------------------------------------------
+# Registry helpers
+# ---------------------------------------------------------------------------
+
+async def _get_registry_entry(ontology_id: str) -> Optional[Dict[str, Any]]:
+    raw = await redis_client.hget(REGISTRY_KEY, ontology_id)
+    return json.loads(raw) if raw else None
+
+
+async def _save_registry_entry(ontology_id: str, entry: Dict[str, Any]) -> None:
+    await redis_client.hset(REGISTRY_KEY, ontology_id, json.dumps(entry))
+
+
+async def _load_manual_ontologies() -> List[Dict[str, Any]]:
+    if not os.path.exists(MANUAL_ONTOLOGIES_PATH):
+        return []
+    try:
+        with open(MANUAL_ONTOLOGIES_PATH) as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error("Failed to load manual_ontologies.json: %s", e)
+        return []
+
+
+async def _upsert_registry_from_source(
+    ontology_id: str, fields: Dict[str, Any], overwrite_source: bool = False
+) -> None:
+    """
+    Upsert a registry entry without clobbering server_url, secret_key, or
+    update status that may have been set by other code paths.
+    """
+    existing = await _get_registry_entry(ontology_id) or {}
+
+    # Only overwrite source fields if they come from the canonical source
+    if overwrite_source or "source" not in existing:
+        existing.update(fields)
+    else:
+        # Preserve existing source if it is higher priority (manual > obofoundry > bioportal)
+        priority = {"manual": 3, "obofoundry": 2, "bioportal": 1}
+        existing_p = priority.get(existing.get("source", ""), 0)
+        new_p = priority.get(fields.get("source", ""), 0)
+        if new_p >= existing_p:
+            for k, v in fields.items():
+                if k not in ("server_url", "secret_key", "update_status", "update_error",
+                             "last_checked", "last_updated", "update_history",
+                             "active_owl_path", "active_es_index", "source_etag",
+                             "source_last_modified", "source_md5"):
+                    existing[k] = v
+
+    existing.setdefault("ontology_id", ontology_id)
+    await _save_registry_entry(ontology_id, existing)
+
+
+# ---------------------------------------------------------------------------
+# Source sync task  (runs daily; populates ontology_registry from OBO / BP / manual)
+# ---------------------------------------------------------------------------
+
+async def _sync_sources_once() -> None:
+    """Fetch OBOFoundry, BioPortal, and manual lists, upsert into Redis registry."""
+    logger.info("Starting source sync…")
+
+    # 1. OBOFoundry
+    obo_list = await fetch_obofoundry_ontologies()
+    obo_ids: Set[str] = set()
+    for entry in obo_list:
+        oid = entry["ontology_id"]
+        obo_ids.add(oid)
+        await _upsert_registry_from_source(oid, entry)
+    logger.info("Source sync: %d OBOFoundry ontologies upserted", len(obo_list))
+
+    # 2. BioPortal (skip OBO IDs)
+    bp_list = await fetch_bioportal_ontologies(exclude_ids=obo_ids)
+    for entry in bp_list:
+        oid = entry["ontology_id"]
+        await _upsert_registry_from_source(oid, entry)
+    logger.info("Source sync: %d BioPortal ontologies upserted", len(bp_list))
+
+    # 3. Manual (always wins)
+    manual_list = await _load_manual_ontologies()
+    for entry in manual_list:
+        oid = entry.get("ontology_id", "").lower()
+        if not oid:
+            continue
+        entry["source"] = "manual"
+        await _upsert_registry_from_source(oid, entry, overwrite_source=True)
+    logger.info("Source sync: %d manual ontologies upserted", len(manual_list))
+
+    logger.info("Source sync complete.")
+
+
+async def daily_source_sync_task() -> None:
+    """Background task: sync ontology sources daily."""
+    # Initial sync shortly after startup
+    await asyncio.sleep(30)
+    await _sync_sources_once()
+    while True:
+        await asyncio.sleep(SOURCE_SYNC_INTERVAL)
+        await _sync_sources_once()
+
+
+# ---------------------------------------------------------------------------
+# Update check task (runs daily; triggers update pipeline for changed ontologies)
+# ---------------------------------------------------------------------------
+
+async def _check_and_update_all() -> None:
+    logger.info("Starting daily update check for all registered ontologies…")
+    all_keys = await redis_client.hkeys(REGISTRY_KEY)
+    if not all_keys:
+        logger.info("No ontologies in registry, skipping update check.")
+        return
+
+    # Run checks concurrently (but limit parallelism to avoid hammering servers)
+    sem = asyncio.Semaphore(5)
+
+    async def check_one(ontology_id: str) -> None:
+        async with sem:
+            entry = await _get_registry_entry(ontology_id)
+            if not entry or not entry.get("source_url"):
+                return
+            if entry.get("update_status") == "disabled":
+                return
+            logger.info("Checking update for %s", ontology_id)
+            try:
+                result = await update_pipeline.execute_update_pipeline(
+                    ontology_id=ontology_id,
+                    registry_entry=entry,
+                    redis_client=redis_client,
+                    virtuoso_mgr=virtuoso_mgr,
+                    es_mgr=es_mgr,
+                    ontologies_base_path=ONTOLOGIES_BASE_PATH,
+                    es_url=ELASTICSEARCH_URL,
+                )
+                if result.get("changed") is False:
+                    logger.info("%s: no change detected", ontology_id)
+                elif result.get("success"):
+                    logger.info("%s: updated successfully", ontology_id)
+                else:
+                    logger.warning("%s: update failed: %s", ontology_id, result.get("error"))
+            except Exception as e:
+                logger.error("Unhandled error updating %s: %s", ontology_id, e)
+
+    await asyncio.gather(*[check_one(k) for k in all_keys])
+    logger.info("Daily update check complete.")
+
+
+async def daily_update_check_task() -> None:
+    """Background task: check for ontology updates daily."""
+    await asyncio.sleep(300)  # stagger 5 min after source sync
+    await _check_and_update_all()
+    while True:
+        await asyncio.sleep(UPDATE_CHECK_INTERVAL)
+        await _check_and_update_all()
 
 
 async def _load_catalogue_config():
@@ -103,8 +305,18 @@ async def fetch_and_update_server_metadata(server: Dict[str, Any]):
     if not url or not ontology:
         return
 
-    stats_url = f"{str(url).rstrip('/')}/api/api/getStatistics.groovy"
-    logger.info(f"Fetching metadata for {ontology} from {stats_url}")
+    # If the URL is localhost/127.0.0.1, we must use host.docker.internal to reach it from inside the container
+    base_url = str(url)
+    if "localhost" in base_url or "127.0.0.1" in base_url:
+        poll_base = base_url.replace("localhost", "host.docker.internal").replace("127.0.0.1", "host.docker.internal")
+    else:
+        poll_base = base_url
+
+    # Ensure no double /api/ prefix. stats_url should be base + /api/getStatistics.groovy
+    # if base is http://host:port/
+    stats_url = f"{poll_base.rstrip('/')}/api/getStatistics.groovy"
+    
+    logger.info(f"Fetching metadata for {ontology} from {stats_url} (originally {url})")
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(stats_url, timeout=10) as response:
@@ -183,26 +395,35 @@ async def periodic_metadata_fetch_task():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    global redis_client
+    global redis_client, virtuoso_mgr, es_mgr
     redis_client = redis.from_url("redis://redis", decode_responses=True)
     await redis_client.ping()
     logger.info("Successfully connected to Redis.")
-    
+
+    virtuoso_mgr = CentralVirtuosoManager()
+    es_mgr = CentralESManager()
+    await es_mgr.ensure_ontologies_index()
+    logger.info("Central service managers initialised.")
+
     await _load_catalogue_config()
-    
+
     # Load servers from file before fetching metadata
     await _load_servers_from_file()
-    
+
     # Perform initial metadata fetch on startup
     asyncio.create_task(_fetch_and_update_all_servers())
     # Start the periodic background task
     asyncio.create_task(periodic_metadata_fetch_task())
 
+    # Start intake scheduler tasks
+    asyncio.create_task(daily_source_sync_task())
+    asyncio.create_task(daily_update_check_task())
+
     # Start MCP server if configured
     await start_mcp_server_if_configured()
-    
+
     yield
-    
+
     # Shutdown
     if mcp_process:
         logger.info(f"Terminating MCP server process (PID: {mcp_process.pid})...")
@@ -233,6 +454,9 @@ class RegistrationRequest(BaseModel):
     ontology: str
     url: HttpUrl
     secret_key: Optional[str] = None
+    # Extended fields for intake system
+    ontology_id: Optional[str] = None   # lowercase ID (defaults to ontology lowercased)
+    source_url: Optional[str] = None    # upstream OWL download URL
 
 
 @app.post("/register")
@@ -248,18 +472,25 @@ async def register_server(payload: RegistrationRequest):
     new_secret_key = None
 
     if existing_server_json:
-        # Existing registration, check for update or takeover
+        # Existing registration, check for update
         server_data = json.loads(existing_server_json)
         stored_key = server_data.get("secret_key")
 
-        if stored_key and secret_key == stored_key:
-            # Valid update from existing server
-            server_data["url"] = server_url
-            server_data["status"] = "online"
-            message = f"Server for {ontology_name} updated."
-            logger.info(f"Updated server URL for ontology: {ontology_name} at {server_url}")
+        # Security: require secret_key for updates to prevent hijacking.
+        # If no key is stored (legacy or reset), we allow a new registration.
+        if stored_key:
+            if secret_key == stored_key:
+                # Valid update from existing server
+                server_data["url"] = server_url
+                server_data["status"] = "online"
+                message = f"Server for {ontology_name} updated."
+                logger.info(f"Updated server URL for ontology: {ontology_name} at {server_url}")
+            else:
+                # Key mismatch - REJECT hijacking
+                logger.warning(f"Registration hijacking attempt blocked for ontology: {ontology_name}. Invalid secret key.")
+                raise HTTPException(status_code=403, detail="Invalid secret key for this ontology.")
         else:
-            # Key mismatch or no key provided for existing entry -> new server taking over
+            # No key stored, allow registration and issue a new key
             new_secret_key = str(uuid.uuid4())
             new_key_issued = True
             server_data = {
@@ -268,8 +499,8 @@ async def register_server(payload: RegistrationRequest):
                 "status": "online",
                 "secret_key": new_secret_key
             }
-            message = f"New server for {ontology_name} registered, old one replaced."
-            logger.info(f"New server instance taking over for ontology: {ontology_name}. New key issued.")
+            message = f"Server for {ontology_name} registered (new key issued)."
+            logger.info(f"Registered server for ontology: {ontology_name} (no previous key). New key issued.")
     else:
         # New registration
         new_secret_key = str(uuid.uuid4())
@@ -441,9 +672,30 @@ async def get_servers():
     return servers
 
 
-@app.api_route("/api/elastic/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+@app.api_route("/api/elastic/{path:path}", methods=["GET", "POST"])
 async def elastic_proxy(request: Request, path: str):
     """Proxies requests to Elasticsearch."""
+    # Security: Validate path to prevent access to administrative endpoints
+    # and restrict methods to read operations.
+    safe_path_suffixes = ["/_search", "/_count", "/_mapping", "/_settings"]
+    is_safe = False
+    
+    # Check if the path ends with any of the safe suffixes or matches them exactly
+    # (after prepending a slash if needed)
+    full_path = "/" + path.lstrip("/")
+    for suffix in safe_path_suffixes:
+        if full_path.endswith(suffix):
+            is_safe = True
+            break
+            
+    if not is_safe:
+        logger.warning(f"Blocked unsafe Elasticsearch proxy request to: {path}")
+        raise HTTPException(status_code=403, detail="Unsafe Elasticsearch endpoint access blocked.")
+
+    # Prevent path traversal
+    if ".." in path:
+        raise HTTPException(status_code=400, detail="Invalid path.")
+
     async with aiohttp.ClientSession() as session:
         target_url = f"{ELASTICSEARCH_URL}/{path}"
         
@@ -458,14 +710,20 @@ async def elastic_proxy(request: Request, path: str):
         }
 
         if method == "POST":
+            # Elasticsearch supports GET with body via the 'source' parameter
+            # We keep the method as GET for the actual request to ES if we use 'source'
             method = "GET"
             if data:
                 # ES can take query in `source` parameter for GET requests
                 new_params = list(params.items())
-                new_params.append(('source', data.decode('utf-8')))
-                new_params.append(('source_content_type', 'application/json'))
-                params = new_params
-                data = None
+                try:
+                    new_params.append(('source', data.decode('utf-8')))
+                    new_params.append(('source_content_type', 'application/json'))
+                    params = new_params
+                    data = None
+                except UnicodeDecodeError:
+                    # If data is not decodable, don't try to use 'source'
+                    method = "POST"
         
         try:
             async with session.request(
@@ -1485,6 +1743,295 @@ async def _reset_all_data():
             logger.info(f"Removed server cache file: {SERVERS_FILE_PATH}")
     except Exception as e:
         logger.error(f"Failed to connect to Redis or reset data: {e}")
+
+
+# ===========================================================================
+# Admin routes
+# ===========================================================================
+
+_admin_templates = Jinja2Templates(directory="app/templates/admin")
+
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_dashboard(
+    request: Request,
+    credentials: HTTPBasicCredentials = Depends(_require_admin),
+):
+    """Admin dashboard: all ontologies with status."""
+    all_keys = await redis_client.hkeys(REGISTRY_KEY)
+    entries = []
+    for k in all_keys:
+        raw = await redis_client.hget(REGISTRY_KEY, k)
+        if raw:
+            entries.append(json.loads(raw))
+
+    # Also include registered_servers data
+    server_data_json = await redis_client.hvals("registered_servers")
+    servers_by_id = {}
+    for s in server_data_json:
+        srv = json.loads(s)
+        servers_by_id[srv.get("ontology", "").lower()] = srv
+
+    for entry in entries:
+        oid = entry.get("ontology_id", "")
+        srv = servers_by_id.get(oid, {})
+        entry["server_status"] = srv.get("status", "unknown")
+        entry["server_url"] = srv.get("url", entry.get("server_url", ""))
+
+    virt_ok = await virtuoso_mgr.health_check()
+    es_ok = await es_mgr.health_check()
+
+    return _admin_templates.TemplateResponse(
+        "dashboard.html",
+        {
+            "request": request,
+            "entries": sorted(entries, key=lambda e: e.get("ontology_id", "")),
+            "virtuoso_ok": virt_ok,
+            "es_ok": es_ok,
+            "total": len(entries),
+            "online": sum(1 for e in entries if e.get("server_status") == "online"),
+            "failed": sum(1 for e in entries if e.get("update_status") not in ("ok", None, "")),
+        },
+    )
+
+
+@app.get("/admin/ontology/{ontology_id}", response_class=HTMLResponse)
+async def admin_ontology_detail(
+    request: Request,
+    ontology_id: str,
+    credentials: HTTPBasicCredentials = Depends(_require_admin),
+):
+    """Admin detail page for a single ontology."""
+    entry = await _get_registry_entry(ontology_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Ontology not in registry")
+
+    doc_count = None
+    active_index = entry.get("active_es_index")
+    if active_index:
+        doc_count = await es_mgr.get_doc_count(active_index)
+
+    triple_count = await virtuoso_mgr.get_triple_count(ontology_id)
+
+    return _admin_templates.TemplateResponse(
+        "ontology_detail.html",
+        {
+            "request": request,
+            "entry": entry,
+            "doc_count": doc_count,
+            "triple_count": triple_count,
+        },
+    )
+
+
+@app.post("/admin/ontology/{ontology_id}/trigger_update")
+async def admin_trigger_update(
+    ontology_id: str,
+    credentials: HTTPBasicCredentials = Depends(_require_admin),
+):
+    """Manually trigger the update pipeline for one ontology."""
+    entry = await _get_registry_entry(ontology_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Ontology not in registry")
+
+    async def _run():
+        try:
+            await update_pipeline.execute_update_pipeline(
+                ontology_id=ontology_id,
+                registry_entry=entry,
+                redis_client=redis_client,
+                virtuoso_mgr=virtuoso_mgr,
+                es_mgr=es_mgr,
+                ontologies_base_path=ONTOLOGIES_BASE_PATH,
+                es_url=ELASTICSEARCH_URL,
+            )
+        except Exception as e:
+            logger.error("Manual update failed for %s: %s", ontology_id, e)
+
+    asyncio.create_task(_run())
+    return {"status": "update_triggered", "ontology_id": ontology_id}
+
+
+@app.post("/admin/ontology/{ontology_id}/disable")
+async def admin_disable_ontology(
+    ontology_id: str,
+    credentials: HTTPBasicCredentials = Depends(_require_admin),
+):
+    """Pause automatic updates for an ontology."""
+    entry = await _get_registry_entry(ontology_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Ontology not in registry")
+    entry["update_status"] = "disabled"
+    await _save_registry_entry(ontology_id, entry)
+    return {"status": "disabled", "ontology_id": ontology_id}
+
+
+@app.post("/admin/ontology/{ontology_id}/enable")
+async def admin_enable_ontology(
+    ontology_id: str,
+    credentials: HTTPBasicCredentials = Depends(_require_admin),
+):
+    """Re-enable automatic updates for an ontology."""
+    entry = await _get_registry_entry(ontology_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Ontology not in registry")
+    entry["update_status"] = "ok"
+    entry["update_error"] = None
+    await _save_registry_entry(ontology_id, entry)
+    return {"status": "enabled", "ontology_id": ontology_id}
+
+
+@app.get("/admin/infrastructure")
+async def admin_infrastructure(
+    credentials: HTTPBasicCredentials = Depends(_require_admin),
+):
+    """Health status of Virtuoso and Elasticsearch."""
+    return {
+        "virtuoso": "ok" if await virtuoso_mgr.health_check() else "error",
+        "elasticsearch": "ok" if await es_mgr.health_check() else "error",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Provisioning endpoint – spin up a new OntologyServer container
+# ---------------------------------------------------------------------------
+
+class ProvisionRequest(BaseModel):
+    ontology_id: str
+    source_url: str
+    port: int
+    name: Optional[str] = None
+    description: Optional[str] = None
+    detach: bool = True
+
+
+@app.post("/admin/provision_ontology")
+async def admin_provision_ontology(
+    payload: ProvisionRequest,
+    credentials: HTTPBasicCredentials = Depends(_require_admin),
+):
+    """
+    Provision a new per-ontology Docker stack.
+
+    Downloads the OWL file from source_url, writes it to the shared
+    ontologies volume, then calls reload_docker.sh to start the container stack.
+    """
+    ontology_id = payload.ontology_id.lower()
+    reload_script = os.path.join(ABEROWL_REPO_PATH, "reload_docker.sh")
+
+    if not os.path.exists(reload_script):
+        raise HTTPException(
+            status_code=500,
+            detail=f"reload_docker.sh not found at {reload_script}",
+        )
+
+    # Download the OWL file into the shared ontologies volume
+    ont_dir = Path(ONTOLOGIES_BASE_PATH) / ontology_id
+    ont_dir.mkdir(parents=True, exist_ok=True)
+    owl_dest = str(ont_dir / f"{ontology_id}_active.owl")
+
+    logger.info("Provisioning %s: downloading from %s", ontology_id, payload.source_url)
+    async with aiohttp.ClientSession() as session:
+        dl = await update_pipeline.download_ontology(payload.source_url, owl_dest, session)
+    if "error" in dl:
+        raise HTTPException(status_code=502, detail=f"Download failed: {dl['error']}")
+
+    secret_key = secrets.token_hex(32)
+    cmd = [
+        "bash",
+        reload_script,
+        "--ontology-id", ontology_id,
+        "--source-url", payload.source_url,
+        "--central-virtuoso-url", os.getenv("VIRTUOSO_URL", "http://virtuoso:8890"),
+        "--central-es-url", ELASTICSEARCH_URL,
+    ]
+    if payload.detach:
+        cmd.append("-d")
+
+    # The OWL file is already in the shared volume; pass its container-internal path
+    owl_container_path = f"/data/{ontology_id}_active.owl"
+    cmd += [owl_container_path, str(payload.port)]
+
+    env = {**os.environ, "ABEROWL_SECRET_KEY": secret_key}
+
+    logger.info("Running: %s", " ".join(cmd))
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            env=env,
+            cwd=ABEROWL_REPO_PATH,
+        )
+        if result.returncode != 0:
+            raise HTTPException(
+                status_code=500,
+                detail=f"reload_docker.sh failed: {result.stderr[-1000:]}",
+            )
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="Provisioning timed out")
+
+    # Pre-register the ontology in the registry
+    entry = {
+        "ontology_id": ontology_id,
+        "name": payload.name or ontology_id,
+        "description": payload.description or "",
+        "source": "manual",
+        "source_url": payload.source_url,
+        "source_md5": dl.get("md5"),
+        "secret_key": secret_key,
+        "update_status": "provisioned",
+        "last_updated": datetime.now(timezone.utc).isoformat(),
+        "update_history": [],
+    }
+    await _save_registry_entry(ontology_id, entry)
+
+    return {
+        "status": "provisioned",
+        "ontology_id": ontology_id,
+        "port": payload.port,
+        "secret_key": secret_key,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Update result callback (called by OntologyServer after hot-swap)
+# ---------------------------------------------------------------------------
+
+class UpdateResultPayload(BaseModel):
+    ontology_id: str
+    task_id: str
+    status: str          # "success" or "failed"
+    message: Optional[str] = None
+    class_count: Optional[int] = None
+
+
+@app.post("/api/update_result")
+async def update_result_callback(payload: UpdateResultPayload):
+    """
+    Callback endpoint that OntologyServer POSTs to after completing a hot-swap.
+    Updates the registry status in Redis.
+    """
+    entry = await _get_registry_entry(payload.ontology_id)
+    if not entry:
+        return {"status": "ignored", "reason": "not in registry"}
+
+    now = datetime.now(timezone.utc).isoformat()
+    if payload.status == "success":
+        entry["update_status"] = "ok"
+        entry["update_error"] = None
+        entry["last_updated"] = now
+    else:
+        entry["update_status"] = "hotswap_failed"
+        entry["update_error"] = payload.message
+
+    history = entry.get("update_history", [])
+    history.append({"timestamp": now, "task_id": payload.task_id, "status": payload.status})
+    entry["update_history"] = history[-10:]
+    await _save_registry_entry(payload.ontology_id, entry)
+    return {"status": "recorded"}
+
 
 if __name__ == "__main__":
     import sys

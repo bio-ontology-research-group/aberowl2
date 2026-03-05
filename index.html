@@ -6,9 +6,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AberOWL2</title>
   <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
-  <link rel="stylesheet" href="app.css">
+  <link rel="stylesheet" href="app.css?v=2">
   <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
-  <script src="ontology.js"></script>
+  <script src="ontology.js?v=2"></script>
   <!-- <script src="main.js"></script> -->
 </head>
 
@@ -116,7 +116,7 @@
             </div>
 
             <div class="col-sm-8 col-md-9 main">
-              <h1 x-text="(ontology?.acronym) + ' - ' + (ontology?.name')">
+              <h1 x-text="(ontology?.acronym) + ' - ' + (ontology?.name)">
               </h1>
               <h5 x-text="ontology?.description"></h5>
 

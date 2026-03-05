@@ -85,7 +85,7 @@ DavRoot = DAV
 ResultSetMaxRows = 10000
 MaxQueryCostEstimationTime = 400
 MaxQueryExecutionTime = 60
-DefaultGraph = http://www.co-ode.org/ontologies/pizza/pizza.owl
+DefaultGraph = http://localhost:8890/ontology
 """)
         return config_path
         
@@ -124,15 +124,15 @@ DefaultGraph = http://www.co-ode.org/ontologies/pizza/pizza.owl
                 escaped_path = self.db_path.replace("\\", "\\\\")
                 f.write(f"""
 -- Clear existing data
-SPARQL CLEAR GRAPH <http://www.co-ode.org/ontologies/pizza/pizza.owl>;
+SPARQL CLEAR GRAPH <http://localhost:8890/ontology>;
 
 -- Load new data
-ld_dir('{escaped_path}', 'ontology.rdf', 'http://www.co-ode.org/ontologies/pizza/pizza.owl');
+ld_dir('{escaped_path}', 'ontology.rdf', 'http://localhost:8890/ontology');
 rdf_loader_run();
 checkpoint;
 
 -- Register prefixes for easier querying
-DB.DBA.XML_SET_NS_DECL ('pizza', 'http://www.co-ode.org/ontologies/pizza/pizza.owl#', 2);
+DB.DBA.XML_SET_NS_DECL ('pizza', 'http://localhost:8890/ontology#', 2);
 DB.DBA.XML_SET_NS_DECL ('owl', 'http://www.w3.org/2002/07/owl#', 2);
 DB.DBA.XML_SET_NS_DECL ('rdf', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#', 2);
 DB.DBA.XML_SET_NS_DECL ('rdfs', 'http://www.w3.org/2000/01/rdf-schema#', 2);
@@ -149,7 +149,7 @@ select * from DB.DBA.LOAD_LIST where ll_error is not NULL;
                     files = {'file': ('ontology.rdf', f, 'application/rdf+xml')}
                     
                     # First try to clear the graph
-                    clear_query = "CLEAR GRAPH <http://www.co-ode.org/ontologies/pizza/pizza.owl>"
+                    clear_query = "CLEAR GRAPH <http://localhost:8890/ontology>"
                     clear_response = requests.post(
                         f"http://localhost:{self.http_port}/sparql",
                         data={'query': clear_query},
@@ -163,7 +163,7 @@ select * from DB.DBA.LOAD_LIST where ll_error is not NULL;
                     response = requests.post(
                         f"http://localhost:{self.http_port}/sparql-graph-crud-auth",
                         files=files,
-                        params={'graph-uri': 'http://www.co-ode.org/ontologies/pizza/pizza.owl'},
+                        params={'graph-uri': 'http://localhost:8890/ontology'},
                         auth=('dba', 'dba'),
                         headers={'Accept': 'application/json'},
                         timeout=30

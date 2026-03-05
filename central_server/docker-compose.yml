@@ -1,4 +1,3 @@
-
 services:
   central-server:
     build: .
@@ -7,15 +6,30 @@ services:
       - "8765:8765"
     environment:
       - MCP_SERVER_ADDRESS=${MCP_SERVER_ADDRESS}
+      - VIRTUOSO_URL=http://virtuoso:8890
+      - VIRTUOSO_DBA_PASSWORD=${VIRTUOSO_DBA_PASSWORD:-dba}
+      - CENTRAL_ES_URL=http://elasticsearch:9200
+      - ONTOLOGIES_HOST_PATH=${ONTOLOGIES_HOST_PATH:-./ontologies}
+      - ADMIN_USER=${ADMIN_USER:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
+      - ABEROWL_REPO_PATH=${ABEROWL_REPO_PATH:-/opt/aberowl}
+      - SOURCE_SYNC_INTERVAL_SECONDS=${SOURCE_SYNC_INTERVAL_SECONDS:-86400}
+      - UPDATE_CHECK_INTERVAL_SECONDS=${UPDATE_CHECK_INTERVAL_SECONDS:-86400}
     volumes:
-      # Mount the app directory for live-reloading during development
       - ./app:/code/app
-      # Mount the MCP server file correctly (source:destination)
       - ./mcp_server.py:/code/mcp_server.py
+      - ./config:/code/config
+      - ${ONTOLOGIES_HOST_PATH:-./ontologies}:/data/ontologies
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: always
     container_name: aberowl-central-server
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      elasticsearch:
+        condition: service_healthy
     networks:
       - aberowl-net
 
@@ -28,8 +42,46 @@ services:
     networks:
       - aberowl-net
 
+  virtuoso:
+    build:
+      context: ..
+      dockerfile: Dockerfile.virtuoso
+    environment:
+      - DBA_PASSWORD=${VIRTUOSO_DBA_PASSWORD:-dba}
+      - SPARQL_UPDATE=true
+      - DEFAULT_GRAPH=http://aberowl.net/
+    volumes:
+      - virtuoso_data:/opt/virtuoso-opensource/database/data
+      - virtuoso_logs:/opt/virtuoso-opensource/database/logs
+      - ${ONTOLOGIES_HOST_PATH:-./ontologies}:/data/ontologies:ro
+      - ./docker/virtuoso.ini:/opt/virtuoso-opensource/database/virtuoso.ini
+    restart: unless-stopped
+    container_name: aberowl-central-virtuoso
+    networks:
+      - aberowl-net
+
+  elasticsearch:
+    image: elasticsearch:7.17.10
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    restart: unless-stopped
+    container_name: aberowl-central-elasticsearch
+    networks:
+      - aberowl-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s --fail 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
 volumes:
   redis_data:
+  virtuoso_data:
+  virtuoso_logs:
+  elasticsearch_data:
 
 networks:
   aberowl-net:

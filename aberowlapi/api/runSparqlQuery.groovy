@@ -12,15 +12,20 @@ if (request != null) {
 }
 
 def query = params.query
-def endpoint = params.endpoint ?: "http://virtuoso:8890/sparql/"
+// Prefer central Virtuoso if configured; fall back to the per-ontology instance.
+def centralVirtuosoUrl = System.getenv("CENTRAL_VIRTUOSO_URL")
+def defaultEndpoint = centralVirtuosoUrl ? "${centralVirtuosoUrl.replaceAll('/+$', '')}/sparql/" : "http://virtuoso:8890/sparql/"
+def endpoint = params.endpoint ?: defaultEndpoint
 // Get the original host as seen by the user (before nginx proxy)
 def userHost = request.getHeader('X-Forwarded-Host') ?: request.getHeader('Host')
 
-// Check if endpoint refers to the local virtuoso instance
-if (userHost.contains("ontology-api:8080")) {
-    endpoint = "http://virtuoso:8890/sparql/"
+// Security: Prevent SSRF by validating the endpoint.
+// We only allow internal Virtuoso or the central Virtuoso instance.
+def allowedEndpoints = [defaultEndpoint, "http://virtuoso:8890/sparql/", "http://localhost:8890/sparql/"].unique()
+if (endpoint && !allowedEndpoints.contains(endpoint)) {
+    endpoint = defaultEndpoint
 }
-def manager = application.manager
+def manager = application.getAttribute("manager")
 
 response.contentType = 'application/json'
 

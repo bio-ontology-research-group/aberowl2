@@ -9,7 +9,7 @@ if(!application) {
 
 def params = Util.extractParams(request);
 def property = params.property;
-def manager = application.manager;
+def manager = application.getAttribute("manager");
 
 response.contentType = 'application/json';
 

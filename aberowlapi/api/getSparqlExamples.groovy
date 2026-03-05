@@ -4,7 +4,7 @@ if(!application) {
     application = request.getApplication(true);
 }
 
-def manager = application.manager
+def manager = application.getAttribute("manager")
 response.contentType = 'application/json'
 
 if(manager) {

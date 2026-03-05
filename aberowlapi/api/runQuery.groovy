@@ -16,15 +16,15 @@ def labels = params.labels
 def axioms = params.axioms
 def ontology = params.ontology
 def shortform = params.shortform
-def manager = application.manager
+def manager = application.getAttribute("manager")
 
 if (type == null) {
     type = "all"
 }
 
-direct = true; //(direct.equals("true")) ? true : false;
-labels = (labels.equals("true")) ? true : false;
-axioms = (axioms.equals("true")) ? true : false;
+direct = (direct != null && direct.equals("true")) ? true : false;
+labels = (labels != null && labels.equals("true")) ? true : false;
+axioms = (axioms != null && axioms.equals("true")) ? true : false;
 
 response.contentType = 'application/json'
 

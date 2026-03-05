@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ entry.ontology_id }} — AberOWL Admin</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <style>
+    .badge-source-obofoundry { background-color:#007bff; }
+    .badge-source-bioportal  { background-color:#6f42c1; }
+    .badge-source-manual     { background-color:#fd7e14; }
+    pre.error-block { max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; }
+  </style>
+</head>
+<body>
+<nav class="navbar navbar-dark bg-dark px-3">
+  <a class="navbar-brand mb-0 h1" href="/admin">AberOWL Admin</a>
+  <span class="ms-auto text-light small">
+    <a href="/admin" class="text-light">← Dashboard</a>
+  </span>
+</nav>
+
+<div class="container-fluid mt-3">
+  <div class="d-flex align-items-center mb-3 gap-2">
+    <h4 class="mb-0"><code>{{ entry.ontology_id }}</code></h4>
+    <span class="badge badge-source-{{ entry.source or 'manual' }}">{{ entry.source or '?' }}</span>
+    {% set us = entry.update_status or 'ok' %}
+    {% if us in ('ok', 'provisioned') %}
+      <span class="badge bg-success">{{ us }}</span>
+    {% elif us == 'disabled' %}
+      <span class="badge bg-secondary">disabled</span>
+    {% elif us == 'source_gone' %}
+      <span class="badge bg-dark">source gone</span>
+    {% else %}
+      <span class="badge bg-danger">{{ us }}</span>
+    {% endif %}
+  </div>
+
+  <div class="row g-3">
+    <!-- Left column: metadata + controls -->
+    <div class="col-lg-5">
+      <div class="card mb-3">
+        <div class="card-header">Metadata</div>
+        <div class="card-body p-0">
+          <table class="table table-sm mb-0">
+            <tbody>
+              <tr><th style="width:38%">Name</th><td>{{ entry.name or '—' }}</td></tr>
+              <tr><th>Description</th><td class="small">{{ (entry.description or '')[:300] or '—' }}</td></tr>
+              <tr><th>Source URL</th>
+                <td class="small text-break">
+                  {% if entry.source_url %}
+                    <a href="{{ entry.source_url }}" target="_blank">{{ entry.source_url[:80] }}{% if entry.source_url|length > 80 %}…{% endif %}</a>
+                  {% else %}—{% endif %}
+                </td>
+              </tr>
+              <tr><th>Permanent URL</th>
+                <td class="small text-break">{{ entry.permanent_url or '—' }}</td>
+              </tr>
+              <tr><th>Homepage</th>
+                <td class="small">
+                  {% if entry.homepage %}
+                    <a href="{{ entry.homepage }}" target="_blank">link</a>
+                  {% else %}—{% endif %}
+                </td>
+              </tr>
+              <tr><th>License</th><td class="small">{{ entry.license or '—' }}</td></tr>
+              <tr><th>Last MD5</th><td><code class="small">{{ (entry.source_md5 or '—')[:16] }}</code></td></tr>
+              <tr><th>Last ETag</th><td><code class="small">{{ entry.source_etag or '—' }}</code></td></tr>
+              <tr><th>Last-Modified</th><td class="small">{{ entry.source_last_modified or '—' }}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header">Server</div>
+        <div class="card-body p-0">
+          <table class="table table-sm mb-0">
+            <tbody>
+              <tr><th style="width:38%">URL</th>
+                <td>
+                  {% if entry.server_url %}
+                    <a href="{{ entry.server_url }}" target="_blank">{{ entry.server_url }}</a>
+                    <span class="badge {{ 'bg-success' if entry.server_status == 'online' else 'bg-secondary' }} ms-1">
+                      {{ entry.server_status or 'unknown' }}
+                    </span>
+                  {% else %}<span class="text-muted">no server</span>{% endif %}
+                </td>
+              </tr>
+              <tr><th>Last Checked</th><td class="small">{{ (entry.last_checked or '')[:19].replace('T',' ') or '—' }}</td></tr>
+              <tr><th>Last Updated</th><td class="small">{{ (entry.last_updated or '')[:19].replace('T',' ') or '—' }}</td></tr>
+              <tr><th>Triples</th><td>{{ triple_count if triple_count is not none else '—' }}</td></tr>
+              <tr><th>ES Docs</th><td>{{ doc_count if doc_count is not none else '—' }}</td></tr>
+              <tr><th>ES Index</th><td><code class="small">{{ entry.active_es_index or '—' }}</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="d-flex flex-wrap gap-2 mb-3">
+        <form method="post" action="/admin/ontology/{{ entry.ontology_id }}/trigger_update">
+          <button class="btn btn-primary btn-sm" type="submit">Trigger update</button>
+        </form>
+        {% if us == 'disabled' %}
+        <form method="post" action="/admin/ontology/{{ entry.ontology_id }}/enable">
+          <button class="btn btn-success btn-sm" type="submit">Enable</button>
+        </form>
+        {% else %}
+        <form method="post" action="/admin/ontology/{{ entry.ontology_id }}/disable">
+          <button class="btn btn-secondary btn-sm" type="submit">Disable updates</button>
+        </form>
+        {% endif %}
+      </div>
+
+      {% if entry.update_error %}
+      <div class="card border-danger mb-3">
+        <div class="card-header text-danger">Last error</div>
+        <div class="card-body p-2">
+          <pre class="error-block mb-0 text-danger small">{{ entry.update_error }}</pre>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Right column: update history -->
+    <div class="col-lg-7">
+      <div class="card">
+        <div class="card-header">Update history (last 10)</div>
+        <div class="table-responsive">
+          <table class="table table-sm mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Timestamp</th>
+                <th>Task ID</th>
+                <th>Status</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% set history = entry.update_history or [] %}
+              {% for h in history | reverse %}
+              <tr>
+                <td class="small">{{ h.timestamp[:19].replace('T',' ') }}</td>
+                <td><code class="small">{{ (h.task_id or '')[:8] }}</code></td>
+                <td>
+                  {% if h.status == 'success' %}
+                    <span class="badge bg-success">success</span>
+                  {% elif h.status == 'skipped' %}
+                    <span class="badge bg-secondary">skipped</span>
+                  {% else %}
+                    <span class="badge bg-danger">{{ h.status }}</span>
+                  {% endif %}
+                </td>
+                <td class="small text-muted">{{ (h.message or '')[:80] }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="4" class="text-center text-muted">No history yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

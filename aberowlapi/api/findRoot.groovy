@@ -11,7 +11,7 @@ if(!application) {
 def params = Util.extractParams(request)
 
 def query = params.query
-def manager = application.manager
+def manager = application.getAttribute("manager")
 
 def owlThing = '<http://www.w3.org/2002/07/owl#Thing>'
 
@@ -20,15 +20,23 @@ if(query && manager) {
 
     // find superclasses
     def supers = [query]
+    def visited = new HashSet()
+    visited.add(query)
     int it = 0
-    while(true) {
+    while(it < supers.size()) {
 	    q = supers[it]
 	    parents = manager.runQuery(q, 'superclass', true, false, true).toArray()
 	    if (parents.size() == 0 || parents[0].owlClass.equals(owlThing)) {
 	        break
 	    }
-	    supers.add(parents[0].owlClass)
+	    def parent = parents[0].owlClass
+	    if (visited.contains(parent)) {
+	        break // Cycle detected
+	    }
+	    supers.add(parent)
+	    visited.add(parent)
 	    it++
+	    if (it > 100) break // Safety limit
     }
 
     supers = supers.reverse()

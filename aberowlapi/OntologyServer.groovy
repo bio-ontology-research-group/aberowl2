@@ -68,18 +68,21 @@ def startServer(def ontologyFilePath, def port) {
     context.setErrorHandler(localErrorHandler)
 
     // Paths are relative to resourceBase ('.', which is /app/aberowlapi)
-    context.addServlet(GroovyServlet, '/health.groovy')
-    context.addServlet(GroovyServlet, '/api/runQuery.groovy')
-    context.addServlet(GroovyServlet, '/api/reloadOntology.groovy')
-    context.addServlet(GroovyServlet, '/api/findRoot.groovy')
-    context.addServlet(GroovyServlet, '/api/getObjectProperties.groovy')
-    context.addServlet(GroovyServlet, '/api/retrieveRSuccessors.groovy')
-    context.addServlet(GroovyServlet, '/api/retrieveAllLabels.groovy')
-    context.addServlet(GroovyServlet, '/api/getStatistics.groovy')
-    context.addServlet(GroovyServlet, '/api/sparql.groovy')
-    context.addServlet(GroovyServlet, '/api/runSparqlQuery.groovy')
-    context.addServlet(GroovyServlet, '/api/getSparqlExamples.groovy')
-    context.addServlet(GroovyServlet, '/api/elastic.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/health.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/health.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/runQuery.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/reloadOntology.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/findRoot.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/getObjectProperties.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/retrieveRSuccessors.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/retrieveAllLabels.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/getStatistics.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/sparql.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/runSparqlQuery.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/getSparqlExamples.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/elastic.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/updateOntology.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/updateStatus.groovy')
 
     context.setAttribute('port', port)
     context.setAttribute('version', '0.2')
@@ -147,7 +150,9 @@ def startServer(def ontologyFilePath, def port) {
     }
 
     if (manager != null) {
-        context.setAttribute("manager", manager)
+        context.getServletContext().setAttribute("manager", manager)
+        // Also initialize updateTasks map here to ensure it's available early
+        context.getServletContext().setAttribute("updateTasks", new java.util.concurrent.ConcurrentHashMap())
         println("RequestManager set in context for ${ontId}.")
     } else {
         println("ERROR: Failed to create or set RequestManager in context for ${ontId}. API calls relying on it will fail.")

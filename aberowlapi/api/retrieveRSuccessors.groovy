@@ -10,20 +10,17 @@ if(!application) {
 def params = Util.extractParams(request)
 def relation = params.relation
 def qClass = params.class
-def ontology = application.ontology
-//def version = params.version
-def rManager = application.rManager
+def manager = application.getAttribute("manager")
 
-if (!relation || !qClass || !ontology) {
+if (!relation || !qClass || !manager) {
+  response.setStatus(400)
+  println new JsonBuilder([ 'err': true, 'message': 'Missing parameters: relation, class, or manager not found.' ]).toString()
   return
-}
-if (version == null) {
-  version = -1
 }
 
 try {
   def results = new HashMap()
-  def out = rManager.relationQuery(relation, qClass)
+  def out = manager.relationQuery(relation, qClass)
 
   results['result'] = out
   response.contentType = 'application/json'

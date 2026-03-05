@@ -545,6 +545,33 @@ public class RequestManager {
             exampleSubclassExpressionText: this.exampleSubclassExpressionText
         ]
     }
+
+    /**
+     * Release all reasoner and ontology resources.
+     * Call this on the old RequestManager after a hot-swap to prevent memory leaks.
+     */
+    public void disposeAll() {
+	try {
+	    oReasoner?.dispose()
+	} catch (Exception e) {
+	    println "Error disposing oReasoner for $ont: ${e.getMessage()}"
+	}
+	// structReasoner may be the same object as oReasoner when the structural
+	// reasoner fallback was triggered; avoid a double-dispose.
+	try {
+	    if (structReasoner != null && structReasoner !== oReasoner) {
+		structReasoner.dispose()
+	    }
+	} catch (Exception e) {
+	    println "Error disposing structReasoner for $ont: ${e.getMessage()}"
+	}
+	oReasoner    = null
+	structReasoner = null
+	queryEngine  = null
+	ontology     = null
+	oManager     = null
+	println "Disposed all resources for $ont"
+    }
 	   
 	   /**
 	    * Adds spaces to camel case text.

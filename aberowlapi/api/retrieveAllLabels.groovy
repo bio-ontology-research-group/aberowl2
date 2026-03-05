@@ -9,8 +9,8 @@ if(!application) {
   application = request.getApplication(true)
 }
 
-def ontology = application.ontology
-def rManager = application.rManager
+def ontology = application.getAttribute("ontology")
+def rManager = application.getAttribute("rManager")
 
 if(ontology) {
   query = java.net.URLDecoder.decode(ontology, "UTF-8")
