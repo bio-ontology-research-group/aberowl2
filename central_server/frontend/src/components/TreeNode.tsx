@@ -7,15 +7,20 @@ interface Props {
   node: ClassResult
   ontologyId: string
   depth?: number
+  /** If provided, clicking the label calls onSelect instead of navigating */
+  onSelect?: (iri: string) => void
+  /** Currently selected IRI (for highlighting) */
+  selectedIri?: string | null
 }
 
-export default function TreeNode({ node, ontologyId, depth = 0 }: Props) {
+export default function TreeNode({ node, ontologyId, depth = 0, onSelect, selectedIri }: Props) {
   const [children, setChildren] = useState<ClassResult[] | null>(null)
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const lbl = Array.isArray(node.label) ? node.label[0] : node.label
   const iri = node.class || node.owlClass?.replace(/[<>]/g, '') || ''
+  const isSelected = selectedIri === iri
 
   async function toggle() {
     if (open) { setOpen(false); return }
@@ -33,9 +38,40 @@ export default function TreeNode({ node, ontologyId, depth = 0 }: Props) {
 
   const isLeaf = children !== null && children.length === 0
 
+  function handleClick(e: React.MouseEvent) {
+    if (onSelect) {
+      e.preventDefault()
+      onSelect(iri)
+    }
+  }
+
+  const labelEl = onSelect ? (
+    <button
+      onClick={handleClick}
+      className={`text-sm text-left truncate leading-tight transition-colors ${
+        isSelected
+          ? 'text-indigo-700 font-semibold bg-indigo-100 px-1 -mx-1 rounded'
+          : 'text-gray-700 hover:text-indigo-700'
+      }`}
+      title={iri}
+    >
+      {lbl || iri}
+    </button>
+  ) : (
+    <Link
+      to={`/ontology/${ontologyId}/class/${encodeURIComponent(iri)}`}
+      className="text-sm text-gray-700 hover:text-indigo-700 truncate leading-tight"
+      title={iri}
+    >
+      {lbl || iri}
+    </Link>
+  )
+
   return (
-    <div className={depth > 0 ? 'ml-5 border-l border-gray-200' : ''}>
-      <div className="flex items-center gap-1 py-[3px] pl-2 group hover:bg-indigo-50/50 rounded-r transition-colors">
+    <div className={depth > 0 ? 'ml-4 border-l border-gray-200' : ''}>
+      <div className={`flex items-center gap-1 py-[3px] pl-2 group rounded-r transition-colors ${
+        isSelected ? 'bg-indigo-50' : 'hover:bg-gray-50'
+      }`}>
         <button
           onClick={toggle}
           className={`w-5 h-5 flex items-center justify-center rounded text-xs shrink-0 transition-colors ${
@@ -52,18 +88,19 @@ export default function TreeNode({ node, ontologyId, depth = 0 }: Props) {
             <span className="text-[8px]">&#9679;</span>
           ) : open ? '▾' : '▸'}
         </button>
-        <Link
-          to={`/ontology/${ontologyId}/class/${encodeURIComponent(iri)}`}
-          className="text-sm text-gray-700 hover:text-indigo-700 truncate leading-tight"
-          title={iri}
-        >
-          {lbl || iri}
-        </Link>
+        {labelEl}
       </div>
       {open && children && children.length > 0 && (
         <div>
           {children.map((c, i) => (
-            <TreeNode key={c.class || i} node={c} ontologyId={ontologyId} depth={depth + 1} />
+            <TreeNode
+              key={c.class || i}
+              node={c}
+              ontologyId={ontologyId}
+              depth={depth + 1}
+              onSelect={onSelect}
+              selectedIri={selectedIri}
+            />
           ))}
         </div>
       )}

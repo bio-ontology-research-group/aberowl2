@@ -562,13 +562,13 @@ public class RequestManager {
             manSyntaxRenderer.setShortFormProvider(sfp)
 
             EntitySearcher.getSuperClasses(c, o).each { cExpr ->
-                info["SubClassOf"] << manSyntaxRenderer.render(cExpr)
+                info["SubClassOf"] << cleanRenderedAxiom(manSyntaxRenderer.render(cExpr))
             }
             EntitySearcher.getEquivalentClasses(c, o).each { cExpr ->
-                info["Equivalent"] << manSyntaxRenderer.render(cExpr)
+                info["Equivalent"] << cleanRenderedAxiom(manSyntaxRenderer.render(cExpr))
             }
             EntitySearcher.getDisjointClasses(c, o).each { cExpr ->
-                info["Disjoint"] << manSyntaxRenderer.render(cExpr)
+                info["Disjoint"] << cleanRenderedAxiom(manSyntaxRenderer.render(cExpr))
             }
         }
         return info
@@ -744,6 +744,28 @@ public class RequestManager {
                 }
             }
         }
+    }
+
+    /**
+     * Strip HTML tags and clean up IRI artifacts from rendered Manchester OWL syntax.
+     * The AberOWLSyntaxRenderer produces HTML with <a href='#/Browse/<...>'>label</a>
+     * and <span> tags. Stripping HTML can leave behind '>' and '<' fragments from
+     * href attributes. This method produces clean plain text Manchester OWL syntax.
+     */
+    private String cleanRenderedAxiom(String rendered) {
+        if (rendered == null) return ""
+        return rendered
+            .replaceAll("</span>", " ")         // Replace closing spans with space
+            .replaceAll("<[^>]+>", "")           // Remove all HTML tags
+            .replaceAll("&gt;", ">")             // Decode HTML entities
+            .replaceAll("&lt;", "<")
+            .replaceAll("&amp;", "&")
+            .replaceAll("&quot;", "\"")
+            .replaceAll("&#39;", "'")
+            .replaceAll("'>", "")                // Remove IRI quote artifacts
+            .replaceAll("'<", "")
+            .trim()
+            .replaceAll("\\s+", " ")             // Normalize whitespace
     }
 
     private String addSpacesToCamelCase(String text) {
