@@ -318,9 +318,9 @@ async def fetch_and_update_server_metadata(server: Dict[str, Any]):
         poll_base = base_url
 
     # Ensure no double /api/ prefix. stats_url should be base + /api/getStatistics.groovy
-    # if base is http://host:port/
-    stats_url = f"{poll_base.rstrip('/')}/api/getStatistics.groovy"
-    
+    # Pass ontologyId so multi-ontology workers return per-ontology metadata with title
+    stats_url = f"{poll_base.rstrip('/')}/api/getStatistics.groovy?ontologyId={ontology}"
+
     logger.info(f"Fetching metadata for {ontology} from {stats_url} (originally {url})")
     try:
         async with aiohttp.ClientSession() as session:
@@ -329,7 +329,7 @@ async def fetch_and_update_server_metadata(server: Dict[str, Any]):
                     stats = await response.json()
                     server.update(stats)
                     server["status"] = "online"
-                    logger.info(f"Successfully updated metadata for {ontology}")
+                    logger.info(f"Successfully updated metadata for {ontology} (title: {stats.get('title', '')})")
                 else:
                     logger.warning(f"Failed to fetch metadata for {ontology}. Status: {response.status}")
                     server["status"] = "offline"

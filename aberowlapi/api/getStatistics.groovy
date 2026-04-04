@@ -83,15 +83,31 @@ def creatorIRI = IRI.create("http://purl.org/dc/terms/creator")
 def defaultNamespaceIRI = IRI.create("http://www.geneontology.org/formats/oboInOwl#default-namespace")
 def oboFormatVersionIRI = IRI.create("http://www.geneontology.org/formats/oboInOwl#hasOBOFormatVersion")
 
+// Additional annotation IRIs to check
+def dctermsTitleIRI = IRI.create("http://purl.org/dc/terms/title")
+def dctermsDescIRI = IRI.create("http://purl.org/dc/terms/description")
+def rdfsLabelIRI = OWLRDFVocabulary.RDFS_LABEL.getIRI()
+def rdfsCommentIRI = OWLRDFVocabulary.RDFS_COMMENT.getIRI()
+
 for (OWLAnnotation annotation : annotations) {
     def propertyIRI = annotation.getProperty().getIRI()
     def value = annotation.getValue()
 
-    if (propertyIRI.equals(DublinCoreVocabulary.TITLE.getIRI())) {
+    if (propertyIRI.equals(DublinCoreVocabulary.TITLE.getIRI()) || propertyIRI.equals(dctermsTitleIRI)) {
         if (value instanceof OWLLiteral) {
             title = ((OWLLiteral) value).getLiteral()
         }
-    } else if (propertyIRI.equals(DublinCoreVocabulary.DESCRIPTION.getIRI())) {
+    } else if (propertyIRI.equals(rdfsLabelIRI) && !title) {
+        // Use rdfs:label as fallback for title if dc:title/dcterms:title not found
+        if (value instanceof OWLLiteral) {
+            title = ((OWLLiteral) value).getLiteral()
+        }
+    } else if (propertyIRI.equals(DublinCoreVocabulary.DESCRIPTION.getIRI()) || propertyIRI.equals(dctermsDescIRI)) {
+        if (value instanceof OWLLiteral) {
+            description = ((OWLLiteral) value).getLiteral()
+        }
+    } else if (propertyIRI.equals(rdfsCommentIRI) && !description) {
+        // Use rdfs:comment as fallback description
         if (value instanceof OWLLiteral) {
             description = ((OWLLiteral) value).getLiteral()
         }

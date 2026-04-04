@@ -44,9 +44,10 @@ export async function queryNames(term: string, ontology?: string, prefix = false
   return data.result
 }
 
-export async function dlQuery(query: string, type: string, ontologies?: string): Promise<{ time: number; result: ClassResult[] }> {
+export async function dlQuery(query: string, type: string, ontologies?: string, direct = false): Promise<{ time: number; result: ClassResult[] }> {
   const params: Record<string, string> = { query, type, labels: 'true' }
   if (ontologies) params.ontologies = ontologies
+  if (direct) params.direct = 'true'
   return get('/api/dlquery_all', params)
 }
 
