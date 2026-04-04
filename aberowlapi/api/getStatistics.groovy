@@ -1,7 +1,5 @@
 import groovy.json.JsonOutput
 import src.RequestManager
-import groovy.json.JsonOutput
-import src.RequestManager
 import org.semanticweb.owlapi.model.OWLOntology
 import org.semanticweb.owlapi.model.AxiomType
 import org.semanticweb.owlapi.model.parameters.Imports
@@ -20,22 +18,48 @@ import org.semanticweb.owlapi.model.OWLEquivalentClassesAxiom
 import org.semanticweb.owlapi.model.OWLClassExpression
 import uk.ac.manchester.cs.owl.owlapi.mansyntaxrenderer.ManchesterOWLSyntaxObjectRenderer
 import src.NewShortFormProvider
+import src.util.Util
 import java.io.StringWriter
+
+if(!application) {
+    application = request.getApplication(true)
+}
+
+def params = Util.extractParams(request)
+def ontologyId = params.ontologyId ?: params.ontology
 
 response.setContentType("application/json")
 
 def manager = application.getAttribute("manager")
 
 if (manager == null) {
-    response.setStatus(503) // Service Unavailable
+    response.setStatus(503)
     out << JsonOutput.toJson([status: "error", message: "RequestManager not available. Ontology may still be loading."])
     return
 }
 
-OWLOntology ontology = manager.getOntology()
+// Resolve ontologyId
+if (!ontologyId && manager.ontologies.size() == 1) {
+    ontologyId = manager.getDefaultOntologyId()
+} else if (!ontologyId) {
+    // Return stats for all loaded ontologies
+    def allStats = manager.listOntologies().collect { info ->
+        [ontologyId: info.ontologyId, status: info.status, classCount: info.classCount, reasonerType: info.reasonerType]
+    }
+    out << JsonOutput.toJson([ontologies: allStats])
+    return
+}
+
+if (!manager.hasOntology(ontologyId)) {
+    response.setStatus(404)
+    out << JsonOutput.toJson([status: "error", message: "Ontology not found: ${ontologyId}"])
+    return
+}
+
+OWLOntology ontology = manager.getOntology(ontologyId)
 
 if (ontology == null) {
-    response.setStatus(503) // Service Unavailable
+    response.setStatus(503)
     out << JsonOutput.toJson([status: "error", message: "OWLOntology object not available."])
     return
 }
@@ -130,53 +154,17 @@ def rboxAxiomsCount = ontology.getRBoxAxioms(Imports.INCLUDED).size()
 
 def declarationAxiomsCount = ontology.getAxioms(AxiomType.DECLARATION, true).size()
 
-//def checker = new DLExpressivityChecker(Collections.singleton(ontology))
 def checker = new DLExpressivity(ontology)
 def dlExpressivity = checker.getValue()
 
-def exampleSuperclassLabel = ""
-def exampleSubclassExpression = ""
-def exampleSubclassExpressionText = ""
-
-// Find a class with a label for the superclass example
-outerloop1:
-for (OWLClass cls : ontology.getClassesInSignature(true)) {
-    if (cls.isBuiltIn()) continue
-    for (OWLAnnotationAssertionAxiom annAxiom : ontology.getAnnotationAssertionAxioms(cls.getIRI())) {
-        if (annAxiom.getProperty().isLabel()) {
-            if (annAxiom.getValue() instanceof OWLLiteral) {
-                def label = ((OWLLiteral) annAxiom.getValue()).getLiteral()
-                if (label) {
-                    exampleSuperclassLabel = label
-                    break outerloop1
-                }
-            }
-        }
-    }
-}
-
-// Find a class with an intersection for the subclass example
-outerloop2:
-for (OWLClass cls : ontology.getClassesInSignature(true)) {
-    if (cls.isBuiltIn()) continue
-    for (OWLEquivalentClassesAxiom axiom : ontology.getEquivalentClassesAxioms(cls)) {
-        for (OWLClassExpression ce : axiom.getClassExpressions()) {
-            if (ce instanceof OWLObjectIntersectionOf) {
-                def writer = new StringWriter()
-                def renderer = new ManchesterOWLSyntaxObjectRenderer(writer, new NewShortFormProvider(Collections.singleton(ontology)))
-                renderer.setUseWrapping(false)
-                ce.accept(renderer)
-                
-                exampleSubclassExpressionText = writer.toString()
-                exampleSubclassExpression = writer.toString() // No HTML version for now
-                
-                break outerloop2
-            }
-        }
-    }
-}
+def exampleSuperclassLabel = manager.exampleSuperclassLabels.get(ontologyId) ?: ""
+def exampleSubclassExpression = manager.exampleSubclassExpressions.get(ontologyId) ?: ""
+def exampleSubclassExpressionText = manager.exampleSubclassExpressionTexts.get(ontologyId) ?: ""
 
 def result = [
+    "ontology_id": ontologyId,
+    "reasoner_type": manager.reasonerTypes.get(ontologyId) ?: "unknown",
+    "status": manager.getStatus(ontologyId) ?: "unknown",
     "title": title,
     "description": description,
     "version_info": versionInfo,

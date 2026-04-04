@@ -1,22 +1,20 @@
 package src
 
-import org.semanticweb.elk.owlapi.ElkReasonerFactory;
+import org.semanticweb.elk.owlapi.ElkReasonerFactory
 import org.semanticweb.elk.owlapi.ElkReasonerConfiguration
 import org.semanticweb.elk.reasoner.config.*
 
-// import org.semanticweb.HermiT.ReasonerFactory;
-// import uk.ac.manchester.cs.jfact.JFactFactory;
-
-import org.semanticweb.owlapi.apibinding.OWLManager;
+import org.semanticweb.owlapi.apibinding.OWLManager
 import org.semanticweb.owlapi.reasoner.*
 import org.semanticweb.owlapi.reasoner.structural.StructuralReasoner
-import org.semanticweb.owlapi.vocab.OWLRDFVocabulary;
-import org.semanticweb.owlapi.model.*;
-import org.semanticweb.owlapi.io.*;
-import org.semanticweb.owlapi.owllink.*;
-import org.semanticweb.owlapi.util.*;
-import org.semanticweb.owlapi.search.*;
-import org.semanticweb.owlapi.manchestersyntax.renderer.*;
+import org.semanticweb.owlapi.reasoner.structural.StructuralReasonerFactory
+import org.semanticweb.owlapi.vocab.OWLRDFVocabulary
+import org.semanticweb.owlapi.model.*
+import org.semanticweb.owlapi.io.*
+import org.semanticweb.owlapi.owllink.*
+import org.semanticweb.owlapi.util.*
+import org.semanticweb.owlapi.search.*
+import org.semanticweb.owlapi.manchestersyntax.renderer.*
 import org.semanticweb.owlapi.reasoner.structural.*
 import org.semanticweb.owlapi.expression.ShortFormEntityChecker
 import org.semanticweb.owlapi.manchestersyntax.parser.ManchesterOWLSyntaxParserImpl
@@ -32,365 +30,418 @@ import groovy.io.*
 import com.google.common.collect.*
 import org.semanticweb.owlapi.model.UnloadableImportException
 import src.IRIOnlyShortFormProvider
+import src.ReasonerFactory
+import groovyx.gpars.GParsPool
 
 
-
+/**
+ * Manages one or more ontologies within a single JVM container.
+ *
+ * Each ontology is identified by a string ontologyId and has its own
+ * OWLOntologyManager, OWLReasoner, QueryEngine, and ShortFormProviders.
+ *
+ * Thread-safe: all per-ontology state is stored in ConcurrentHashMaps.
+ */
 public class RequestManager {
-    private static final ELK_THREADS = "4"
-    private static final MAX_UNSATISFIABLE_CLASSES = 500
+    private static final int MAX_UNSATISFIABLE_CLASSES = 500
+    private static final int MAX_REASONER_RESULTS = 100000
+    private static final int PARALLEL_THREADS = 4
 
-    private static final MAX_REASONER_RESULTS = 100000
+    OWLDataFactory df = OWLManager.getOWLDataFactory()
 
-    OWLOntologyManager oManager;
-    OWLDataFactory df = OWLManager.getOWLDataFactory();
-    OWLReasoner oReasoner = null;
-    OWLReasoner structReasoner = null;
-    
-    def ontology = null;
-    def ont = null;
-    def ontIRI = null;
-    def queryEngine = null;
+    // Per-ontology state maps (keyed by ontologyId)
+    final ConcurrentHashMap<String, OWLOntologyManager> oManagers = new ConcurrentHashMap<>()
+    final ConcurrentHashMap<String, OWLOntology> ontologies = new ConcurrentHashMap<>()
+    final ConcurrentHashMap<String, OWLReasoner> reasoners = new ConcurrentHashMap<>()
+    final ConcurrentHashMap<String, OWLReasoner> structReasoners = new ConcurrentHashMap<>()
+    final ConcurrentHashMap<String, QueryEngine> queryEngines = new ConcurrentHashMap<>()
+    final ConcurrentHashMap<String, NewShortFormProvider> shortFormProviders = new ConcurrentHashMap<>()
+    final ConcurrentHashMap<String, IRIOnlyShortFormProvider> iriShortFormProviders = new ConcurrentHashMap<>()
+    final ConcurrentHashMap<String, String> ontologyPaths = new ConcurrentHashMap<>()
+    final ConcurrentHashMap<String, String> reasonerTypes = new ConcurrentHashMap<>()
+    final ConcurrentHashMap<String, String> loadStati = new ConcurrentHashMap<>()
+    final ConcurrentHashMap<String, String> exampleSuperclassLabels = new ConcurrentHashMap<>()
+    final ConcurrentHashMap<String, String> exampleSubclassExpressions = new ConcurrentHashMap<>()
+    final ConcurrentHashMap<String, String> exampleSubclassExpressionTexts = new ConcurrentHashMap<>()
 
+    // Shared annotation property lists
     def aProperties = [
-    	df.getRDFSLabel(),
-	df.getOWLAnnotationProperty(IRI.create("http://www.geneontology.org/formats/oboInOwl#hasNarrowSynonym")),
-	df.getOWLAnnotationProperty(IRI.create("http://www.geneontology.org/formats/oboInOwl#hasBroadSynonym")),
-	df.getOWLAnnotationProperty(IRI.create("http://www.geneontology.org/formats/oboInOwl#hasExactSynonym"))
-    ];
-    
+        df.getRDFSLabel(),
+        df.getOWLAnnotationProperty(IRI.create("http://www.geneontology.org/formats/oboInOwl#hasNarrowSynonym")),
+        df.getOWLAnnotationProperty(IRI.create("http://www.geneontology.org/formats/oboInOwl#hasBroadSynonym")),
+        df.getOWLAnnotationProperty(IRI.create("http://www.geneontology.org/formats/oboInOwl#hasExactSynonym"))
+    ]
+
     def identifiers = [
-	df.getOWLAnnotationProperty(IRI.create('http://purl.org/dc/elements/1.1/identifier')),
-    ];
+        df.getOWLAnnotationProperty(IRI.create('http://purl.org/dc/elements/1.1/identifier')),
+    ]
 
     def labels = [
-	df.getRDFSLabel(),
-	df.getOWLAnnotationProperty(IRI.create('http://www.w3.org/2004/02/skos/core#prefLabel')),
-	df.getOWLAnnotationProperty(IRI.create('http://purl.obolibrary.org/obo/IAO_0000111'))
-    ];
+        df.getRDFSLabel(),
+        df.getOWLAnnotationProperty(IRI.create('http://www.w3.org/2004/02/skos/core#prefLabel')),
+        df.getOWLAnnotationProperty(IRI.create('http://purl.obolibrary.org/obo/IAO_0000111'))
+    ]
     def synonyms = [
-	df.getOWLAnnotationProperty(IRI.create('http://www.w3.org/2004/02/skos/core#altLabel')),
-	df.getOWLAnnotationProperty(IRI.create('http://purl.obolibrary.org/obo/IAO_0000118')),
-	df.getOWLAnnotationProperty(IRI.create('http://www.geneontology.org/formats/oboInOwl#hasExactSynonym')),
-	df.getOWLAnnotationProperty(IRI.create('http://www.geneontology.org/formats/oboInOwl#hasSynonym')),
-	df.getOWLAnnotationProperty(IRI.create('http://www.geneontology.org/formats/oboInOwl#hasNarrowSynonym')),
-	df.getOWLAnnotationProperty(IRI.create('http://www.geneontology.org/formats/oboInOwl#hasBroadSynonym'))
-    ];
+        df.getOWLAnnotationProperty(IRI.create('http://www.w3.org/2004/02/skos/core#altLabel')),
+        df.getOWLAnnotationProperty(IRI.create('http://purl.obolibrary.org/obo/IAO_0000118')),
+        df.getOWLAnnotationProperty(IRI.create('http://www.geneontology.org/formats/oboInOwl#hasExactSynonym')),
+        df.getOWLAnnotationProperty(IRI.create('http://www.geneontology.org/formats/oboInOwl#hasSynonym')),
+        df.getOWLAnnotationProperty(IRI.create('http://www.geneontology.org/formats/oboInOwl#hasNarrowSynonym')),
+        df.getOWLAnnotationProperty(IRI.create('http://www.geneontology.org/formats/oboInOwl#hasBroadSynonym'))
+    ]
     def definitions = [
-	df.getOWLAnnotationProperty(IRI.create('http://purl.obolibrary.org/obo/IAO_0000115')),
-	df.getOWLAnnotationProperty(IRI.create('http://www.w3.org/2004/02/skos/core#definition')),
-	df.getOWLAnnotationProperty(IRI.create('http://purl.org/dc/elements/1.1/description')),
-	df.getOWLAnnotationProperty(IRI.create('http://purl.org/dc/terms/description')),
-	df.getOWLAnnotationProperty(IRI.create('http://www.geneontology.org/formats/oboInOwl#hasDefinition'))
-    ];
+        df.getOWLAnnotationProperty(IRI.create('http://purl.obolibrary.org/obo/IAO_0000115')),
+        df.getOWLAnnotationProperty(IRI.create('http://www.w3.org/2004/02/skos/core#definition')),
+        df.getOWLAnnotationProperty(IRI.create('http://purl.org/dc/elements/1.1/description')),
+        df.getOWLAnnotationProperty(IRI.create('http://purl.org/dc/terms/description')),
+        df.getOWLAnnotationProperty(IRI.create('http://www.geneontology.org/formats/oboInOwl#hasDefinition'))
+    ]
 
-    NewShortFormProvider shortFormProvider;
-    IRIOnlyShortFormProvider iriOnlyShortFormProvider;
-    def exampleSuperclassLabel = null;
-    def exampleSubclassExpression = null;
-    def exampleSubclassExpressionText = null;
+    // -----------------------------------------------------------------------
+    // Constructor
+    // -----------------------------------------------------------------------
 
-    public RequestManager(String ont, String ontIRI) {
-	this.ont = ont;
-	this.ontIRI = ontIRI;
-	// Initialize with null, will be set in createReasoner()
-	this.shortFormProvider = null;
-	this.iriOnlyShortFormProvider = null;
-    } 
-    
-    public static RequestManager create(String ont, String ontIRI) {
-	RequestManager mgr = new RequestManager(ont, ontIRI);
-	try {
-	    println("Starting manager for $ont")
-	    mgr.loadOntology()
-	    mgr.createReasoner()
-	    println("Finished loading $ont")
-	    return mgr;
-	} catch (UnloadableImportException e) {
-	    println("Unloadable ontology $ont")
-	    e.printStackTrace();
-	    return null;
-	} catch (Exception e) {
-	    println("Failed loading $ont")
-	    e.printStackTrace();
-	    return null;
-	}
+    public RequestManager() {
+        // Empty multi-ontology manager
     }
 
+    // -----------------------------------------------------------------------
+    // Single-ontology convenience (backward compatibility)
+    // -----------------------------------------------------------------------
+
     /**
-     * Load a new or replace an existing ontology
-     *
-     * @param name corresponding to name of the ontology in the database
+     * Create a RequestManager with a single ontology loaded (backward compat).
      */
-    void reloadOntology() {
-	try {
-	    println("Reloading the ontology $ont");
-	    this.loadOntology();
-	    this.createReasoner();
-	} catch (Exception e) {
-	    e.printStackTrace()
-	}
+    public static RequestManager create(String ontId, String ontIRI) {
+        return create(ontId, ontIRI, "elk")
     }
 
+    public static RequestManager create(String ontId, String ontIRI, String reasonerType) {
+        RequestManager mgr = new RequestManager()
+        try {
+            println("Starting manager for $ontId")
+            mgr.loadOntology(ontId, ontIRI, reasonerType)
+            mgr.createReasoner(ontId)
+            println("Finished loading $ontId")
+            return mgr
+        } catch (UnloadableImportException e) {
+            println("Unloadable ontology $ontId")
+            e.printStackTrace()
+            return null
+        } catch (Exception e) {
+            println("Failed loading $ontId")
+            e.printStackTrace()
+            return null
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Ontology loading
+    // -----------------------------------------------------------------------
+
     /**
-     * Create the ontology manager and load it with the given ontology.
-     * Create the ontology manager and load it with the given ontology.
-     *
-     * @throws OWLOntologyCreationException , IOException
-     * @throws OWLOntologyCreationException , IOException
+     * Load a single ontology from a file path.
      */
-    void loadOntology() throws OWLOntologyCreationException, IOException {
-	OWLOntologyManager lManager = OWLManager.createOWLOntologyManager()
+    void loadOntology(String ontId, String ontIRI) {
+        loadOntology(ontId, ontIRI, "elk")
+    }
 
-	// def ontology = lManager.loadOntologyFromOntologyDocument(IRI.create(this.ontIRI));
-	// def ont_file = new File(this.ontIRI)
-	// println "Loading ontology from ${ont_file.absolutePath}"
-	def originalOntology = lManager.loadOntologyFromOntologyDocument(new File(this.ontIRI))
-	IRI originalOntologyIRI = originalOntology.getOntologyID().getOntologyIRI().orNull()
-	Set<OWLAnnotation> originalAnnotations = originalOntology.getAnnotations().collect()
+    void loadOntology(String ontId, String ontIRI, String reasonerType) {
+        println "Loading ontology ${ontId} from ${ontIRI}"
+        loadStati.put(ontId, "loading")
+        reasonerTypes.put(ontId, reasonerType ?: "elk")
+        ontologyPaths.put(ontId, ontIRI)
 
-	// Perform merge
-	OWLOntologyImportsClosureSetProvider provider = new OWLOntologyImportsClosureSetProvider(lManager, originalOntology)
-	OWLOntologyMerger merger = new OWLOntologyMerger(provider, false)
-//	def mergedOntology = merger.createMergedOntology(lManager, IRI.create("http://merged.owl"))	
-	def mergedOntology = merger.createMergedOntology(lManager, originalOntologyIRI ?: IRI.create("http://merged.owl"))
-	
-	originalAnnotations.each { annotation ->
+        OWLOntologyManager lManager = OWLManager.createOWLOntologyManager()
+
+        def originalOntology = lManager.loadOntologyFromOntologyDocument(new File(ontIRI))
+        IRI originalOntologyIRI = originalOntology.getOntologyID().getOntologyIRI().orNull()
+        Set<OWLAnnotation> originalAnnotations = originalOntology.getAnnotations().collect()
+
+        // Merge imports closure into a single ontology
+        OWLOntologyImportsClosureSetProvider provider = new OWLOntologyImportsClosureSetProvider(lManager, originalOntology)
+        OWLOntologyMerger merger = new OWLOntologyMerger(provider, false)
+        def mergedOntology = merger.createMergedOntology(lManager, originalOntologyIRI ?: IRI.create("http://merged.owl"))
+
+        originalAnnotations.each { annotation ->
             lManager.applyChange(new AddOntologyAnnotation(mergedOntology, annotation))
-	}
-    
-	this.ontology = mergedOntology
-	this.oManager = lManager	
+        }
+
+        ontologies.put(ontId, mergedOntology)
+        oManagers.put(ontId, lManager)
+        loadStati.put(ontId, "loaded")
+        println "Loaded ontology ${ontId}"
+    }
+
+    // -----------------------------------------------------------------------
+    // Reasoner creation
+    // -----------------------------------------------------------------------
+
+    /**
+     * Classify a single ontology with its configured reasoner.
+     */
+    void createReasoner(String ontId) {
+        def ontology = ontologies.get(ontId)
+        def manager = oManagers.get(ontId)
+        def rType = reasonerTypes.get(ontId) ?: "elk"
+        if (ontology == null || manager == null) {
+            throw new IllegalArgumentException("Ontology not loaded: ${ontId}")
+        }
+
+        println "Classifying ${ontId} with reasoner: ${rType}"
+        loadStati.put(ontId, "classifying")
+
+        List<String> langs = new ArrayList<>()
+        Map<OWLAnnotationProperty, List<String>> preferredLanguageMap = new HashMap<>()
+        for (OWLAnnotationProperty annotationProperty : this.aProperties) {
+            preferredLanguageMap.put(annotationProperty, langs)
+        }
+
+        // Create the main reasoner
+        OWLReasoner oReasoner = src.ReasonerFactory.createReasoner(rType, ontology)
+        oReasoner.precomputeInferences(InferenceType.CLASS_HIERARCHY)
+
+        // Always create a structural reasoner for object property queries
+        OWLReasoner sReasoner = src.ReasonerFactory.createStructuralReasoner(ontology)
+
+        def sfp = new NewShortFormProvider(this.aProperties, preferredLanguageMap, manager)
+        def iriSfp = new IRIOnlyShortFormProvider(manager.getOntologies())
+
+        // Dispose old reasoners if present
+        def oldQE = queryEngines.get(ontId)
+        oldQE?.getoReasoner()?.dispose()
+
+        // Check for excessive unsatisfiable classes -> fall back to structural
+        def unsatCount = oReasoner.getEquivalentClasses(df.getOWLNothing()).getEntitiesMinusBottom().size()
+        if (unsatCount >= MAX_UNSATISFIABLE_CLASSES) {
+            oReasoner.dispose()
+            oReasoner = sReasoner
+            loadStati.put(ontId, "incoherent")
+            println "Classified ${ontId} but switched to structural reasoner (${unsatCount} unsatisfiable classes)"
+        } else {
+            loadStati.put(ontId, "classified")
+            println "Successfully classified ${ontId}"
+        }
+
+        reasoners.put(ontId, oReasoner)
+        structReasoners.put(ontId, sReasoner)
+        queryEngines.put(ontId, new QueryEngine(oReasoner, sfp))
+        shortFormProviders.put(ontId, sfp)
+        iriShortFormProviders.put(ontId, iriSfp)
+
+        findExampleClassesAndExpressions(ontId)
+        println "Classification complete for ${ontId}"
     }
 
     /**
-     * Create and run the reasoning on the loaded OWL ontologies, creating a QueryEngine for each.
+     * Classify all loaded ontologies in parallel using GParsPool.
      */
-    void createReasoner() {
-	println "Classifying $ont"
-	List<String> langs = new ArrayList<>();
-	Map<OWLAnnotationProperty, List<String>> preferredLanguageMap = new HashMap<>();
-	for (OWLAnnotationProperty annotationProperty : this.aProperties) {
-	    preferredLanguageMap.put(annotationProperty, langs);
-	}
-
-	OWLReasonerFactory reasonerFactory = new ElkReasonerFactory();
-	OWLOntology ontology = this.ontology
-	OWLOntologyManager manager = this.oManager
-	// /* Configure Elk */
-	ReasonerConfiguration eConf = ReasonerConfiguration.getConfiguration()
-	eConf.setParameter(ReasonerConfiguration.NUM_OF_WORKING_THREADS, ELK_THREADS)
-	eConf.setParameter(ReasonerConfiguration.INCREMENTAL_MODE_ALLOWED, "true")
-
-	/* OWLAPI Reasoner config, no progress monitor */
-	OWLReasonerConfiguration rConf = new ElkReasonerConfiguration(
-	    ElkReasonerConfiguration.getDefaultOwlReasonerConfiguration(
-		new NullReasonerProgressMonitor()), eConf)
-	// OWLReasonerConfiguration rConf = new SimpleConfiguration(
-        //     new NullReasonerProgressMonitor());
-	this.oReasoner = reasonerFactory.createReasoner(ontology, rConf);
-	this.oReasoner.precomputeInferences(InferenceType.CLASS_HIERARCHY);
-
-	StructuralReasonerFactory sReasonerFactory = new StructuralReasonerFactory()
-	this.structReasoner = sReasonerFactory.createReasoner(ontology)
-	
-	this.shortFormProvider = new NewShortFormProvider(
-	    this.aProperties, preferredLanguageMap, manager);
-	this.iriOnlyShortFormProvider = new IRIOnlyShortFormProvider(
-	    manager.getOntologies());
-
-	// dispose of old reasoners, close the threadpool
-	queryEngine?.getoReasoner()?.dispose()
-
-	// check if there are many many unsatisfiable classes, then switch to structural reasoner
-	if (this.oReasoner.getEquivalentClasses(df.getOWLNothing()).getEntitiesMinusBottom().size() >= MAX_UNSATISFIABLE_CLASSES) {
-	    this.oReasoner.dispose()
-	    this.oReasoner = this.structReasoner;
-	    queryEngine = new QueryEngine(this.oReasoner, this.shortFormProvider)
-	    println "Successfully classified $ont but switched to structural reasoner"
-	} else {
-	    this.queryEngine = new QueryEngine(this.oReasoner, this.shortFormProvider)
-	    println "Successfully classified $ont"
-	}
-
-	findExampleClassesAndExpressions()
-
-	println "Classified $ont"
+    void createAllReasoners() {
+        def ontIds = new ArrayList(ontologies.keySet())
+        if (ontIds.isEmpty()) {
+            println "No ontologies to classify"
+            return
+        }
+        println "Classifying ${ontIds.size()} ontologies in parallel..."
+        GParsPool.withPool(PARALLEL_THREADS) {
+            ontIds.eachParallel { ontId ->
+                try {
+                    createReasoner(ontId)
+                } catch (Exception e) {
+                    loadStati.put(ontId, "error")
+                    println "ERROR classifying ${ontId}: ${e.getMessage()}"
+                    e.printStackTrace()
+                }
+            }
+        }
+        println "All ontologies classified"
     }
 
-    def toInfo(OWLEntity c, boolean axioms, shortFormProvider) {
-	def o = this.ontology;
-	def info = [
-	    "owlClass": c.toString(),
-	    "class": c.getIRI().toString(),
-	    "ontology": this.ont,
-	    "deprecated": false
-	].withDefault {key -> []};
+    // -----------------------------------------------------------------------
+    // Ontology lifecycle
+    // -----------------------------------------------------------------------
 
-	def hasLabel = false;
-	def hasAnnot = false;
-
-	EntitySearcher.getAnnotationAssertionAxioms(c, o).each { axiom ->
-	    hasAnnot = true;
-	    def annot = axiom.getAnnotation();
-	    def aProp = axiom.getProperty();
-	    if (annot.isDeprecatedIRIAnnotation()) {
-		info["deprecated"] = true
-	    } else if (aProp in this.identifiers) {
-	 if (annot.getValue() instanceof OWLLiteral) {
-	     def aVal = annot.getValue().getLiteral()
-	     info['identifier'] << aVal
-	 }
-	    } else if (aProp in this.labels) {
-	 if (annot.getValue() instanceof OWLLiteral) {
-	     def aVal = annot.getValue().getLiteral()
-	            // Apply camel case splitting to label values
-	            info['label'] = addSpacesToCamelCase(aVal)
-	     hasLabel = true
-	 }
-	    } else if (aProp in this.definitions) {
-		if (annot.getValue() instanceof OWLLiteral) {
-		    def aVal = annot.getValue().getLiteral()
-		    info["definition"] << aVal
-		}
-	    } else if (aProp in this.synonyms) {
-		if (annot.getValue() instanceof OWLLiteral) {
-		    def aVal = annot.getValue().getLiteral()
-		    info["synonyms"] << aVal
-		}
-	    } else {
-		if (annot.getValue() instanceof OWLLiteral) {
-		    try {
-			def aVal = annot.getValue().getLiteral()
-			def aLabels = EntitySearcher.getAnnotations(
-			    aProp, o)
-			if (aLabels.size() > 0) {
-			    aLabels.each { l ->
-				if (l.getValue() instanceof OWLLiteral) {
-				    def lab = l.getValue().getLiteral()
-				    info[lab].add(aVal)
-				}
-			    }
-			} else {
-			    def prop = this.shortFormProvider.getShortForm(aProp)
-			    info[prop].add(aVal)
-			}
-		    } catch (Exception e) {
-		    }
-		}
-	    }
-	}
-
-	if (!hasLabel) {
-	    // The shortFormProvider already applies camel case splitting
-	    info["label"] = shortFormProvider.getShortForm(c);
-	}
-
-	if (!hasAnnot) {
-	    info["deprecated"] = true;
-	}
-
-	if (axioms) {
-	    // set up the renderer for the axioms
-	    // Use the same ShortFormProvider that's used elsewhere to ensure consistent rendering
-	    def manSyntaxRenderer = new AberOWLSyntaxRendererImpl()
-	    manSyntaxRenderer.setShortFormProvider(shortFormProvider)
-
-	    /* get the axioms */
-	    EntitySearcher.getSuperClasses(c, o).each {
-		cExpr -> // OWL Class Expression
-		info["SubClassOf"] << manSyntaxRenderer.render(cExpr)
-	    }
-	    EntitySearcher.getEquivalentClasses(c, o).each {
-		cExpr -> // OWL Class Expression
-		info["Equivalent"] << manSyntaxRenderer.render(cExpr)
-	    }
-	    EntitySearcher.getDisjointClasses(c, o).each {
-		cExpr -> // OWL Class Expression
-		info["Disjoint"] << manSyntaxRenderer.render(cExpr)
-	    }
-	}
-	return info;
+    /**
+     * Reload (hot-swap) a single ontology from a new file path.
+     */
+    void reloadOntology(String ontId, String ontIRI) {
+        reloadOntology(ontId, ontIRI, reasonerTypes.get(ontId) ?: "elk")
     }
 
-    ArrayList<HashMap> classes2info(Set<OWLClass> classes, boolean axioms, shortFormProvider) {
-	ArrayList<HashMap> result = new ArrayList<HashMap>();
-	def o = this.ontology
-	classes.each { c ->
-	    def info = toInfo(c, axioms, shortFormProvider);
-	    if (!info["deprecated"]) {
-		result.add(info);
-	    }
-	}
-	return result
+    void reloadOntology(String ontId, String ontIRI, String reasonerType) {
+        println "Reloading ontology ${ontId} from ${ontIRI}"
+        disposeOntology(ontId)
+        loadOntology(ontId, ontIRI, reasonerType)
+        createReasoner(ontId)
+        println "Reloaded ontology ${ontId}"
     }
 
     /**
-     * Iterate the query engines, collecting results from each and collating them into a single structure.
-     *
-     * @param mOwlQuery Class query in Manchester OWL Syntax.
-     * @param requestType Type of class match to be performed. Valid values are: subclass, superclass, equivalent or all.
-     * @return Set of OWL Classes.
+     * Dispose all resources for a specific ontology.
      */
-    Set runQuery(OWLClassExpression mOwlQuery, String type, boolean direct, boolean labels, boolean axioms, String shortform) {
+    void disposeOntology(String ontId) {
+        try {
+            def oReasoner = reasoners.remove(ontId)
+            def sReasoner = structReasoners.remove(ontId)
+            try { oReasoner?.dispose() } catch (Exception e) {
+                println "Error disposing reasoner for ${ontId}: ${e.getMessage()}"
+            }
+            if (sReasoner != null && sReasoner !== oReasoner) {
+                try { sReasoner.dispose() } catch (Exception e) {
+                    println "Error disposing struct reasoner for ${ontId}: ${e.getMessage()}"
+                }
+            }
+        } catch (Exception e) {
+            println "Error during dispose for ${ontId}: ${e.getMessage()}"
+        }
+        queryEngines.remove(ontId)
+        shortFormProviders.remove(ontId)
+        iriShortFormProviders.remove(ontId)
+        ontologies.remove(ontId)
+        oManagers.remove(ontId)
+        ontologyPaths.remove(ontId)
+        reasonerTypes.remove(ontId)
+        loadStati.remove(ontId)
+        exampleSuperclassLabels.remove(ontId)
+        exampleSubclassExpressions.remove(ontId)
+        exampleSubclassExpressionTexts.remove(ontId)
+        println "Disposed all resources for ${ontId}"
+    }
+
+    /**
+     * Dispose all ontologies and release all resources.
+     */
+    public void disposeAll() {
+        def ontIds = new ArrayList(ontologies.keySet())
+        ontIds.each { ontId ->
+            disposeOntology(ontId)
+        }
+        println "Disposed all ontologies"
+    }
+
+    // -----------------------------------------------------------------------
+    // Queries
+    // -----------------------------------------------------------------------
+
+    /**
+     * List all loaded ontology IDs with their status and reasoner type.
+     */
+    List<Map> listOntologies() {
+        return ontologies.keySet().collect { ontId ->
+            [
+                ontologyId: ontId,
+                status: loadStati.get(ontId) ?: "unknown",
+                reasonerType: reasonerTypes.get(ontId) ?: "unknown",
+                path: ontologyPaths.get(ontId) ?: "",
+                classCount: ontologies.get(ontId)?.getClassesInSignature(true)?.size() ?: 0
+            ]
+        }
+    }
+
+    /**
+     * Check if a specific ontology is loaded.
+     */
+    boolean hasOntology(String ontId) {
+        return ontologies.containsKey(ontId)
+    }
+
+    /**
+     * Get the status of a specific ontology.
+     */
+    String getStatus(String ontId) {
+        return loadStati.get(ontId)
+    }
+
+    /**
+     * Run a DL query against a specific ontology (by OWLClassExpression).
+     */
+    Set runQuery(String ontId, OWLClassExpression mOwlQuery, String type, boolean direct, boolean labels, boolean axioms, String shortform) {
+        def qEngine = queryEngines.get(ontId)
+        if (qEngine == null) {
+            throw new IllegalArgumentException("Ontology not loaded or not classified: ${ontId}")
+        }
+
         type = type.toLowerCase()
         def requestType
         switch (type) {
-            case "superclass": requestType = RequestType.SUPERCLASS; break;
-            case "subclass": requestType = RequestType.SUBCLASS; break;
-            case "equivalent": requestType = RequestType.EQUIVALENT; break;
-            case "supeq": requestType = RequestType.SUPEQ; break;
-            case "subeq": requestType = RequestType.SUBEQ; break;
-            case "realize": requestType = RequestType.REALIZE; break;
-            default: requestType = RequestType.SUBEQ; break;
+            case "superclass": requestType = RequestType.SUPERCLASS; break
+            case "subclass": requestType = RequestType.SUBCLASS; break
+            case "equivalent": requestType = RequestType.EQUIVALENT; break
+            case "supeq": requestType = RequestType.SUPEQ; break
+            case "subeq": requestType = RequestType.SUBEQ; break
+            case "realize": requestType = RequestType.REALIZE; break
+            default: requestType = RequestType.SUBEQ; break
         }
 
-	def currentShortFormProvider = (shortform == 'iri') ? this.iriOnlyShortFormProvider : this.shortFormProvider;
-	println "Using short form provider: " + (shortform == 'iri' ? "IRIOnlyShortFormProvider" : "NewShortFormProvider")
-	
-        Set resultSet = Sets.newHashSet(Iterables.limit(queryEngine.getClasses(mOwlQuery, requestType, direct, labels), MAX_REASONER_RESULTS))
+        def currentSfp = (shortform == 'iri') ? iriShortFormProviders.get(ontId) : shortFormProviders.get(ontId)
+
+        Set resultSet = Sets.newHashSet(Iterables.limit(qEngine.getClasses(mOwlQuery, requestType, direct, labels), MAX_REASONER_RESULTS))
         resultSet.remove(df.getOWLNothing())
         resultSet.remove(df.getOWLThing())
-        def classes = classes2info(resultSet, axioms, currentShortFormProvider);
-        return classes.sort {x, y -> x["label"].compareTo(y["label"])};
+        def classes = classes2info(ontId, resultSet, axioms, currentSfp)
+        return classes.sort { x, y -> x["label"].compareTo(y["label"]) }
     }
-    
-    Set runQuery(String mOwlQuery, String type, boolean direct, boolean labels, boolean axioms, String shortform) {
+
+    /**
+     * Run a DL query against a specific ontology (by string, Manchester OWL Syntax or IRI).
+     */
+    Set runQuery(String ontId, String mOwlQuery, String type, boolean direct, boolean labels, boolean axioms, String shortform) {
         if (mOwlQuery.startsWith("http") || mOwlQuery.startsWith("<")) {
             type = type.toLowerCase()
             def requestType
             switch (type) {
-                case "superclass": requestType = RequestType.SUPERCLASS; break;
-                case "subclass": requestType = RequestType.SUBCLASS; break;
-                case "equivalent": requestType = RequestType.EQUIVALENT; break;
-                case "supeq": requestType = RequestType.SUPEQ; break;
-                case "subeq": requestType = RequestType.SUBEQ; break;
-                case "realize": requestType = RequestType.REALIZE; break;
-                default: requestType = RequestType.SUBEQ; break;
+                case "superclass": requestType = RequestType.SUPERCLASS; break
+                case "subclass": requestType = RequestType.SUBCLASS; break
+                case "equivalent": requestType = RequestType.EQUIVALENT; break
+                case "supeq": requestType = RequestType.SUPEQ; break
+                case "subeq": requestType = RequestType.SUBEQ; break
+                case "realize": requestType = RequestType.REALIZE; break
+                default: requestType = RequestType.SUBEQ; break
             }
 
-	    def currentShortFormProvider = (shortform == 'iri') ? this.iriOnlyShortFormProvider : this.shortFormProvider;
-	    println "Using short form provider: " + (shortform == 'iri' ? "IRIOnlyShortFormProvider" : "NewShortFormProvider")
+            def qEngine = queryEngines.get(ontId)
+            if (qEngine == null) {
+                throw new IllegalArgumentException("Ontology not loaded or not classified: ${ontId}")
+            }
 
-            Set resultSet = Sets.newHashSet(Iterables.limit(queryEngine.getClasses(mOwlQuery, requestType, direct, labels), MAX_REASONER_RESULTS))
+            def currentSfp = (shortform == 'iri') ? iriShortFormProviders.get(ontId) : shortFormProviders.get(ontId)
+
+            Set resultSet = Sets.newHashSet(Iterables.limit(qEngine.getClasses(mOwlQuery, requestType, direct, labels), MAX_REASONER_RESULTS))
             resultSet.remove(df.getOWLNothing())
             resultSet.remove(df.getOWLThing())
-            def classes = classes2info(resultSet, axioms, currentShortFormProvider);
-            return classes.sort {x, y -> x["label"].compareTo(y["label"])};
+            def classes = classes2info(ontId, resultSet, axioms, currentSfp)
+            return classes.sort { x, y -> x["label"].compareTo(y["label"]) }
         } else {
-            def ont = this.getOntology()
+            def ont = ontologies.get(ontId)
+            if (ont == null) {
+                throw new IllegalArgumentException("Ontology not loaded: ${ontId}")
+            }
             def sfp = new NewShortFormProvider(ont.getImportsClosure())
             def bidiSfp = new BidirectionalShortFormProviderAdapter(ont.getImportsClosure(), sfp)
             def checker = new ShortFormEntityChecker(bidiSfp)
-            def df = ont.getOWLOntologyManager().getOWLDataFactory()
+            def dataFactory = ont.getOWLOntologyManager().getOWLDataFactory()
             def configSupplier = { -> ont.getOWLOntologyManager().getOntologyLoaderConfiguration() }
-            def parser = new org.semanticweb.owlapi.manchestersyntax.parser.ManchesterOWLSyntaxParserImpl(configSupplier, df)
+            def parser = new org.semanticweb.owlapi.manchestersyntax.parser.ManchesterOWLSyntaxParserImpl(configSupplier, dataFactory)
             parser.setStringToParse(mOwlQuery)
             parser.setOWLEntityChecker(checker)
             def expression = parser.parseClassExpression()
-            return runQuery(expression, type, direct, labels, axioms, shortform)
+            return runQuery(ontId, expression, type, direct, labels, axioms, shortform)
         }
     }
 
+    Set runQuery(String ontId, String mOwlQuery, String type, boolean direct, boolean labels, boolean axioms) {
+        return runQuery(ontId, mOwlQuery, type, direct, labels, axioms, null)
+    }
+
+    Set runQuery(String ontId, String mOwlQuery, String type) {
+        return runQuery(ontId, mOwlQuery, type, false, false, false, null)
+    }
+
+    // Backward-compatible: single-ontology runQuery (uses first loaded ontology)
+    Set runQuery(String mOwlQuery, String type, boolean direct, boolean labels, boolean axioms, String shortform) {
+        def ontId = getDefaultOntologyId()
+        return runQuery(ontId, mOwlQuery, type, direct, labels, axioms, shortform)
+    }
 
     Set runQuery(String mOwlQuery, String type, boolean direct, boolean labels, boolean axioms) {
         return runQuery(mOwlQuery, type, direct, labels, axioms, null)
@@ -400,102 +451,262 @@ public class RequestManager {
         return runQuery(mOwlQuery, type, false, false, false, null)
     }
 
-    /** This returns the direct R-successors of a class C in O
-     class and relations are given as String-IRIs
+    /**
+     * Return the direct R-successors of a class C in ontology.
      */
+    Set relationQuery(String ontId, String relation, String cl) {
+        Set classes = new HashSet<>()
+        def qEngine = queryEngines.get(ontId)
+        if (qEngine == null) {
+            throw new IllegalArgumentException("Ontology not loaded or not classified: ${ontId}")
+        }
+
+        Set<OWLClass> subclasses = qEngine.getClasses(cl, RequestType.SUBCLASS, true, false)
+        String query1 = "<$relation> SOME $cl"
+        Set<OWLClass> mainResult = qEngine.getClasses(query1, RequestType.SUBCLASS, true, false)
+        subclasses.each { sc ->
+            String query2 = "$relation SOME " + sc.toString()
+            def subResult = qEngine.getClasses(query2, RequestType.SUBCLASS, true, false)
+            mainResult = mainResult - subResult
+        }
+        def sfp = shortFormProviders.get(ontId)
+        classes.addAll(classes2info(ontId, mainResult, false, sfp))
+        return classes
+    }
+
+    // Backward-compatible
     Set relationQuery(String relation, String cl) {
-	Set classes = new HashSet<>();
-
-	def vOntUri = ont
-
-	// get the direct subclasses of cl
-	Set<OWLClass> subclasses = queryEngine.getClasses(cl, RequestType.SUBCLASS, true, false)
-	// These are all the classes for which the R some C property holds
-	String query1 = "<$relation> SOME $cl"
-	Set<OWLClass> mainResult = queryEngine.getClasses(query1, RequestType.SUBCLASS, true, false)
-	// Now remove all classes that are not specific to cl (i.e., there is a more specific class in which the R-edge can be created)
-	subclasses.each { sc ->
-	    String query2 = "$relation SOME " + sc.toString()
-	    def subResult = queryEngine.getClasses(query2, RequestType.SUBCLASS, true, false)
-	    mainResult = mainResult - subResult
-	}
-	classes.addAll(classes2info(mainResult, false, this.shortFormProvider))
-	return classes
+        return relationQuery(getDefaultOntologyId(), relation, cl)
     }
 
-    Map<String, QueryEngine> getQueryEngine() {
-	return this.queryEngine
+    // -----------------------------------------------------------------------
+    // Entity info
+    // -----------------------------------------------------------------------
+
+    def toInfo(String ontId, OWLEntity c, boolean axioms, shortFormProvider) {
+        def o = ontologies.get(ontId)
+        if (o == null) {
+            throw new IllegalArgumentException("Ontology not loaded: ${ontId}")
+        }
+        def sfp = shortFormProvider ?: shortFormProviders.get(ontId)
+
+        def info = [
+            "owlClass": c.toString(),
+            "class": c.getIRI().toString(),
+            "ontology": ontId,
+            "deprecated": false
+        ].withDefault { key -> [] }
+
+        def hasLabel = false
+        def hasAnnot = false
+
+        EntitySearcher.getAnnotationAssertionAxioms(c, o).each { axiom ->
+            hasAnnot = true
+            def annot = axiom.getAnnotation()
+            def aProp = axiom.getProperty()
+            if (annot.isDeprecatedIRIAnnotation()) {
+                info["deprecated"] = true
+            } else if (aProp in this.identifiers) {
+                if (annot.getValue() instanceof OWLLiteral) {
+                    def aVal = annot.getValue().getLiteral()
+                    info['identifier'] << aVal
+                }
+            } else if (aProp in this.labels) {
+                if (annot.getValue() instanceof OWLLiteral) {
+                    def aVal = annot.getValue().getLiteral()
+                    info['label'] = addSpacesToCamelCase(aVal)
+                    hasLabel = true
+                }
+            } else if (aProp in this.definitions) {
+                if (annot.getValue() instanceof OWLLiteral) {
+                    def aVal = annot.getValue().getLiteral()
+                    info["definition"] << aVal
+                }
+            } else if (aProp in this.synonyms) {
+                if (annot.getValue() instanceof OWLLiteral) {
+                    def aVal = annot.getValue().getLiteral()
+                    info["synonyms"] << aVal
+                }
+            } else {
+                if (annot.getValue() instanceof OWLLiteral) {
+                    try {
+                        def aVal = annot.getValue().getLiteral()
+                        def aLabels = EntitySearcher.getAnnotations(aProp, o)
+                        if (aLabels.size() > 0) {
+                            aLabels.each { l ->
+                                if (l.getValue() instanceof OWLLiteral) {
+                                    def lab = l.getValue().getLiteral()
+                                    info[lab].add(aVal)
+                                }
+                            }
+                        } else {
+                            def prop = sfp.getShortForm(aProp)
+                            info[prop].add(aVal)
+                        }
+                    } catch (Exception e) {
+                    }
+                }
+            }
+        }
+
+        if (!hasLabel) {
+            info["label"] = sfp.getShortForm(c)
+        }
+
+        if (!hasAnnot) {
+            info["deprecated"] = true
+        }
+
+        if (axioms) {
+            def manSyntaxRenderer = new AberOWLSyntaxRendererImpl()
+            manSyntaxRenderer.setShortFormProvider(sfp)
+
+            EntitySearcher.getSuperClasses(c, o).each { cExpr ->
+                info["SubClassOf"] << manSyntaxRenderer.render(cExpr)
+            }
+            EntitySearcher.getEquivalentClasses(c, o).each { cExpr ->
+                info["Equivalent"] << manSyntaxRenderer.render(cExpr)
+            }
+            EntitySearcher.getDisjointClasses(c, o).each { cExpr ->
+                info["Disjoint"] << manSyntaxRenderer.render(cExpr)
+            }
+        }
+        return info
     }
 
-    /**
-     * @return the oManager
-     */
-    OWLOntologyManager getoManager() {
-	return oManager
+    // Backward-compatible
+    def toInfo(OWLEntity c, boolean axioms, shortFormProvider) {
+        return toInfo(getDefaultOntologyId(), c, axioms, shortFormProvider)
     }
 
-    /**
-     * @return the ontologies
-     */
-    def getOntology() {
-	return ontology
+    ArrayList<HashMap> classes2info(String ontId, Set<OWLClass> classes, boolean axioms, shortFormProvider) {
+        ArrayList<HashMap> result = new ArrayList<HashMap>()
+        classes.each { c ->
+            def info = toInfo(ontId, c, axioms, shortFormProvider)
+            if (!info["deprecated"]) {
+                result.add(info)
+            }
+        }
+        return result
     }
 
-    /**
-     * Get the axiom count of all the ontologies
-     */
-    // Map getStats(String oString) {
-    // 	def stats = []
-    // 	OWLOntology ont = ontology
-    // 	stats = [
-    // 	    'axiomCount': 0,
-    // 	    'classCount': ont.getClassesInSignature(true).size()
-    // 	]
-    // 	AxiomType.TBoxAxiomTypes.each { ont.getAxioms(it, true).each { stats.axiomCount += 1 } }
-    // 	AxiomType.RBoxAxiomTypes.each { ont.getAxioms(it, true).each { stats.axiomCount += 1 } }
+    // Backward-compatible
+    ArrayList<HashMap> classes2info(Set<OWLClass> classes, boolean axioms, shortFormProvider) {
+        return classes2info(getDefaultOntologyId(), classes, axioms, shortFormProvider)
+    }
 
-    // 	return stats
-    // }
-    
-    
-    /**
-     * Retrieve all objects properties
-     */
+    // -----------------------------------------------------------------------
+    // Object properties
+    // -----------------------------------------------------------------------
+
+    def getObjectProperties(String ontId) {
+        return getObjectProperties(ontId, df.getOWLTopObjectProperty())
+    }
+
+    def getObjectProperties(String ontId, String prop) {
+        def objProp = df.getOWLObjectProperty(IRI.create(prop))
+        return getObjectProperties(ontId, objProp)
+    }
+
+    def getObjectProperties(String ontId, OWLObjectProperty prop) {
+        def sReasoner = structReasoners.get(ontId)
+        if (sReasoner == null) {
+            throw new IllegalArgumentException("Ontology not loaded: ${ontId}")
+        }
+        def sfp = shortFormProviders.get(ontId)
+        def subProps = sReasoner.getSubObjectProperties(prop, true).getFlattened()
+        subProps.remove(df.getOWLBottomObjectProperty())
+        subProps.remove(df.getOWLTopObjectProperty())
+        def used = new HashSet<OWLObjectProperty>()
+        def result = []
+        for (def expression : subProps) {
+            def objProp = expression.getNamedProperty()
+            if (!used.contains(objProp)) {
+                result.add(toInfo(ontId, objProp, false, sfp))
+                used.add(objProp)
+            }
+        }
+        return ["result": result.sort { x, y -> x["label"].compareTo(y["label"]) }]
+    }
+
+    // Backward-compatible (no-arg only; single-String overload removed to avoid Groovy ambiguity)
     def getObjectProperties() {
-	return this.getObjectProperties(df.getOWLTopObjectProperty())
+        return getObjectProperties(getDefaultOntologyId())
     }
-    
-    def getObjectProperties(String prop) {
-	def objProp = df.getOWLObjectProperty(IRI.create(prop));
-	return this.getObjectProperties(objProp);
-    }
-    
-    def getObjectProperties(OWLObjectProperty prop) {
 
-	def subProps = this.structReasoner.getSubObjectProperties(
-	    prop, true).getFlattened()
-	subProps.remove(df.getOWLBottomObjectProperty())
-	subProps.remove(df.getOWLTopObjectProperty())
-	def used = new HashSet<OWLObjectProperty>();
-	def result = [];
-	for (def expression: subProps) {
-	    def objProp = expression.getNamedProperty()
-	    if (!used.contains(objProp)) {
-		result.add(toInfo(objProp, false, this.shortFormProvider));
-		used.add(objProp);
-	    }
-	}
-	return ["result": result.sort {x, y -> x["label"].compareTo(y["label"])}];
-	   }
-	   
+    // -----------------------------------------------------------------------
+    // SPARQL examples
+    // -----------------------------------------------------------------------
+
+    def getSparqlExamples(String ontId) {
+        return [
+            exampleSuperclassLabel: exampleSuperclassLabels.get(ontId),
+            exampleSubclassExpression: exampleSubclassExpressions.get(ontId),
+            exampleSubclassExpressionText: exampleSubclassExpressionTexts.get(ontId)
+        ]
+    }
+
+    // Backward-compatible
+    def getSparqlExamples() {
+        return getSparqlExamples(getDefaultOntologyId())
+    }
+
+    // -----------------------------------------------------------------------
+    // Accessors
+    // -----------------------------------------------------------------------
+
+    OWLOntologyManager getoManager(String ontId) {
+        return oManagers.get(ontId)
+    }
+
+    def getOntology(String ontId) {
+        return ontologies.get(ontId)
+    }
+
+    QueryEngine getQueryEngine(String ontId) {
+        return queryEngines.get(ontId)
+    }
+
+    // Backward-compatible: return first ontology
+    OWLOntologyManager getoManager() {
+        return oManagers.get(getDefaultOntologyId())
+    }
+
+    def getOntology() {
+        return ontologies.get(getDefaultOntologyId())
+    }
+
+    def getQueryEngine() {
+        return queryEngines.get(getDefaultOntologyId())
+    }
+
+    // For backward compat: expose ont name of default ontology
+    String getOnt() {
+        return getDefaultOntologyId()
+    }
+
+    // -----------------------------------------------------------------------
+    // Private helpers
+    // -----------------------------------------------------------------------
+
     /**
-     * Find an example superclass label and subclass expression during ontology load time.
+     * Get the default ontology ID (first loaded). Used for backward compatibility.
      */
-    void findExampleClassesAndExpressions() {
-        def classes = this.ontology.getClassesInSignature(true)
+    String getDefaultOntologyId() {
+        if (ontologies.isEmpty()) {
+            throw new IllegalStateException("No ontologies loaded")
+        }
+        return ontologies.keySet().iterator().next()
+    }
+
+    void findExampleClassesAndExpressions(String ontId) {
+        def ontology = ontologies.get(ontId)
+        def sfp = shortFormProviders.get(ontId)
+        if (ontology == null || sfp == null) return
+
+        def classes = ontology.getClassesInSignature(true)
         OWLClass exampleSuperclass = null
 
-        // Find an example superclass (a named class)
         for (def cls : classes) {
             if (!cls.isOWLThing() && !cls.isOWLNothing()) {
                 exampleSuperclass = cls
@@ -504,20 +715,19 @@ public class RequestManager {
         }
 
         if (exampleSuperclass != null) {
-            this.exampleSuperclassLabel = this.shortFormProvider.getShortForm(exampleSuperclass)
+            exampleSuperclassLabels.put(ontId, sfp.getShortForm(exampleSuperclass))
         }
 
-        // Find an example subclass expression (a complex class)
         def manSyntaxHTMLRenderer = new AberOWLSyntaxRendererImpl()
-        manSyntaxHTMLRenderer.setShortFormProvider(this.shortFormProvider)
+        manSyntaxHTMLRenderer.setShortFormProvider(sfp)
         for (def cls : classes) {
-            def subClassAxioms = this.ontology.getSubClassAxiomsForSubClass(cls)
+            def subClassAxioms = ontology.getSubClassAxiomsForSubClass(cls)
             for (def axiom : subClassAxioms) {
                 def superClass = axiom.getSuperClass()
                 if (superClass.isAnonymous()) {
-                    this.exampleSubclassExpression = manSyntaxHTMLRenderer.render(superClass)
-                    // Derive a plain-text version from the HTML by adding spaces and stripping tags
-                    this.exampleSubclassExpressionText = this.exampleSubclassExpression
+                    def rendered = manSyntaxHTMLRenderer.render(superClass)
+                    exampleSubclassExpressions.put(ontId, rendered)
+                    def text = rendered
                         .replaceAll("</span>", "</span> ")
                         .replaceAll("<[^>]+>", "")
                         .replaceAll("&gt;", ">")
@@ -529,89 +739,32 @@ public class RequestManager {
                         .replaceAll("'<", "")
                         .trim()
                         .replaceAll("\\s+", " ")
-                    break
+                    exampleSubclassExpressionTexts.put(ontId, text)
+                    return
                 }
-            }
-            if (this.exampleSubclassExpression != null) {
-                break
             }
         }
     }
-	   
-    def getSparqlExamples() {
-        return [
-            exampleSuperclassLabel: this.exampleSuperclassLabel,
-            exampleSubclassExpression: this.exampleSubclassExpression,
-            exampleSubclassExpressionText: this.exampleSubclassExpressionText
-        ]
-    }
 
-    /**
-     * Release all reasoner and ontology resources.
-     * Call this on the old RequestManager after a hot-swap to prevent memory leaks.
-     */
-    public void disposeAll() {
-	try {
-	    oReasoner?.dispose()
-	} catch (Exception e) {
-	    println "Error disposing oReasoner for $ont: ${e.getMessage()}"
-	}
-	// structReasoner may be the same object as oReasoner when the structural
-	// reasoner fallback was triggered; avoid a double-dispose.
-	try {
-	    if (structReasoner != null && structReasoner !== oReasoner) {
-		structReasoner.dispose()
-	    }
-	} catch (Exception e) {
-	    println "Error disposing structReasoner for $ont: ${e.getMessage()}"
-	}
-	oReasoner    = null
-	structReasoner = null
-	queryEngine  = null
-	ontology     = null
-	oManager     = null
-	println "Disposed all resources for $ont"
+    private String addSpacesToCamelCase(String text) {
+        if (text == null || text.isEmpty()) {
+            return text
+        }
+        if (text.contains(" ") || text.contains("_")) {
+            return text
+        }
+        StringBuilder result = new StringBuilder()
+        result.append(text.charAt(0))
+        for (int i = 1; i < text.length(); i++) {
+            char current = text.charAt(i)
+            char previous = text.charAt(i - 1)
+            if (Character.isUpperCase(current) && Character.isLowerCase(previous)) {
+                result.append(' ')
+            } else if (Character.isDigit(current) && Character.isLetter(previous)) {
+                result.append(' ')
+            }
+            result.append(current)
+        }
+        return result.toString()
     }
-	   
-	   /**
-	    * Adds spaces to camel case text.
-	    * For example: "PizzaVegetarianaEquivalente2" becomes "Pizza Vegetariana Equivalente 2"
-	    *
-	    * @param text The text to process
-	    * @return The text with spaces added between camel case words
-	    */
-	   private String addSpacesToCamelCase(String text) {
-	       if (text == null || text.isEmpty()) {
-	           return text;
-	       }
-	       
-	       // If text already contains spaces or underscores, return it as is
-	       if (text.contains(" ") || text.contains("_")) {
-	           return text;
-	       }
-	       
-	       // Simple character-by-character approach to avoid regex issues
-	       StringBuilder result = new StringBuilder();
-	       result.append(text.charAt(0));
-	       
-	       for (int i = 1; i < text.length(); i++) {
-	           char current = text.charAt(i);
-	           char previous = text.charAt(i - 1);
-	           
-	           // Add space before uppercase letter if previous char is lowercase
-	           if (Character.isUpperCase(current) && Character.isLowerCase(previous)) {
-	               result.append(' ');
-	           }
-	           // Add space before digit if previous char is a letter
-	           else if (Character.isDigit(current) && Character.isLetter(previous)) {
-	               result.append(' ');
-	           }
-	           
-	           result.append(current);
-	       }
-	       
-	       return result.toString();
-	   }
-	   
 }
-

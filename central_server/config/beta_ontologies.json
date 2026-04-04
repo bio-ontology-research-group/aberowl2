@@ -1,0 +1,26 @@
+{
+  "_comment": "Initial 100 ontologies for beta.aber-owl.net deployment (50 OBO Foundry + 50 BioPortal)",
+  "obo_foundry": [
+    "go", "chebi", "hp", "mp", "cl", "uberon", "pato", "obi",
+    "doid", "mondo", "ncbitaxon", "pr", "so", "bfo", "ro",
+    "envo", "po", "zfa", "fbbt", "wbbt",
+    "iao", "ogms", "caro", "peco", "xao",
+    "mmusdv", "hsapdv", "fbdv", "wbls", "zfs",
+    "eco", "ero", "stato", "swo", "geno",
+    "chmo", "duo", "rxno", "mop", "fix",
+    "nbo", "oba", "upheno", "sepio", "agro",
+    "apo", "fypo", "ddanat", "plana", "ceph"
+  ],
+  "bioportal": [
+    "SNOMEDCT", "MESH", "NCIT", "LOINC", "ICD10CM",
+    "RXNORM", "OMIM", "ORPHANET", "RADLEX", "FMA",
+    "NIFSTD", "EFO", "EDAM", "SIO", "MEDDRA",
+    "ATC", "ICD9CM", "CPT", "HGNC", "BIOMODELS",
+    "CRISP", "HL7", "ICPC", "MEDLINEPLUS", "VANDF",
+    "WHO-ART", "COSTART", "PCDS", "NDFRT", "PDQ",
+    "CTCAE", "ICNP", "ICF", "IOBC", "BAO",
+    "CLO", "CHEAR", "OCMR", "ONTONEO", "OBIWS",
+    "MIRNAO", "PHARE", "IDQA", "KISAO", "TEDDY",
+    "AURA", "GFO", "HPIO", "CSEO", "PROVO"
+  ]
+}

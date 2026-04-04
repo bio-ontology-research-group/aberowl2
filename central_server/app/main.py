@@ -24,6 +24,11 @@ from pydantic import BaseModel, HttpUrl
 
 from app.virtuoso_manager import CentralVirtuosoManager
 from app.es_manager import CentralESManager
+from app.sparql_expander import expand_sparql_query, execute_sparql
+from app.auth import (
+    get_rate_limit_key, create_api_key, revoke_api_key, list_api_keys,
+    PUBLIC_RATE_LIMIT, API_KEY_RATE_LIMIT,
+)
 from app.intake.obofoundry import fetch_obofoundry_ontologies
 from app.intake.bioportal import fetch_bioportal_ontologies
 from app.intake import updater as update_pipeline
@@ -337,32 +342,31 @@ async def fetch_and_update_server_metadata(server: Dict[str, Any]):
     await _write_servers_to_file()
 
 
-async def start_mcp_server_if_configured():
-    """Checks for MCP_SERVER_ADDRESS env var and starts the MCP server if present."""
+async def start_mcp_servers():
+    """Start the MCP ontology and SPARQL servers as subprocesses if enabled."""
     global mcp_process
-    mcp_server_address = os.getenv("MCP_SERVER_ADDRESS")
-    if mcp_server_address:
-        logger.info(f"MCP_SERVER_ADDRESS is set. Starting MCP server...")
-        
-        # The mcp_server.py script is mounted at the root of the /code directory
-        mcp_server_script = "/code/mcp_server.py"
-        
-        if not os.path.exists(mcp_server_script):
-            logger.error(f"MCP server script not found at '{mcp_server_script}'. Cannot start MCP server.")
-            return
+    if not os.getenv("ENABLE_MCP", "").lower() in ("true", "1", "yes"):
+        logger.info("MCP servers disabled (set ENABLE_MCP=true to enable)")
+        return
 
+    # MCP servers are standalone scripts in the central_server directory
+    mcp_scripts = [
+        ("mcp_ontology_server.py", os.getenv("MCP_ONTOLOGY_PORT", "8766")),
+        ("mcp_sparql_server.py", os.getenv("MCP_SPARQL_PORT", "8767")),
+    ]
+    for script_name, port in mcp_scripts:
+        script_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), script_name)
+        if not os.path.exists(script_path):
+            logger.warning(f"MCP script not found: {script_path}")
+            continue
         try:
-            # We run mcp_server.py as a separate process.
-            # It will pick up the MCP_SERVER_ADDRESS environment variable.
-            mcp_process = await asyncio.create_subprocess_exec(
-                sys.executable,
-                mcp_server_script,
-                stdout=sys.stdout, # pipe to parent stdout/stderr for logging
-                stderr=sys.stderr
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, script_path,
+                stdout=sys.stdout, stderr=sys.stderr,
             )
-            logger.info(f"MCP server process started with PID {mcp_process.pid}.")
+            logger.info(f"MCP server {script_name} started (PID: {proc.pid}, port: {port})")
         except Exception as e:
-            logger.error(f"Failed to start MCP server: {e}")
+            logger.error(f"Failed to start MCP server {script_name}: {e}")
 
 
 async def _fetch_and_update_all_servers():
@@ -419,29 +423,43 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(daily_source_sync_task())
     asyncio.create_task(daily_update_check_task())
 
-    # Start MCP server if configured
-    await start_mcp_server_if_configured()
+    # Start MCP servers if enabled
+    await start_mcp_servers()
 
     yield
 
     # Shutdown
-    if mcp_process:
-        logger.info(f"Terminating MCP server process (PID: {mcp_process.pid})...")
-        mcp_process.terminate()
-        try:
-            await asyncio.wait_for(mcp_process.wait(), timeout=5.0)
-            logger.info("MCP server process terminated gracefully.")
-        except asyncio.TimeoutError:
-            logger.warning("MCP server process did not terminate gracefully, killing it.")
-            mcp_process.kill()
-
     await redis_client.close()
     logger.info("Redis connection closed.")
 
 app = FastAPI(lifespan=lifespan)
 
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
-templates = Jinja2Templates(directory="app/templates")
+# Rate limiting via slowapi
+try:
+    from slowapi import Limiter
+    from slowapi.util import get_remote_address
+    from slowapi.errors import RateLimitExceeded
+    from slowapi.middleware import SlowAPIMiddleware
+
+    limiter = Limiter(key_func=get_rate_limit_key, default_limits=[f"{PUBLIC_RATE_LIMIT}/minute"])
+    app.state.limiter = limiter
+    app.add_middleware(SlowAPIMiddleware)
+
+    @app.exception_handler(RateLimitExceeded)
+    async def rate_limit_handler(request, exc):
+        return JSONResponse(
+            {"error": "Rate limit exceeded. Use an API key for higher limits."},
+            status_code=429,
+        )
+    logger.info("Rate limiting enabled: %d/min public, %d/min API key", PUBLIC_RATE_LIMIT, API_KEY_RATE_LIMIT)
+except ImportError:
+    logger.warning("slowapi not installed, rate limiting disabled")
+
+_static_dir = Path(__file__).parent / "static"
+_templates_dir = Path(__file__).parent / "templates"
+_static_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
+templates = Jinja2Templates(directory=str(_templates_dir))
 
 
 @app.get("/about", response_class=HTMLResponse)
@@ -529,129 +547,133 @@ async def register_server(payload: RegistrationRequest):
 
 @app.get("/api/search_all")
 async def search_all_api(request: Request):
-    """Runs a text search query across all registered online servers."""
+    """Search for ontology classes across all ontologies via the central ES.
+
+    Query params:
+        query      - search term (required)
+        ontologies - comma-separated list of ontology IDs to restrict to
+        prefix     - "true" for prefix/autocomplete mode
+        size       - max results (default 100, max 5000)
+    """
     query = request.query_params.get("query")
     ontologies_to_query_str = request.query_params.get("ontologies")
+    prefix = request.query_params.get("prefix", "").lower() == "true"
+    try:
+        size = min(int(request.query_params.get("size", "100")), 5000)
+    except ValueError:
+        size = 100
 
     if not query:
-        return {"error": "Missing 'query' parameter"}, 400
+        return JSONResponse({"error": "Missing 'query' parameter"}, status_code=400)
 
-    server_data_json = await redis_client.hvals("registered_servers")
-    all_servers = [json.loads(s) for s in server_data_json]
-    online_servers = [s for s in all_servers if s.get("status") == "online"]
-
+    # Query central ES directly (no scatter-gather to ontology servers)
+    ontology_filter = None
     if ontologies_to_query_str:
-        ontologies_to_query = ontologies_to_query_str.split(',')
-        online_servers = [s for s in online_servers if s.get("ontology") in ontologies_to_query]
+        ontology_filter = ontologies_to_query_str.split(',')[0]  # ES query handles one ontology; loop for multiple
 
-    async def query_one_server(server, session):
-        ontology_name = server.get("ontology")
-        ontology_title = server.get("title", ontology_name)
-        
-        server_url = server.get("url")
-        parsed_url = urlparse(server_url)
-        port = parsed_url.port
-        if not port:
-            port = 80 if parsed_url.scheme == 'http' else 443
-        
-        index_name = f"class_index_{port}"
-        api_url = f"{str(server_url).rstrip('/')}/api/api/elastic.groovy"
-        
-        logger.info(f"Querying {ontology_name} for '{query}' at {api_url}")
-
-        es_query = {
-            "query": {
-                "bool": {
-                    "must": {
-                        "query_string": {
-                            "query": f"*{query.lower()}*",
-                            "fields": ["label", "synonyms"]
-                        }
-                    },
-                    "should": [
-                        {"prefix": {"label": {"value": query.lower(), "boost": 4}}},
-                        {"prefix": {"synonyms": {"value": query.lower(), "boost": 2}}}
-                    ]
-                }
-            },
-            "_source": {"excludes": ["embedding_vector"]},
-            "size": 10000
-        }
-
-        params = {
-            "index": index_name,
-            "source": json.dumps(es_query),
-            "source_content_type": "application/json"
-        }
-        
-        try:
-            async with session.get(api_url, params=params, timeout=20) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    hits = data.get("hits", {}).get("hits", [])
-                    results = [hit.get("_source") for hit in hits if hit.get("_source")]
-                    
-                    for item in results:
-                        if isinstance(item, dict):
-                            item["ontology"] = ontology_name
-                            item["ontology_title"] = ontology_title
-                    return results
-                else:
-                    logger.warning(f"Search query failed for {ontology_name}: Status {response.status} {await response.text()}")
-                    return []
-        except Exception as e:
-            logger.error(f"Error search querying {ontology_name}: {e}")
-            return []
-
-    all_results = []
-    async with aiohttp.ClientSession() as session:
-        tasks = [query_one_server(server, session) for server in online_servers]
-        results_from_servers = await asyncio.gather(*tasks)
-        for res_list in results_from_servers:
-            all_results.extend(res_list)
+    if ontologies_to_query_str and ',' in ontologies_to_query_str:
+        # Multiple ontologies: query each alias and merge
+        ontology_ids = [o.strip() for o in ontologies_to_query_str.split(',')]
+        all_results = []
+        for ont_id in ontology_ids:
+            results = await es_mgr.search_classes(query, ontology=ont_id, prefix=prefix, size=size)
+            all_results.extend(results)
+    else:
+        all_results = await es_mgr.search_classes(
+            query, ontology=ontology_filter, prefix=prefix, size=size
+        )
 
     return {"result": all_results}
 
 
+@app.get("/api/queryNames")
+async def query_names_api(request: Request):
+    """Search for ontology classes by label, synonym, or ID.
+
+    Compatible with the original AberOWL queryNames API.
+
+    Query params:
+        term     - search term (required)
+        ontology - restrict to a specific ontology (optional)
+        prefix   - "true" for prefix/autocomplete mode
+        size     - max results (default 100, max 5000)
+    """
+    term = request.query_params.get("term")
+    ontology = request.query_params.get("ontology")
+    prefix = request.query_params.get("prefix", "").lower() == "true"
+    try:
+        size = min(int(request.query_params.get("size", "100")), 5000)
+    except ValueError:
+        size = 100
+
+    if not term:
+        return JSONResponse({"error": "Missing 'term' parameter"}, status_code=400)
+
+    results = await es_mgr.search_classes(term, ontology=ontology, prefix=prefix, size=size)
+    return {"result": results}
+
+
 @app.get("/api/dlquery_all")
 async def dl_query_all(request: Request):
-    """Runs a DL query across all registered online servers."""
+    """Runs a DL query across all registered online servers.
+
+    In multi-ontology container mode, each server hosts multiple ontologies.
+    The ontologyId parameter is passed so the container knows which ontology
+    to run the query against.
+
+    Query params:
+        query      - Manchester OWL Syntax query (required)
+        type       - query type: subclass, superclass, equivalent, subeq, supeq (required)
+        ontologies - comma-separated list of ontology IDs to restrict to
+        direct     - "true" for direct results only
+        labels     - "true" to include labels (default true)
+        axioms     - "true" to include axioms
+    """
     query = request.query_params.get("query")
     query_type = request.query_params.get("type")
     ontologies_to_query_str = request.query_params.get("ontologies")
+    direct = request.query_params.get("direct", "false")
+    labels = request.query_params.get("labels", "true")
+    axioms = request.query_params.get("axioms", "false")
 
     if not query or not query_type:
-        return {"error": "Missing 'query' or 'type' parameter"}, 400
+        return JSONResponse({"error": "Missing 'query' or 'type' parameter"}, status_code=400)
 
     server_data_json = await redis_client.hvals("registered_servers")
     all_servers = [json.loads(s) for s in server_data_json]
     online_servers = [s for s in all_servers if s.get("status") == "online"]
 
     if ontologies_to_query_str:
-        ontologies_to_query = ontologies_to_query_str.split(',')
+        ontologies_to_query = [o.strip() for o in ontologies_to_query_str.split(',')]
         online_servers = [s for s in online_servers if s.get("ontology") in ontologies_to_query]
 
     async def query_one_server(server, session):
         ontology_name = server.get("ontology")
         ontology_title = server.get("title", ontology_name)
-        api_url = f"{str(server.get('url')).rstrip('/')}/api/api/runQuery.groovy"
-        params = {"query": query, "type": query_type, "labels": "true"}
-        
+        api_url = f"{str(server.get('url')).rstrip('/')}/api/runQuery.groovy"
+        params = {
+            "query": query,
+            "type": query_type,
+            "labels": labels,
+            "direct": direct,
+            "axioms": axioms,
+            "ontologyId": ontology_name,  # Pass ontologyId for multi-ontology containers
+        }
+
         try:
-            async with session.get(api_url, params=params, timeout=20) as response:
+            async with session.get(api_url, params=params, timeout=30) as response:
                 if response.status == 200:
                     data = await response.json()
-                    # Annotate results with ontology name
                     for item in data.get("result", []):
                         if isinstance(item, dict):
                             item["ontology"] = ontology_name
                             item["ontology_title"] = ontology_title
                     return data.get("result", [])
                 else:
-                    logger.warning(f"Query failed for {ontology_name}: Status {response.status}")
+                    logger.warning(f"DL query failed for {ontology_name}: Status {response.status}")
                     return []
         except Exception as e:
-            logger.error(f"Error querying {ontology_name}: {e}")
+            logger.error(f"Error DL querying {ontology_name}: {e}")
             return []
 
     all_results = []
@@ -670,6 +692,244 @@ async def get_servers():
     server_data_json = await redis_client.hvals("registered_servers")
     servers = [json.loads(s) for s in server_data_json]
     return servers
+
+
+@app.get("/api/listOntologies")
+async def list_ontologies_api():
+    """Return a list of all registered ontology IDs."""
+    server_data_json = await redis_client.hvals("registered_servers")
+    servers = [json.loads(s) for s in server_data_json]
+    ontologies = [
+        {
+            "id": s.get("ontology"),
+            "title": s.get("title", ""),
+            "status": s.get("status", "unknown"),
+        }
+        for s in servers
+    ]
+    return {"result": ontologies}
+
+
+@app.get("/api/getOntology")
+async def get_ontology_api(ontology: str = Query(...)):
+    """Return full metadata for a single ontology."""
+    server_data_json = await redis_client.hvals("registered_servers")
+    servers = [json.loads(s) for s in server_data_json]
+    for s in servers:
+        if s.get("ontology", "").lower() == ontology.lower():
+            return s
+    raise HTTPException(status_code=404, detail=f"Ontology not found: {ontology}")
+
+
+@app.get("/api/queryOntologies")
+async def query_ontologies_api(term: str = Query(...), size: int = Query(50, le=200)):
+    """Search ontology metadata by name or description."""
+    results = await es_mgr.search_ontologies(term, size=size)
+    return {"result": results}
+
+
+@app.get("/api/getClass")
+async def get_class_api(
+    query: str = Query(..., description="Class IRI"),
+    ontology: str = Query(..., description="Ontology ID"),
+):
+    """Get detailed information about a specific ontology class.
+
+    Tries ES first (fast, has all indexed annotations).  Falls back to
+    querying the ontology worker's reasoner directly (always works if the
+    ontology is loaded, but slower and only returns what OWLAPI provides).
+    """
+    # --- Try ES first ---
+    try:
+        alias = es_mgr._alias_name(ontology.lower())
+        query_body = {
+            "query": {"bool": {"must": [{"term": {"class": query}}]}},
+            "size": 1,
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{es_mgr.es_url}/{alias}/_search",
+                json=query_body,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json(content_type=None)
+                    hits = data.get("hits", {}).get("hits", [])
+                    if hits:
+                        return hits[0].get("_source", {})
+    except Exception as e:
+        logger.debug("getClass ES lookup failed for %s/%s: %s", ontology, query, e)
+
+    # --- Fall back to querying the ontology worker directly ---
+    server_data_json = await redis_client.hvals("registered_servers")
+    servers = [json.loads(s) for s in server_data_json]
+    server = next(
+        (s for s in servers if s.get("ontology", "").lower() == ontology.lower() and s.get("status") == "online"),
+        None,
+    )
+    if not server:
+        raise HTTPException(status_code=404, detail=f"Ontology not found or offline: {ontology}")
+
+    worker_url = server.get("url", "").rstrip("/")
+    # Query the worker for this specific class with labels + axioms
+    iri_query = f"<{query}>" if not query.startswith("<") else query
+    params = {
+        "query": iri_query,
+        "type": "equivalent",
+        "direct": "true",
+        "labels": "true",
+        "axioms": "true",
+        "ontologyId": ontology,
+    }
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{worker_url}/api/runQuery.groovy",
+                params=params,
+                timeout=aiohttp.ClientTimeout(total=30),
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    results = data.get("result", [])
+                    # The query returns equivalent classes; find the one matching our IRI
+                    for r in results:
+                        if r.get("class") == query:
+                            return r
+                    # If exact match not found, return first result or query info
+                    if results:
+                        return results[0]
+
+                    # No equivalent found — try superclass query to get class info
+                    params["type"] = "superclass"
+                    async with session.get(
+                        f"{worker_url}/api/runQuery.groovy",
+                        params=params,
+                        timeout=aiohttp.ClientTimeout(total=30),
+                    ) as resp2:
+                        if resp2.status == 200:
+                            data2 = await resp2.json()
+                            supers = data2.get("result", [])
+                            if supers:
+                                # Class exists (has superclasses) — build info
+                                return {
+                                    "class": query,
+                                    "ontology": ontology,
+                                    "label": query.rsplit("#", 1)[-1].rsplit("/", 1)[-1],
+                                    "SubClassOf": [r.get("label", r.get("class")) for r in supers],
+                                }
+                        # No superclasses = class not in ontology
+                        elif resp2.status == 400:
+                            pass  # Query error = class not found
+    except Exception as e:
+        logger.error("getClass worker fallback error: %s", e)
+
+    raise HTTPException(status_code=404, detail="Class not found")
+
+
+@app.get("/api/getStats")
+async def get_stats_api(ontology: Optional[str] = Query(None)):
+    """Get ontology statistics. If ontology is specified, returns stats for that ontology only."""
+    server_data_json = await redis_client.hvals("registered_servers")
+    servers = [json.loads(s) for s in server_data_json]
+
+    if ontology:
+        for s in servers:
+            if s.get("ontology", "").lower() == ontology.lower():
+                return {
+                    "ontology": s.get("ontology"),
+                    "class_count": s.get("class_count", 0),
+                    "property_count": s.get("property_count", 0),
+                    "object_property_count": s.get("object_property_count", 0),
+                    "individual_count": s.get("individual_count", 0),
+                    "status": s.get("status"),
+                }
+        raise HTTPException(status_code=404, detail=f"Ontology not found: {ontology}")
+
+    # Aggregate stats across all ontologies
+    total_classes = sum(s.get("class_count", 0) for s in servers)
+    total_properties = sum(s.get("property_count", 0) for s in servers)
+    total_ontologies = len(servers)
+    online = sum(1 for s in servers if s.get("status") == "online")
+    return {
+        "total_ontologies": total_ontologies,
+        "online_ontologies": online,
+        "total_classes": total_classes,
+        "total_properties": total_properties,
+    }
+
+
+@app.get("/api/getStatuses")
+async def get_statuses_api():
+    """Return loading/classification status for all ontologies."""
+    server_data_json = await redis_client.hvals("registered_servers")
+    servers = [json.loads(s) for s in server_data_json]
+    statuses = {
+        s.get("ontology"): s.get("status", "unknown")
+        for s in servers
+    }
+    return statuses
+
+
+@app.post("/api/sparql")
+@app.get("/api/sparql")
+async def sparql_expand_api(request: Request):
+    """Execute a SPARQL query with optional OWL DL query expansion.
+
+    Supports two embedded expansion patterns:
+
+    1. VALUES pattern:
+       VALUES ?var { OWL type ontology_id { dl_query } }
+       Example: VALUES ?class { OWL subeq GO { 'part of' some 'cell' } }
+
+    2. FILTER pattern:
+       FILTER OWL(?var, type, ontology_id, "dl_query")
+       Example: FILTER OWL(?class, subeq, GO, "'part of' some 'cell'")
+
+    Query params (GET) or form fields (POST):
+        query    - SPARQL query string (required)
+        endpoint - SPARQL endpoint URL (optional, defaults to central Virtuoso)
+    """
+    if request.method == "POST":
+        try:
+            body = await request.json()
+            query = body.get("query", "")
+            endpoint = body.get("endpoint")
+        except Exception:
+            form = await request.form()
+            query = form.get("query", "")
+            endpoint = form.get("endpoint")
+    else:
+        query = request.query_params.get("query", "")
+        endpoint = request.query_params.get("endpoint")
+
+    if not query:
+        return JSONResponse({"error": "Missing 'query' parameter"}, status_code=400)
+
+    # Default to central Virtuoso
+    virtuoso_url = os.getenv("VIRTUOSO_URL", "http://virtuoso:8890")
+    if not endpoint:
+        endpoint = f"{virtuoso_url}/sparql"
+
+    # Build server lookup from registered servers
+    server_data_json = await redis_client.hvals("registered_servers")
+    servers = [json.loads(s) for s in server_data_json]
+    server_lookup = {
+        s.get("ontology", "").lower(): s.get("url", "")
+        for s in servers
+        if s.get("status") == "online"
+    }
+
+    # Expand OWL patterns in the query
+    expanded_query, expansions = await expand_sparql_query(query, server_lookup)
+
+    # Execute the expanded query
+    results = await execute_sparql(expanded_query, endpoint)
+
+    return {
+        "results": results,
+        "expanded_query": expanded_query if expansions else None,
+        "expansions": expansions if expansions else None,
+    }
 
 
 @app.api_route("/api/elastic/{path:path}", methods=["GET", "POST"])
@@ -781,7 +1041,13 @@ async def get_catalogue_info(
 ):
     """Serves the main HTML page and provides catalogue info for other formats."""
     if format == "html":
-        return templates.TemplateResponse("index.html", {"request": request})
+        spa_index = _dist_dir / "index.html" if '_dist_dir' in dir() else Path(__file__).parent / "static" / "dist" / "index.html"
+        if spa_index.exists():
+            return HTMLResponse(spa_index.read_text())
+        try:
+            return templates.TemplateResponse("index.html", {"request": request})
+        except Exception:
+            return HTMLResponse("<h1>AberOWL</h1><p>Frontend not built. Run <code>cd central_server/frontend && npm run build</code></p>")
 
     catalogue_info = {
         "@context": {
@@ -1852,6 +2118,47 @@ async def admin_trigger_update(
     return {"status": "update_triggered", "ontology_id": ontology_id}
 
 
+@app.post("/api/webhook/update/{ontology_id}")
+async def webhook_trigger_update(ontology_id: str, request: Request):
+    """Webhook endpoint for push-based update triggers.
+
+    Can be called by GitHub Actions, CI pipelines, or any service that
+    detects an upstream ontology release. Requires a webhook secret
+    matching the ontology's stored secret_key.
+
+    Headers:
+        X-Webhook-Secret: the secret key for this ontology
+    """
+    entry = await _get_registry_entry(ontology_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Ontology not in registry")
+
+    # Verify webhook secret
+    expected_secret = entry.get("secret_key")
+    provided_secret = request.headers.get("X-Webhook-Secret")
+    if not expected_secret or not provided_secret:
+        raise HTTPException(status_code=401, detail="Webhook secret required")
+    if not secrets.compare_digest(provided_secret.encode(), expected_secret.encode()):
+        raise HTTPException(status_code=401, detail="Invalid webhook secret")
+
+    async def _run():
+        try:
+            await update_pipeline.execute_update_pipeline(
+                ontology_id=ontology_id,
+                registry_entry=entry,
+                redis_client=redis_client,
+                virtuoso_mgr=virtuoso_mgr,
+                es_mgr=es_mgr,
+                ontologies_base_path=ONTOLOGIES_BASE_PATH,
+                es_url=ELASTICSEARCH_URL,
+            )
+        except Exception as e:
+            logger.error("Webhook update failed for %s: %s", ontology_id, e)
+
+    asyncio.create_task(_run())
+    return {"status": "update_triggered", "ontology_id": ontology_id, "source": "webhook"}
+
+
 @app.post("/admin/ontology/{ontology_id}/disable")
 async def admin_disable_ontology(
     ontology_id: str,
@@ -1996,6 +2303,46 @@ async def admin_provision_ontology(
 
 
 # ---------------------------------------------------------------------------
+# API Key Management (Admin)
+# ---------------------------------------------------------------------------
+
+
+class APIKeyCreateRequest(BaseModel):
+    name: str
+    description: str = ""
+
+
+@app.post("/admin/api_keys")
+async def admin_create_api_key(
+    payload: APIKeyCreateRequest,
+    credentials: HTTPBasicCredentials = Depends(_require_admin),
+):
+    """Create a new API key."""
+    record = await create_api_key(redis_client, payload.name, payload.description)
+    return record
+
+
+@app.get("/admin/api_keys")
+async def admin_list_api_keys(
+    credentials: HTTPBasicCredentials = Depends(_require_admin),
+):
+    """List all API keys (keys are masked)."""
+    return await list_api_keys(redis_client)
+
+
+@app.delete("/admin/api_keys/{key}")
+async def admin_revoke_api_key(
+    key: str,
+    credentials: HTTPBasicCredentials = Depends(_require_admin),
+):
+    """Revoke an API key."""
+    ok = await revoke_api_key(redis_client, key)
+    if ok:
+        return {"status": "revoked"}
+    raise HTTPException(status_code=404, detail="API key not found")
+
+
+# ---------------------------------------------------------------------------
 # Update result callback (called by OntologyServer after hot-swap)
 # ---------------------------------------------------------------------------
 
@@ -2031,6 +2378,33 @@ async def update_result_callback(payload: UpdateResultPayload):
     entry["update_history"] = history[-10:]
     await _save_registry_entry(payload.ontology_id, entry)
     return {"status": "recorded"}
+
+
+# ---------------------------------------------------------------------------
+# SPA Frontend (catch-all — must be LAST)
+# ---------------------------------------------------------------------------
+
+_dist_dir = Path(__file__).parent / "static" / "dist"
+if _dist_dir.exists() and (_dist_dir / "index.html").exists():
+    # Serve built assets (JS, CSS, etc.)
+    app.mount("/assets", StaticFiles(directory=str(_dist_dir / "assets")), name="spa-assets")
+
+    @app.get("/{path:path}")
+    async def spa_catch_all(path: str):
+        """Serve the SPA index.html for all non-API routes (client-side routing)."""
+        # Serve static files from dist if they exist (favicon, etc.)
+        file_path = _dist_dir / path
+        if path and file_path.exists() and file_path.is_file():
+            return Response(
+                content=file_path.read_bytes(),
+                media_type="application/octet-stream",
+            )
+        # Otherwise return the SPA shell
+        return HTMLResponse((_dist_dir / "index.html").read_text())
+
+    logger.info("SPA frontend enabled from %s", _dist_dir)
+else:
+    logger.info("No SPA build found at %s — frontend not served", _dist_dir)
 
 
 if __name__ == "__main__":

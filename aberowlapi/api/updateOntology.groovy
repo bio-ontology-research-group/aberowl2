@@ -1,15 +1,16 @@
 /**
  * updateOntology.groovy
  *
- * Hot-swap endpoint: downloads a pre-staged OWL file (already at owlPath on the
- * shared volume) into a new RequestManager, then atomically replaces the current
- * manager and disposes the old one.
+ * Hot-swap endpoint: loads a pre-staged OWL file into the multi-ontology
+ * RequestManager, replacing the existing ontology if present.
  *
  * POST parameters (JSON body or query string):
- *   owlPath     - absolute path inside the container, must start with /data/
- *   secretKey   - must match ABEROWL_SECRET_KEY env var
- *   taskId      - optional, used to track status via updateStatus.groovy
- *   callbackUrl - optional, URL to POST the result to when finished
+ *   owlPath      - absolute path inside the container, must start with /data/
+ *   ontologyId   - identifier for the ontology to update/add
+ *   reasonerType - reasoner to use: elk (default), structural, hermit
+ *   secretKey    - must match ABEROWL_SECRET_KEY env var
+ *   taskId       - optional, used to track status via updateStatus.groovy
+ *   callbackUrl  - optional, URL to POST the result to when finished
  */
 
 import groovy.json.*
@@ -18,10 +19,12 @@ import src.RequestManager
 import java.util.concurrent.ConcurrentHashMap
 
 def params = Util.extractParams(request)
-def owlPath    = params.owlPath
-def secretKey  = params.secretKey
-def taskId     = params.taskId ?: UUID.randomUUID().toString()
-def callbackUrl = params.callbackUrl
+def owlPath      = params.owlPath
+def ontologyId   = params.ontologyId
+def reasonerType = params.reasonerType ?: "elk"
+def secretKey    = params.secretKey
+def taskId       = params.taskId ?: UUID.randomUUID().toString()
+def callbackUrl  = params.callbackUrl
 
 response.contentType = 'application/json'
 
@@ -44,6 +47,11 @@ if (!new File(owlPath).exists()) {
     println new JsonBuilder([status: 'error', message: "File not found: ${owlPath}"])
     return
 }
+if (!ontologyId) {
+    response.setStatus(400)
+    println new JsonBuilder([status: 'error', message: 'ontologyId parameter required'])
+    return
+}
 
 // ---- Task registry -------------------------------------------------------
 synchronized (application) {
@@ -54,10 +62,7 @@ synchronized (application) {
 def updateTasks = application.getAttribute("updateTasks")
 updateTasks[taskId] = [status: 'pending', started: new Date().toString()]
 
-// ---- Current ontology name -----------------------------------------------
-def currentManager = application.getAttribute("manager")
-def ontName = currentManager?.ont ?: "unknown"
-
+def manager = application.getAttribute("manager")
 def servletContext = application
 
 // ---- Background hot-swap -------------------------------------------------
@@ -65,20 +70,17 @@ Thread.start {
     def finalStatus = 'failed'
     def message = ''
     try {
-        def newManager = RequestManager.create(ontName, owlPath)
-        if (newManager != null) {
-            def oldManager = servletContext.getAttribute("manager")
-            // Swap AFTER create() is finished (create calls createReasoner)
-            servletContext.setAttribute("manager", newManager)
-            // Release reasoner resources from the old manager
-            try { oldManager?.disposeAll() } catch (Exception ex) {
-                println "WARNING: disposeAll on old manager failed: ${ex.getMessage()}"
-            }
-            finalStatus = 'success'
-            message = "Loaded ${newManager.getOntology()?.getClassesInSignature(true)?.size() ?: 0} classes from ${owlPath}"
-        } else {
-            message = "RequestManager.create returned null for ${owlPath}"
+        if (manager == null) {
+            manager = new RequestManager()
+            servletContext.setAttribute("manager", manager)
         }
+
+        // Reload the specific ontology (disposes old, loads new, classifies)
+        manager.reloadOntology(ontologyId, owlPath, reasonerType)
+
+        def classCount = manager.getOntology(ontologyId)?.getClassesInSignature(true)?.size() ?: 0
+        finalStatus = 'success'
+        message = "Loaded ${classCount} classes from ${owlPath} for ontology ${ontologyId} with ${reasonerType} reasoner"
     } catch (Exception e) {
         message = e.getMessage() ?: e.getClass().getName()
         e.printStackTrace()
@@ -90,10 +92,11 @@ Thread.start {
     if (callbackUrl) {
         try {
             def payload = new JsonBuilder([
-                ontology_id: ontName,
-                task_id:     taskId,
-                status:      finalStatus,
-                message:     message
+                ontology_id:  ontologyId,
+                task_id:      taskId,
+                status:       finalStatus,
+                message:      message,
+                reasoner_type: reasonerType
             ]).toString()
             def conn = new URL(callbackUrl).openConnection() as HttpURLConnection
             conn.setRequestMethod('POST')
@@ -109,4 +112,4 @@ Thread.start {
     }
 }
 
-println new JsonBuilder([status: 'accepted', taskId: taskId])
+println new JsonBuilder([status: 'accepted', taskId: taskId, ontologyId: ontologyId])

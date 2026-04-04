@@ -536,8 +536,6 @@ async def execute_update_pipeline(
     )
     registry_entry["update_history"] = history[-10:]
 
-    from central_server.app.main import redis_client as _rc  # noqa: avoid circular at top
-
     await redis_client.hset(
         "ontology_registry", ontology_id, json.dumps(registry_entry)
     )

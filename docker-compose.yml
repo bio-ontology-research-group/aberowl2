@@ -12,22 +12,37 @@ services:
       - CENTRAL_ES_URL=${CENTRAL_ES_URL}
       # elastic.groovy reads ELASTICSEARCH_URL; point it at the central instance
       - ELASTICSEARCH_URL=${CENTRAL_ES_URL}
-      # Per-ontology identity and auth
-      - ONTOLOGY_ID=${ONTOLOGY_ID}
+      # Per-ontology identity and auth (single-ontology mode)
+      - ONTOLOGY_ID=${ONTOLOGY_ID:-}
       - ABEROWL_SECRET_KEY=${ABEROWL_SECRET_KEY}
+      # Reasoner configuration
+      - REASONER_TYPE=${REASONER_TYPE:-elk}
+      # Container identity (multi-ontology mode)
+      - CONTAINER_ID=${CONTAINER_ID:-}
+      # Ontology path: file, directory, or JSON config
+      - ONTOLOGY_PATH=${ONTOLOGY_PATH:-}
     volumes:
-      # Mount only this ontology's subdirectory from the shared host path
-      - ${ONTOLOGIES_HOST_PATH}/${ONTOLOGY_ID}:/data
+      # Mount shared ontologies directory (multi-ontology mode)
+      # or a specific ontology's directory (single-ontology mode)
+      - ${ONTOLOGIES_HOST_PATH:-./data}:/data
       - ./aberowlapi:/app/aberowlapi
       # IndexElastic.groovy is called by triggerIndexing.groovy via subprocess
       - ./docker/scripts:/scripts
-    command: python3 /app/api_server.py /data/${ONTOLOGY_ID}_active.owl
+    # Multi-ontology mode: pass /data as directory
+    # Single-ontology mode: pass specific file
+    command: python3 /app/api_server.py ${ONTOLOGY_PATH:-/data/${ONTOLOGY_ID}_active.owl}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
       - default
       - aberowl-net
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: ${CONTAINER_MEMORY_LIMIT:-4g}
+        reservations:
+          memory: ${CONTAINER_MEMORY_RESERVATION:-1g}
 
   nginx:
     build:

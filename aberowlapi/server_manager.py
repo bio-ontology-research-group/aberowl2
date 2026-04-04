@@ -89,8 +89,10 @@ class OntologyServerManager:
                 secret_key = f.read().strip()
                 logging.info("Found existing secret key for registration.")
 
+        # Use ONTOLOGY_ID env var if set, otherwise derive from path
+        ontology_id = os.getenv('ONTOLOGY_ID') or os.path.splitext(os.path.basename(self.ontology))[0].replace('_active', '')
         payload = {
-            'ontology': os.path.basename(self.ontology),
+            'ontology': ontology_id,
             'url': public_url,
             'secret_key': secret_key,
         }

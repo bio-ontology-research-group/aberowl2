@@ -1,0 +1,40 @@
+# Multi-ontology worker container template
+# Each worker hosts 20-50 ontologies and is assigned a unique WORKER_ID.
+#
+# Usage:
+#   WORKER_ID=1 WORKER_PORT=8081 docker compose -f deploy/docker-compose.worker.yml up -d
+#   WORKER_ID=2 WORKER_PORT=8082 docker compose -f deploy/docker-compose.worker.yml up -d
+
+services:
+  ontology-api:
+    build:
+      context: ..
+      dockerfile: Dockerfile.api
+    container_name: aberowl-worker-${WORKER_ID:-1}
+    restart: unless-stopped
+    environment:
+      - CONTAINER_ID=worker-${WORKER_ID:-1}
+      - ABEROWL_SECRET_KEY=${ABEROWL_SECRET_KEY}
+      - CENTRAL_VIRTUOSO_URL=http://virtuoso:8890
+      - CENTRAL_ES_URL=http://elasticsearch:9200
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - ONTOLOGY_PATH=/data
+      - JAVA_OPTS=-Xmx6g -Xms1g
+    volumes:
+      - ${ONTOLOGIES_PATH:-/data/aberowl/ontologies}:/data:ro
+      - ../aberowlapi:/app/aberowlapi
+      - ../docker/scripts:/scripts
+    ports:
+      - "${WORKER_PORT:-8081}:8080"
+    networks:
+      - aberowl-net
+    deploy:
+      resources:
+        limits:
+          memory: ${WORKER_MEMORY:-8g}
+        reservations:
+          memory: 2g
+
+networks:
+  aberowl-net:
+    external: true

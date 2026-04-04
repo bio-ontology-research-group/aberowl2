@@ -230,6 +230,130 @@ class CentralESManager:
             logger.error("ES upsert ontology record error: %s", e)
             return False
 
+    async def search_classes(
+        self,
+        term: str,
+        ontology: Optional[str] = None,
+        prefix: bool = False,
+        size: int = 100,
+    ) -> list:
+        """
+        Search for ontology classes across all (or specific) ontology indices
+        using a boosted dis_max query matching the original AberOWL search logic.
+
+        Field boost values (from original AberOWL):
+          oboid: 10000, ontology: 1000, label: 100, synonym: 75,
+          subclass/equivalent: 25, definition: 3, catch-all: 0.01
+        """
+        if ontology:
+            index_pattern = self._alias_name(ontology.lower())
+        else:
+            index_pattern = "aberowl_*_classes"
+
+        if prefix:
+            # Prefix search mode (autocomplete)
+            query_body = {
+                "query": {
+                    "bool": {
+                        "should": [
+                            {"prefix": {"label": {"value": term.lower(), "boost": 100}}},
+                            {"prefix": {"oboid": {"value": term.upper(), "boost": 10000}}},
+                            {"match_phrase_prefix": {"synonyms": {"query": term, "boost": 75}}},
+                        ],
+                        "minimum_should_match": 1,
+                    }
+                },
+                "_source": {"excludes": ["embedding_vector"]},
+                "size": size,
+            }
+        else:
+            # Full search with boosted dis_max
+            queries = [
+                {"term": {"oboid": {"value": term.upper(), "boost": 10000}}},
+                {"match": {"label": {"query": term, "boost": 100}}},
+                {"match": {"synonyms": {"query": term, "boost": 75}}},
+                {"match": {"definition": {"query": term, "boost": 3}}},
+            ]
+
+            # Also try wildcard on label for partial matches
+            if len(term) >= 3:
+                queries.append(
+                    {"wildcard": {"label": {"value": f"*{term.lower()}*", "boost": 10}}}
+                )
+
+            query_body = {
+                "query": {
+                    "dis_max": {
+                        "queries": queries,
+                        "tie_breaker": 0.1,
+                    }
+                },
+                "_source": {"excludes": ["embedding_vector"]},
+                "size": size,
+            }
+
+        # Add ontology filter if specified
+        if ontology and not prefix:
+            query_body["query"] = {
+                "bool": {
+                    "must": query_body["query"],
+                    "filter": {"term": {"ontology": ontology.lower()}},
+                }
+            }
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.es_url}/{index_pattern}/_search",
+                    json=query_body,
+                    timeout=aiohttp.ClientTimeout(total=30),
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json(content_type=None)
+                        hits = data.get("hits", {}).get("hits", [])
+                        return [hit.get("_source") for hit in hits if hit.get("_source")]
+                    elif resp.status == 404:
+                        # Index doesn't exist yet
+                        return []
+                    else:
+                        body_text = await resp.text()
+                        logger.error("ES search failed (%s): %s", resp.status, body_text[:300])
+                        return []
+        except Exception as e:
+            logger.error("ES search error: %s", e)
+            return []
+
+    async def search_ontologies(self, term: str, size: int = 50) -> list:
+        """Search the central ontologies index by name or description."""
+        query_body = {
+            "query": {
+                "dis_max": {
+                    "queries": [
+                        {"match": {"name": {"query": term, "boost": 10}}},
+                        {"match": {"ontology": {"query": term, "boost": 10}}},
+                        {"match": {"description": {"query": term, "boost": 1}}},
+                    ],
+                    "tie_breaker": 0.1,
+                }
+            },
+            "size": size,
+        }
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.es_url}/{ONTOLOGIES_INDEX}/_search",
+                    json=query_body,
+                    timeout=aiohttp.ClientTimeout(total=15),
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json(content_type=None)
+                        hits = data.get("hits", {}).get("hits", [])
+                        return [hit.get("_source") for hit in hits if hit.get("_source")]
+                    return []
+        except Exception as e:
+            logger.error("ES ontology search error: %s", e)
+            return []
+
     async def health_check(self) -> bool:
         """Return True if Elasticsearch is reachable and healthy."""
         data = await self._get("/_cluster/health")

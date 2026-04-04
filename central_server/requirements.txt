@@ -7,3 +7,5 @@ redis
 websockets
 pyyaml
 aiofiles
+mcp
+slowapi
