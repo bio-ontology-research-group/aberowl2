@@ -8,6 +8,8 @@ export default function Home() {
   const [stats, setStats] = useState<StatsAggregate | null>(null)
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState('')
+  const [sortCol, setSortCol] = useState<'id' | 'title' | 'status'>('id')
+  const [sortAsc, setSortAsc] = useState(true)
   const nav = useNavigate()
 
   useEffect(() => {
@@ -20,11 +22,23 @@ export default function Home() {
     if (q.trim()) nav(`/search?q=${encodeURIComponent(q.trim())}`)
   }
 
-  const filtered = filter
+  function toggleSort(col: 'id' | 'title' | 'status') {
+    if (sortCol === col) setSortAsc(!sortAsc)
+    else { setSortCol(col); setSortAsc(true) }
+  }
+
+  const filtered = (filter
     ? ontologies.filter(o =>
         o.id.toLowerCase().includes(filter.toLowerCase()) ||
         (o.title || '').toLowerCase().includes(filter.toLowerCase()))
     : ontologies
+  ).slice().sort((a, b) => {
+    let cmp = 0
+    if (sortCol === 'id') cmp = a.id.localeCompare(b.id)
+    else if (sortCol === 'title') cmp = (a.title || '').localeCompare(b.title || '')
+    else cmp = a.status.localeCompare(b.status)
+    return sortAsc ? cmp : -cmp
+  })
 
   const online = ontologies.filter(o => o.status === 'online')
 
@@ -87,11 +101,15 @@ export default function Home() {
       </div>
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left text-xs text-gray-500 uppercase tracking-wider">
+          <thead className="bg-gray-50 text-left text-xs text-gray-500 uppercase tracking-wider select-none">
             <tr>
-              <th className="px-4 py-3">ID</th>
-              <th className="px-4 py-3">Name</th>
-              <th className="px-4 py-3 text-center w-20">Status</th>
+              {([['id', 'ID', ''], ['title', 'Name', ''], ['status', 'Status', 'text-center w-20']] as const).map(([col, label, cls]) => (
+                <th key={col}
+                  className={`px-4 py-3 cursor-pointer hover:text-gray-700 transition-colors ${cls}`}
+                  onClick={() => toggleSort(col)}>
+                  {label} {sortCol === col ? (sortAsc ? '▲' : '▼') : ''}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
