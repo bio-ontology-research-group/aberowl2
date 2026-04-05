@@ -329,14 +329,25 @@ async def fetch_and_update_server_metadata(server: Dict[str, Any]):
                     stats = await response.json()
                     server.update(stats)
                     server["status"] = "online"
-                    logger.info(f"Successfully updated metadata for {ontology} (title: {stats.get('title', '')})")
+                    # If the worker didn't provide a title, use OBO Foundry fallback
+                    if not server.get("title"):
+                        fallback = _obo_titles.get(ontology.lower(), "")
+                        if fallback:
+                            server["title"] = fallback
+                    logger.info(f"Successfully updated metadata for {ontology} (title: {server.get('title', '')})")
                 else:
                     logger.warning(f"Failed to fetch metadata for {ontology}. Status: {response.status}")
                     server["status"] = "offline"
     except Exception as e:
         logger.error(f"Error fetching metadata for {ontology}: {e}")
         server["status"] = "offline"
-    
+
+    # Always apply OBO Foundry title fallback if title is missing
+    if not server.get("title"):
+        fallback = _obo_titles.get(ontology.lower(), "")
+        if fallback:
+            server["title"] = fallback
+
     # Update the server data in Redis
     await redis_client.hset("registered_servers", ontology, json.dumps(server))
     await _write_servers_to_file()
@@ -367,6 +378,45 @@ async def start_mcp_servers():
             logger.info(f"MCP server {script_name} started (PID: {proc.pid}, port: {port})")
         except Exception as e:
             logger.error(f"Failed to start MCP server {script_name}: {e}")
+
+
+# Cache of ontology titles from OBO Foundry + BioPortal known names
+_obo_titles: Dict[str, str] = {}
+
+OBO_REGISTRY_URL = "https://raw.githubusercontent.com/OBOFoundry/OBOFoundry.github.io/master/registry/ontologies.jsonld"
+
+# Fallback titles for well-known ontologies not in OBO Foundry
+_KNOWN_TITLES: Dict[str, str] = {
+    "efo": "Experimental Factor Ontology",
+    "radlex": "Radiology Lexicon",
+    "mesh": "Medical Subject Headings",
+    "ncit": "NCI Thesaurus",
+    "fma": "Foundational Model of Anatomy",
+    "bao": "BioAssay Ontology",
+    "sio": "Semanticscience Integrated Ontology",
+    "nifstd": "NIF Standard Ontology",
+    "ddanat": "Dictyostelium Discoideum Anatomy",
+}
+
+
+async def _load_obo_foundry_titles():
+    """Fetch ontology titles from OBO Foundry registry as fallback for ontologies
+    that don't have dc:title/rdfs:label in their OWL file."""
+    global _obo_titles
+    _obo_titles.update(_KNOWN_TITLES)
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(OBO_REGISTRY_URL, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                if resp.status == 200:
+                    data = await resp.json(content_type=None)
+                    for o in data.get("ontologies", []):
+                        oid = o.get("id", "")
+                        title = o.get("title", "")
+                        if oid and title:
+                            _obo_titles[oid.lower()] = title
+                    logger.info(f"Loaded {len(_obo_titles)} ontology titles from OBO Foundry registry")
+    except Exception as e:
+        logger.warning(f"Could not fetch OBO Foundry titles: {e}")
 
 
 async def _fetch_and_update_all_servers():
@@ -413,6 +463,9 @@ async def lifespan(app: FastAPI):
 
     # Load servers from file before fetching metadata
     await _load_servers_from_file()
+
+    # Load OBO Foundry titles for fallback
+    await _load_obo_foundry_titles()
 
     # Perform initial metadata fetch on startup
     asyncio.create_task(_fetch_and_update_all_servers())
