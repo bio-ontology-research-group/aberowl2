@@ -4,6 +4,16 @@ import { sql } from '@codemirror/lang-sql'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { runSparql } from '../api/client'
 
+const KNOWN_ENDPOINTS = [
+  { label: 'AberOWL (Virtuoso)', value: '' },
+  { label: 'UniProt', value: 'https://sparql.uniprot.org/sparql' },
+  { label: 'Wikidata', value: 'https://query.wikidata.org/sparql' },
+  { label: 'EBI OLS / Ontobee', value: 'https://sparql.hegroup.org/sparql' },
+  { label: 'DBpedia', value: 'https://dbpedia.org/sparql' },
+  { label: 'Linked Life Data', value: 'http://linkedlifedata.com/sparql' },
+  { label: 'Bio2RDF', value: 'https://bio2rdf.org/sparql' },
+]
+
 const EXAMPLE_VALUES = `SELECT ?class ?label WHERE {
   VALUES ?class { OWL subeq GO { 'part of' some 'cell' } }
   ?class <http://www.w3.org/2000/01/rdf-schema#label> ?label .
@@ -14,6 +24,16 @@ const EXAMPLE_FILTER = `SELECT ?class ?label WHERE {
   FILTER OWL(?class, subeq, GO, "'part of' some 'cell'")
 }`
 
+const EXAMPLE_UNIPROT = `# Find UniProt proteins classified under GO classes
+# that are subclasses of 'cell death' in GO
+SELECT ?protein ?proteinLabel ?goClass ?goLabel WHERE {
+  VALUES ?goClass { OWL subeq GO { 'cell death' } }
+  ?protein a <http://purl.uniprot.org/core/Protein> ;
+           <http://purl.uniprot.org/core/classifiedWith> ?goClass ;
+           <http://purl.uniprot.org/core/mnemonic> ?proteinLabel .
+  ?goClass <http://www.w3.org/2000/01/rdf-schema#label> ?goLabel .
+} LIMIT 50`
+
 const EXAMPLE_PLAIN = `SELECT ?s ?p ?o WHERE {
   GRAPH <http://aberowl.net/ontology/go> {
     ?s ?p ?o .
@@ -22,11 +42,15 @@ const EXAMPLE_PLAIN = `SELECT ?s ?p ?o WHERE {
 
 export default function SparqlPage() {
   const [query, setQuery] = useState(EXAMPLE_VALUES)
+  const [endpoint, setEndpoint] = useState('')
+  const [customEndpoint, setCustomEndpoint] = useState('')
   const [results, setResults] = useState<Record<string, unknown> | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [expansions, setExpansions] = useState<unknown[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  const effectiveEndpoint = endpoint === '__custom__' ? customEndpoint : endpoint
 
   async function run() {
     setLoading(true)
@@ -35,7 +59,7 @@ export default function SparqlPage() {
     setExpanded(null)
     setExpansions(null)
     try {
-      const data = await runSparql(query) as Record<string, unknown>
+      const data = await runSparql(query, effectiveEndpoint || undefined) as Record<string, unknown>
       if ((data.results as Record<string, unknown>)?.error) {
         setError(String((data.results as Record<string, unknown>).error))
       } else {
@@ -51,40 +75,86 @@ export default function SparqlPage() {
 
   const bindings = (results as Record<string, Record<string, unknown>>)?.results as Record<string, unknown>
   const vars = ((results as Record<string, Record<string, unknown>>)?.head as Record<string, string[]>)?.vars || []
-  const rows = (bindings?.bindings || []) as Record<string, { value: string }>[]
+  const rows = (bindings?.bindings || []) as Record<string, { type: string; value: string }>[]
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6">
       <h1 className="text-2xl font-bold text-gray-900 mb-1">SPARQL + OWL Expansion</h1>
       <p className="text-sm text-gray-500 mb-4">
-        Execute SPARQL queries with embedded OWL Description Logic expansion
+        Execute SPARQL queries with embedded OWL Description Logic expansion against any endpoint
       </p>
 
+      {/* Endpoint selector */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4 shadow-sm">
+        <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">
+          SPARQL Endpoint
+        </label>
+        <div className="flex gap-2 flex-wrap">
+          {KNOWN_ENDPOINTS.map(ep => (
+            <button
+              key={ep.value}
+              onClick={() => { setEndpoint(ep.value); setCustomEndpoint('') }}
+              className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
+                endpoint === ep.value
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-400 hover:text-indigo-600'
+              }`}
+            >
+              {ep.label}
+            </button>
+          ))}
+          <button
+            onClick={() => setEndpoint('__custom__')}
+            className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
+              endpoint === '__custom__'
+                ? 'bg-indigo-600 text-white border-indigo-600'
+                : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-400 hover:text-indigo-600'
+            }`}
+          >
+            Custom...
+          </button>
+        </div>
+        {endpoint === '__custom__' && (
+          <input
+            value={customEndpoint}
+            onChange={e => setCustomEndpoint(e.target.value)}
+            placeholder="https://example.org/sparql"
+            className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+          />
+        )}
+        {effectiveEndpoint && (
+          <p className="mt-2 text-xs text-gray-400 font-mono truncate">
+            Endpoint: {effectiveEndpoint}
+          </p>
+        )}
+      </div>
+
       {/* Examples */}
-      <div className="flex gap-2 mb-3 text-xs">
+      <div className="flex gap-2 mb-3 text-xs flex-wrap">
         <span className="text-gray-500">Examples:</span>
-        <button onClick={() => setQuery(EXAMPLE_VALUES)} className="text-indigo-600 hover:underline">VALUES pattern</button>
-        <button onClick={() => setQuery(EXAMPLE_FILTER)} className="text-indigo-600 hover:underline">FILTER pattern</button>
-        <button onClick={() => setQuery(EXAMPLE_PLAIN)} className="text-indigo-600 hover:underline">Plain SPARQL</button>
+        <button onClick={() => { setQuery(EXAMPLE_VALUES); setEndpoint('') }} className="text-indigo-600 hover:underline">VALUES pattern</button>
+        <button onClick={() => { setQuery(EXAMPLE_FILTER); setEndpoint('') }} className="text-indigo-600 hover:underline">FILTER pattern</button>
+        <button onClick={() => { setQuery(EXAMPLE_UNIPROT); setEndpoint('https://sparql.uniprot.org/sparql') }} className="text-indigo-600 hover:underline">UniProt + OWL</button>
+        <button onClick={() => { setQuery(EXAMPLE_PLAIN); setEndpoint('') }} className="text-indigo-600 hover:underline">Plain SPARQL</button>
       </div>
 
       {/* Editor */}
-      <div className="border border-gray-300 rounded-lg overflow-hidden mb-3">
+      <div className="border border-gray-300 rounded-xl overflow-hidden mb-3 shadow-sm">
         <CodeMirror
           value={query}
           onChange={setQuery}
-          height="240px"
+          height="260px"
           extensions={[sql()]}
           theme={oneDark}
         />
       </div>
 
       <button onClick={run} disabled={loading}
-        className="px-5 py-2 bg-indigo-600 text-white rounded text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 mb-4">
+        className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 mb-4 transition-colors">
         {loading ? 'Executing...' : 'Execute Query'}
       </button>
 
-      {error && <div className="text-red-500 text-sm mb-4 bg-red-50 p-3 rounded">{error}</div>}
+      {error && <div className="text-red-600 text-sm mb-4 bg-red-50 p-3 rounded-lg border border-red-200">{error}</div>}
 
       {/* Expansion info */}
       {expansions && expansions.length > 0 && (
@@ -103,13 +173,13 @@ export default function SparqlPage() {
       {expanded && (
         <details className="mb-4">
           <summary className="text-sm text-gray-500 cursor-pointer hover:text-gray-700">Show expanded query</summary>
-          <pre className="mt-2 bg-gray-900 text-gray-100 p-3 rounded text-xs overflow-x-auto">{expanded}</pre>
+          <pre className="mt-2 bg-gray-900 text-gray-100 p-3 rounded-lg text-xs overflow-x-auto">{expanded}</pre>
         </details>
       )}
 
       {/* Results table */}
       {rows.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
+        <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto shadow-sm">
           <div className="text-xs text-gray-500 p-2 border-b">{rows.length} results</div>
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
@@ -121,7 +191,7 @@ export default function SparqlPage() {
               {rows.slice(0, 500).map((row, i) => (
                 <tr key={i} className="hover:bg-gray-50">
                   {vars.map(v => (
-                    <td key={v} className="px-3 py-1.5 text-gray-700 truncate max-w-xs">
+                    <td key={v} className="px-3 py-1.5 text-gray-700 truncate max-w-xs font-mono text-xs">
                       {row[v]?.value || ''}
                     </td>
                   ))}
@@ -140,19 +210,19 @@ export default function SparqlPage() {
       )}
 
       {/* Syntax reference */}
-      <div className="mt-8 bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-600">
+      <div className="mt-8 bg-gray-50 border border-gray-200 rounded-xl p-4 text-sm text-gray-600">
         <h3 className="font-semibold text-gray-800 mb-2">OWL Expansion Syntax Reference</h3>
         <div className="grid md:grid-cols-2 gap-4">
           <div>
             <h4 className="font-medium text-gray-700">VALUES pattern</h4>
-            <code className="text-xs block mt-1 bg-white p-2 rounded border">
+            <code className="text-xs block mt-1 bg-white p-2 rounded border font-mono">
               VALUES ?var {'{'} OWL type ONTOLOGY {'{'} dl_query {'}'} {'}'}
             </code>
             <p className="text-xs mt-1">Binds ?var to the IRIs returned by the DL query</p>
           </div>
           <div>
             <h4 className="font-medium text-gray-700">FILTER pattern</h4>
-            <code className="text-xs block mt-1 bg-white p-2 rounded border">
+            <code className="text-xs block mt-1 bg-white p-2 rounded border font-mono">
               FILTER OWL(?var, type, ONTOLOGY, "dl_query")
             </code>
             <p className="text-xs mt-1">Restricts ?var to IRIs matching the DL query</p>
@@ -160,7 +230,9 @@ export default function SparqlPage() {
         </div>
         <p className="text-xs mt-3">
           <strong>Types:</strong> subclass, subeq, superclass, supeq, equivalent<br />
-          <strong>DL query:</strong> Manchester OWL Syntax (e.g. <code>'part of' some 'cell'</code>)
+          <strong>DL query:</strong> Manchester OWL Syntax (e.g. <code className="font-mono">'part of' some 'cell'</code>)<br />
+          <strong>Endpoint:</strong> OWL expansion works with <em>any</em> SPARQL endpoint — the DL query
+          is resolved by AberOWL, then the expanded SPARQL (with concrete IRIs) is sent to the chosen endpoint.
         </p>
       </div>
     </div>
