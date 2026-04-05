@@ -43,7 +43,19 @@ export default function OntologyPage() {
   useEffect(() => {
     if (!id || tab !== 'browse' || rootClasses !== null) return
     dlQuery('<http://www.w3.org/2002/07/owl#Thing>', 'subclass', id, true)
-      .then(d => setRootClasses(d.result || []))
+      .then(d => {
+        const results = d.result || []
+        // Sort: non-deprecated first, deprecated last, alphabetical within each group
+        results.sort((a: ClassResult, b: ClassResult) => {
+          const aObs = a.deprecated || /^obsolete /i.test(Array.isArray(a.label) ? a.label[0] || '' : a.label || '') ? 1 : 0
+          const bObs = b.deprecated || /^obsolete /i.test(Array.isArray(b.label) ? b.label[0] || '' : b.label || '') ? 1 : 0
+          if (aObs !== bObs) return aObs - bObs
+          const aL = (Array.isArray(a.label) ? a.label[0] : a.label) || ''
+          const bL = (Array.isArray(b.label) ? b.label[0] : b.label) || ''
+          return aL.localeCompare(bL)
+        })
+        setRootClasses(results)
+      })
       .catch(() => setRootClasses([]))
   }, [id, tab, rootClasses])
 
