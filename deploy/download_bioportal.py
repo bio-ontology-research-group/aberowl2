@@ -13,11 +13,16 @@ OBO Foundry ontologies are NEVER overwritten: anything whose lowercased
 acronym is in the OBO Foundry registry is skipped entirely, so the OBO
 versions (fetched by download_ontologies.py) remain authoritative. As a
 second layer of protection, any file already on disk larger than the
-min-size threshold is also skipped.
+--min-size threshold is also skipped. Freshly downloaded files smaller
+than --min-size are treated as failures and deleted — this rejects the
+many BP entries that return tiny HTML error pages or metadata-only
+stubs (~380 such files were found on a full catalog pull at the 100KB
+threshold; ~20KB is a reasonable default to catch junk without trimming
+legitimate small ontologies).
 
 Usage:
     uv run deploy/download_bioportal.py /data/aberowl/ontologies
-    uv run deploy/download_bioportal.py /data/aberowl/ontologies --workers 8 --log /tmp/bp.log
+    uv run deploy/download_bioportal.py /data/aberowl/ontologies --workers 8 --log /tmp/bp.log --min-size 50000
 """
 
 import argparse
@@ -51,7 +56,7 @@ def fetch_obo_foundry_ids() -> set[str]:
     return {o["id"].lower() for o in data.get("ontologies", []) if o.get("id")}
 
 
-def download_one(acronym: str, dest_dir: Path, min_size: int = 1000) -> dict:
+def download_one(acronym: str, dest_dir: Path, min_size: int) -> dict:
     ont_id = acronym.lower()
     ont_dir = dest_dir / ont_id
     ont_dir.mkdir(parents=True, exist_ok=True)
@@ -62,9 +67,13 @@ def download_one(acronym: str, dest_dir: Path, min_size: int = 1000) -> dict:
 
     url = f"{API_BASE}/ontologies/{acronym}/download?apikey={API_KEY}"
     try:
+        # --compressed: request and transparently decompress Content-Encoding:
+        # gzip responses (BioPortal returns several large ontologies this way;
+        # without --compressed curl writes raw gzip bytes to disk and downstream
+        # OWLAPI parsing fails with "Content is not allowed in prolog").
         result = subprocess.run(
             [
-                "curl", "-fSL",
+                "curl", "-fSL", "--compressed",
                 "--max-time", "1800",
                 "--retry", "2",
                 "-H", f"Authorization: apikey token={API_KEY}",
@@ -95,6 +104,13 @@ def main():
     ap.add_argument("--log", type=Path, default=None, help="append-only progress log")
     ap.add_argument("--limit", type=int, default=0, help="limit number of acronyms (for testing)")
     ap.add_argument("--results-json", type=Path, default=None, help="write final results JSON")
+    ap.add_argument(
+        "--min-size", type=int, default=20_000,
+        help="Minimum acceptable OWL file size in bytes. Files smaller than this are "
+             "treated as failures and discarded. Default 20000 (20KB). Use a smaller "
+             "value like 1000 to keep stub ontologies, or a larger one to aggressively "
+             "filter out broken/metadata-only uploads.",
+    )
     args = ap.parse_args()
 
     dest: Path = args.dest
@@ -135,7 +151,7 @@ def main():
     t0 = time.time()
 
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
-        fut_to_acr = {ex.submit(download_one, a, dest): a for a in acronyms}
+        fut_to_acr = {ex.submit(download_one, a, dest, args.min_size): a for a in acronyms}
         for fut in as_completed(fut_to_acr):
             r = fut.result()
             done += 1
