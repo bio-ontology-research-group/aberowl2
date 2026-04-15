@@ -68,8 +68,11 @@ def container_running(name: str) -> bool:
 def build_docker_cmd(worker: dict, env: dict, port: int) -> list[str]:
     n = worker["number"]
     ram_gb = worker["ram_gb"]
-    # Leave ~2GB headroom for JVM overhead & page cache
-    xmx = max(2, ram_gb - 2)
+    # Leave ~4GB headroom (or 20%, whichever is larger) for JVM non-heap
+    # overhead: metaspace, JIT caches, direct buffers, thread stacks, and
+    # kernel page cache. Observed: -Xmx22g in a 24GB container caused
+    # SIGKILL (exit -9) during ncbitaxon classification.
+    xmx = max(2, ram_gb - max(4, ram_gb // 5))
     name = f"aberowl-worker-{n}"
     cfg_path_in_container = f"/data/worker_{n}_config.json"
 
