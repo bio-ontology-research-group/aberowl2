@@ -67,9 +67,13 @@ def download_one(acronym: str, dest_dir: Path, min_size: int) -> dict:
 
     url = f"{API_BASE}/ontologies/{acronym}/download?apikey={API_KEY}"
     try:
+        # --compressed: request and transparently decompress Content-Encoding:
+        # gzip responses (BioPortal returns several large ontologies this way;
+        # without --compressed curl writes raw gzip bytes to disk and downstream
+        # OWLAPI parsing fails with "Content is not allowed in prolog").
         result = subprocess.run(
             [
-                "curl", "-fSL",
+                "curl", "-fSL", "--compressed",
                 "--max-time", "1800",
                 "--retry", "2",
                 "-H", f"Authorization: apikey token={API_KEY}",
