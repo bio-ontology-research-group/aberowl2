@@ -15,7 +15,7 @@ from pathlib import Path
 from urllib.request import urlopen, Request
 from urllib.error import HTTPError
 
-API_KEY = "7LWB1EK24e8Pj7XorQdG9FnsxQA3H41VDKIxN1BeEv5n"
+API_KEY = "24e0413e-54e0-11e0-9d7b-005056aa3316"
 API_BASE = "https://data.bioontology.org"
 
 # BioPortal ontologies to download (from beta_ontologies.json, minus restricted ones)
