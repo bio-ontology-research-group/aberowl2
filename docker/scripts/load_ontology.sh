@@ -35,9 +35,9 @@ VIRTUOSO_ONTOLOGY_PATH="$VIRTUOSO_ONTOLOGIES_DIR/$STANDARD_ONTOLOGY_NAME"
 
 # Check if ONTOLOGY_FILE is set (should be passed from docker-compose env)
 if [ -z "$ONTOLOGY_FILE" ]; then
-    echo "Error: ONTOLOGY_FILE environment variable is not set!" >&2
-    echo "This should be set via the docker compose environment." >&2
-    exit 1
+    echo "Warning: ONTOLOGY_FILE environment variable is not set. Skipping automated ontology loading." >&2
+    echo "The container will remain running for manual interaction." >&2
+    exit 0
 fi
 
 # Check the format (should be like /data/...)

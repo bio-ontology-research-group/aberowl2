@@ -18,10 +18,6 @@ RUN apt-get update && \
     # Clean default root grapes cache (just in case) - should now have permission
     # rm -rf /root/.groovy/grapes
 
-# Copy the application files FIRST, so we can use OntologyServer.groovy for grabs
-COPY aberowlapi/ /app/aberowlapi/
-COPY docker/scripts/api_server.py /app/api_server.py
-
 # Pre-resolve Grapes dependencies during build using the base image's Groovy
 # This will download the JARs into the image layer's Grapes cache
 # Use temporary directory to avoid polluting /app
@@ -55,6 +51,10 @@ RUN mkdir /tmp/grapes_resolve && cd /tmp/grapes_resolve && \
     cd / && rm -rf /tmp/grapes_resolve && \
     # Verify grapes cache exists (optional)
     echo "Checking for Grapes cache..." && ls -ld /root/.groovy/grapes || echo "Grapes cache not found at /root/.groovy/grapes (might be elsewhere or empty)"
+
+# Copy the application files AFTER dependencies are resolved to preserve cache
+COPY aberowlapi/ /app/aberowlapi/
+COPY docker/scripts/api_server.py /app/api_server.py
 
 
 # Expose the API port

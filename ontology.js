@@ -19,11 +19,16 @@ Alpine.data('ontologyApp', () => ({
     submission: {
       description: '',
       version: '',
+      version_iri: '',
       date_released: '',
       home_page: '',
       documentation: '',
       publication: '',
+      creators: [],
       has_ontology_language: 'OWL',
+      license: '',
+      default_namespace: '',
+      obo_format_version: '',
       nb_classes: 'N/A',
       nb_properties: 'N/A',
       nb_object_properties: 'N/A',
@@ -36,7 +41,10 @@ Alpine.data('ontologyApp', () => ({
       dl_expressivity: 'N/A',
       axiom_count: 'N/A',
       logical_axiom_count: 'N/A',
-      declaration_axiom_count: 'N/A'
+      declaration_axiom_count: 'N/A',
+      tbox_axiom_count: 'N/A',
+      abox_axiom_count: 'N/A',
+      rbox_axiom_count: 'N/A'
     }
   },
   classesMap: new Map(),
@@ -60,9 +68,13 @@ Alpine.data('ontologyApp', () => ({
   llmQuery: '',
   detectedParams: null,
   isLoading: false,
-  endpoint: '/virtuoso/',
+  endpoint: '',
+  exampleSuperclassLabel: null,
+  exampleSubclassExpression: null,
+  exampleSubclassExpressionText: null,
     
   init() {
+    this.endpoint = window.location.origin + '/virtuoso/';
     
     // Fetch the ontology data
     this.fetchOntologyData();
@@ -85,7 +97,7 @@ Alpine.data('ontologyApp', () => ({
     const isCollapsed = node.collapsed || false;
     const hasChildren = node.children && node.children.length > 0;
     let html = `
-      <li class="${isActive ? 'active' : ''}"> 
+      <li class="${isActive ? 'active' : ''}" style="white-space: nowrap;"> 
         <span @click.prevent="toggleCollapsed('${node.owlClass}')">
             <i class="glyphicon ${isCollapsed ? 'glyphicon-plus' : 'glyphicon-minus'}"></i>
         </span>
@@ -108,7 +120,7 @@ Alpine.data('ontologyApp', () => ({
     const isCollapsed = node.collapsed || false;
     const hasChildren = node.children && node.children.length > 0;
     let html = `
-      <li class="${isActive ? 'active' : ''}"> 
+      <li class="${isActive ? 'active' : ''}" style="white-space: nowrap;"> 
         <span @click.prevent="toggleProperty('${node.owlClass}')">
             <i class="glyphicon ${isCollapsed ? 'glyphicon-plus' : 'glyphicon-minus'}"></i>
         </span>
@@ -167,79 +179,21 @@ Alpine.data('ontologyApp', () => ({
   fetchOntologyData() {
     this.isLoading = true;
 
-    // Fetch ontology metadata
-    const sparqlQuery = `
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX dc: <http://purl.org/dc/elements/1.1/>
-        PREFIX dcterms: <http://purl.org/dc/terms/>
-        PREFIX vann: <http://purl.org/vocab/vann/>
-        SELECT ?p ?o
-        WHERE {
-          ?s a owl:Ontology .
-          ?s ?p ?o .
-          FILTER(isLiteral(?o))
-        }
-    `;
-    const sparqlUrl = `/api/api/runSparqlQuery.groovy?query=${encodeURIComponent(sparqlQuery)}`;
-    fetch(sparqlUrl, { headers: { 'Accept': 'application/sparql-results+json' } })
-        .then(response => response.json())
-        .then(data => {
-            const metadata = {};
-            
-            // Check if data has the expected structure with bindings
-            if (data && data.results && data.results.bindings) {
-                data.results.bindings.forEach(binding => {
-                    const prop = binding.p.value.split('#').pop().split('/').pop();
-                    const value = binding.o.value;
-                    if (!metadata[prop]) {
-                        metadata[prop] = [];
-                    }
-                    metadata[prop].push(value);
-                });
-            } else {
-                console.warn('SPARQL query response missing expected bindings structure:', data);
-            }
-
-            const first = (arr) => arr && arr.length > 0 ? arr[0] : undefined;
-
-            this.ontology.name = first(metadata.title) || 'Ontology';
-            this.ontology.acronym = first(metadata.preferredNamespacePrefix) || '';
-            this.ontology.submission.description = first(metadata.description) || first(metadata.comment) || '';
-            this.ontology.submission.version = first(metadata.versionInfo) || '';
-            this.ontology.submission.date_released = first(metadata.date) || '';
-            this.ontology.submission.home_page = first(metadata.homepage) || '';
-        })
-        .catch(error => {
-            console.error('Error fetching ontology metadata:', error);
-        });
-
     // Fetch ontology statistics from the new endpoint
-    fetch('/api/api/getStatistics.groovy')
-        .then(response => {
-            // Check if the response is OK and has the correct content type
-            if (!response.ok) {
-                throw new Error(`HTTP error! Status: ${response.status}`);
-            }
-            
-            // Check content type to ensure we're getting JSON
-            const contentType = response.headers.get('content-type');
-            if (!contentType || !contentType.includes('application/json')) {
-                throw new Error(`Expected JSON but got ${contentType || 'unknown content type'}`);
-            }
-            
-            return response.text().then(text => {
-                try {
-                    // Try to parse the text as JSON
-                    return JSON.parse(text);
-                } catch (e) {
-                    // If parsing fails, log the first part of the response for debugging
-                    console.error('Failed to parse JSON:', text.substring(0, 100) + '...');
-                    throw new Error('Invalid JSON response');
-                }
-            });
-        })
+    fetch('/api/getStatistics.groovy')
+        .then(response => response.json())
         .then(stats => {
+            this.ontology.name = stats.title || 'Ontology';
+            this.ontology.submission.description = stats.description || '';
+            this.ontology.submission.version = stats.version_info || '';
+            this.ontology.submission.version_iri = stats.version_iri || '';
+            this.ontology.submission.home_page = stats.home_page || '';
+            this.ontology.submission.documentation = stats.documentation || '';
+            this.ontology.submission.publication = stats.publication || '';
+            this.ontology.submission.creators = stats.creators || [];
+            this.ontology.submission.license = stats.license || '';
+            this.ontology.submission.default_namespace = stats.default_namespace || '';
+            this.ontology.submission.obo_format_version = stats.obo_format_version || '';
             this.ontology.submission.nb_classes = stats.class_count ?? 'N/A';
             this.ontology.submission.nb_properties = stats.property_count ?? 'N/A';
             this.ontology.submission.nb_object_properties = stats.object_property_count ?? 'N/A';
@@ -249,7 +203,14 @@ Alpine.data('ontologyApp', () => ({
             this.ontology.submission.axiom_count = stats.axiom_count ?? 'N/A';
             this.ontology.submission.logical_axiom_count = stats.logical_axiom_count ?? 'N/A';
             this.ontology.submission.declaration_axiom_count = stats.declaration_axiom_count ?? 'N/A';
+            this.ontology.submission.tbox_axiom_count = stats.tbox_axiom_count ?? 'N/A';
+            this.ontology.submission.abox_axiom_count = stats.abox_axiom_count ?? 'N/A';
+            this.ontology.submission.rbox_axiom_count = stats.rbox_axiom_count ?? 'N/A';
             this.ontology.submission.dl_expressivity = stats.dl_expressivity ?? 'N/A';
+
+            this.exampleSuperclassLabel = stats.exampleSuperclassLabel;
+            this.exampleSubclassExpression = this.formatManchesterAxiom(stats.exampleSubclassExpression);
+            this.exampleSubclassExpressionText = stats.exampleSubclassExpressionText;
         })
         .catch(error => {
             console.error('Error fetching ontology statistics:', error);
@@ -267,7 +228,7 @@ Alpine.data('ontologyApp', () => ({
         });
     
     // Fetch the ontology classes and properties from the backend
-    fetch('/api/api/runQuery.groovy?type=subclass&direct=true&query=<http://www.w3.org/2002/07/owl%23Thing>')
+    fetch('/api/runQuery.groovy?type=subclass&direct=true&query=<http://www.w3.org/2002/07/owl%23Thing>')
       .then(response => {
         if (!response.ok) {
           throw new Error('Network response was not ok');
@@ -295,7 +256,7 @@ Alpine.data('ontologyApp', () => ({
         }));
       });
     // Fetch the ontology properties
-    fetch('/api/api/getObjectProperties.groovy')
+    fetch('/api/getObjectProperties.groovy')
       .then(response => {
         if (!response.ok) {
           throw new Error('Network response was not ok');
@@ -344,6 +305,16 @@ Alpine.data('ontologyApp', () => ({
     }
   },
   
+  quoteIfSpaces(text) {
+    if (!text) return text;
+    if (text.startsWith('<') && text.endsWith('>')) return text; // Already an IRI
+    if (text.startsWith("'") && text.endsWith("'")) return text; // Already quoted
+    if (text.includes(' ')) {
+      return `'${text}'`;
+    }
+    return text;
+  },
+
   handleClassNavigation(tab, owlClass, query) {
     if (tab === 'Browse' && owlClass) {
       if (this.classesMap.has(owlClass)) {
@@ -367,7 +338,7 @@ Alpine.data('ontologyApp', () => ({
         this.isLoading = true;
         
         // Fetch the class hierarchy from the backend
-        fetch(`/api/api/findRoot.groovy?query=${encodeURIComponent(owlClass)}`)
+        fetch(`/api/findRoot.groovy?query=${encodeURIComponent(owlClass)}`)
           .then(response => {
             if (!response.ok) {
               throw new Error('Network response was not ok');
@@ -397,9 +368,12 @@ Alpine.data('ontologyApp', () => ({
         this.selectedClass = this.classesMap.get(owlClass)
       }
       
+      const formattedOwlClass = this.quoteIfSpaces(owlClass);
+      this.dlQueryExp = formattedOwlClass;
+
       if (query) {
           this.dlQuery = query;
-          this.executeDLQuery(owlClass, query);
+          this.executeDLQuery(formattedOwlClass, query);
       }
     } else if (tab === 'Property' && owlClass) {
       if (this.propsMap.has(owlClass)) {
@@ -409,60 +383,31 @@ Alpine.data('ontologyApp', () => ({
   },
 
 
-    getFormattedClass(owlClass) {
-        if (!owlClass || typeof owlClass !== 'string') {
-            return owlClass;
+    formatManchesterAxiom(html) {
+        if (!html || typeof html !== 'string') {
+            return html;
         }
+        // The backend provides spans with id attributes. We just need to map them to CSS classes.
+        // The 'g' flag ensures all occurrences are replaced.
+        return html
+            .replace(/id='man-owlclass'/g, "class='owl-class'")
+            .replace(/id='man-property'/g, "class='owl-property'")
+            .replace(/id='man-keyword'/g, "class='owl-quantifier'")
+            .replace(/id='man-and'/g, "class='owl-operator'")
+            .replace(/id='man-or'/g, "class='owl-operator'")
+            .replace(/id='man-not'/g, "class='owl-operator'")
+            .replace(/<\/span><span/g, "</span> <span");
 
-        const manchesterKeywords = new Set(['and', 'or', 'not', 'some', 'only', 'value', 'min', 'max', 'exactly', 'that', 'inverse', 'self']);
-
-        // Get all labels from classesMap and propsMap
-        const allLabels = new Map();
-        for (const classObj of this.classesMap.values()) {
-            if (classObj.label) {
-                allLabels.set(classObj.label.toLowerCase(), classObj.label);
-            }
-        }
-        for (const propObj of this.propsMap.values()) {
-            if (propObj.label) {
-                allLabels.set(propObj.label.toLowerCase(), propObj.label);
-            }
-        }
-
-        // Sort labels by length, descending, to match longer labels first
-        const sortedLabels = Array.from(allLabels.keys()).sort((a, b) => b.length - a.length);
-
-        let processedQuery = owlClass;
-
-        for (const label of sortedLabels) {
-            if (manchesterKeywords.has(label)) {
-                continue;
-            }
-
-            // Case-insensitive replacement of whole words
-            const regex = new RegExp(`\\b${label.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'gi');
-            
-            const originalLabel = allLabels.get(label);
-            let replacement = originalLabel;
-            if (originalLabel.includes(' ')) {
-                replacement = `'${originalLabel}'`;
-            }
-            
-            processedQuery = processedQuery.replace(regex, replacement);
-        }
-
-        return processedQuery;
     },
     
   executeDLQuery(owlClass, queryType, labels = true) {
       this.isLoading = true;
 
-      formattedQuery = this.getFormattedClass(owlClass);
-      // Check if the query is a class label and format it properly for the Manchester OWL Syntax parser
+      const formattedQuery = this.quoteIfSpaces(owlClass);
       
       console.log('Executing DL query for class:', formattedQuery, 'with type:', queryType, 'and labels:', labels);
     // Make a real API call to the backend
-    fetch(`/api/api/runQuery.groovy?query=${encodeURIComponent(formattedQuery)}&type=${queryType}&labels=${labels}`)
+    fetch(`/api/runQuery.groovy?query=${encodeURIComponent(formattedQuery)}&type=${queryType}&labels=${labels}`)
       .then(response => {
         if (!response.ok) {
           throw new Error('Network response was not ok');
@@ -597,15 +542,25 @@ Alpine.data('ontologyApp', () => ({
     
     const submission = this.ontology.submission;
     return [
+      ['Title', this.ontology.name],
       ['Description', submission.description],
       ['Version', submission.version],
+      ['Version IRI', submission.version_iri ? `<a href="${submission.version_iri}" target="_blank">${submission.version_iri}</a>` : ''],
       ['Release date', submission.date_released],
-      // ['Homepage', `<a href="${submission.home_page}" target="_blank">${submission.home_page}</a>`],
-      // ['Documentation', `<a href="${submission.documentation}" target="_blank">${submission.documentation}</a>`],
-      // ['Publication', submission.publication],
+      ['Homepage', submission.home_page ? `<a href="${submission.home_page}" target="_blank">${submission.home_page}</a>` : ''],
+      ['Documentation', submission.documentation ? `<a href="${submission.documentation}" target="_blank">${submission.documentation}</a>` : ''],
+      ['Publication', submission.publication],
       ['Ontology language', submission.has_ontology_language],
-      // ['License', 'CC-BY 4.0'],
-      // ['Authors', 'The Pizza Ontology Working Group'],
+      ['License', submission.license ? `<a href="${submission.license}" target="_blank">${submission.license}</a>` : ''],
+      ['Default namespace', submission.default_namespace],
+      ['OBO format version', submission.obo_format_version],
+      ['Axiom count', submission.axiom_count],
+      ['Logical axiom count', submission.logical_axiom_count],
+      ['Declaration axiom count', submission.declaration_axiom_count],
+      ['TBox axiom count', submission.tbox_axiom_count],
+      ['ABox axiom count', submission.abox_axiom_count],
+      ['RBox axiom count', submission.rbox_axiom_count],
+      ['Authors', submission.creators.join(', ')],
       // ['Contact', '<a href="mailto:pizza@example.org">pizza@example.org</a>']
     ];
   },
@@ -651,15 +606,22 @@ Alpine.data('ontologyApp', () => ({
       let value = obj[item];
       
       if (htmlFields.has(item)) {
-        // Will be handled with x-html in the template
-        return [item, value.toString()];
+        // These fields contain HTML from the server, but we need to fix spacing and add highlighting
+        if (value) {
+          if (Array.isArray(value)) {
+            value = value.map(axiom => this.formatManchesterAxiom(axiom)).join(', ');
+          } else {
+            value = this.formatManchesterAxiom(value.toString());
+          }
+        }
+        return [item, value || '', true]; // Add flag to indicate HTML content
       }
       
       if (value && Array.isArray(value)) {
         value = value.join(', ');
       }
       
-      return [item, value];
+      return [item, value, false]; // Add flag to indicate plain text
     });
   },
 
@@ -708,15 +670,22 @@ Alpine.data('ontologyApp', () => ({
         let value = obj[item];
         
         if (htmlFields.has(item)) {
-          // Will be handled with x-html in the template
-          return [item, value ? value.toString() : ''];
+          // These fields contain HTML from the server, but we need to fix spacing and add highlighting
+          if (value) {
+            if (Array.isArray(value)) {
+              value = value.map(axiom => this.formatManchesterAxiom(axiom)).join(', ');
+            } else {
+              value = this.formatManchesterAxiom(value.toString());
+            }
+          }
+          return [item, value || '', true]; // Add flag to indicate HTML content
         }
         
         if (value && Array.isArray(value)) {
           value = value.join(', ');
         }
         
-        return [item, value];
+        return [item, value, false]; // Add flag to indicate plain text
       });
   },
 
@@ -737,14 +706,17 @@ Alpine.data('ontologyApp', () => ({
   setDLQuery(owlClass, queryType) {
     this.dlQuery = queryType;
     
+    // Quote if needed
+    const formattedOwlClass = this.quoteIfSpaces(owlClass);
+
     // Store the original query for display purposes
-    this.dlQueryExp = owlClass;
+    this.dlQueryExp = formattedOwlClass;
     
     // Update URL hash
-    window.location.hash = `/DLQuery/${encodeURIComponent(owlClass)}/${queryType}`;
+    window.location.hash = `/DLQuery/${encodeURIComponent(formattedOwlClass)}/${queryType}`;
     
     // Execute the query with the potentially formatted class
-    this.executeDLQuery(owlClass, queryType);
+    this.executeDLQuery(formattedOwlClass, queryType);
   },
   
   // Execute DL query when a class is selected in Browse view
@@ -781,51 +753,78 @@ Alpine.data('ontologyApp', () => ({
     this.format = event.target.value;
   },
 
-    setCheesyPizzaExampleQuery(event) {
-  if (event) event.preventDefault();
-    const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
-    "PREFIX owl: <http://www.w3.org/2002/07/owl#> \n" +
-    "SELECT DISTINCT ?class \n" +
-    "WHERE { \n" +
-    "VALUES ?class {OWL superclass <> <> { cheesy_pizza } } . } \n" +
-    "ORDER BY ?class \n"
-  this.query = query
+    setSuperclassExampleQuery(event) {
+        if (event) event.preventDefault();
+        if (!this.exampleSuperclassLabel) return;
+        // Remove any existing quotes and add single quotes only if the label contains spaces
+        let labelForQuery = this.exampleSuperclassLabel.replace(/^'|'$/g, '');
+        // Always quote labels
+        labelForQuery = `'${labelForQuery}'`;
+        
+        const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
+                      "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n" +
+                      "PREFIX owl: <http://www.w3.org/2002/07/owl#> \n" +
+                      "SELECT DISTINCT ?class ?label \n" +
+                      "WHERE { \n" +
+                      `VALUES ?class {OWL superclass { ${labelForQuery} } } . \n` +
+                      "OPTIONAL { ?class rdfs:label ?label } \n" +
+                      "} \n" +
+                      "ORDER BY ?class \n";
+        this.query = query;
+    },
+
+    setSubclassExampleQuery(event) {
+        if (event) event.preventDefault();
+        if (!this.exampleSubclassExpression) return;
+        // Clean up the expression text to remove any HTML artifacts
+        let cleanExpression = this.exampleSubclassExpression;
+        
+        // Parse HTML if it contains HTML tags
+        if (cleanExpression.includes('<') && cleanExpression.includes('>')) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = cleanExpression;
+            cleanExpression = tempDiv.textContent || tempDiv.innerText || cleanExpression;
+        }
+        
+        // Decode HTML entities
+        cleanExpression = cleanExpression
+            .replace(/&gt;/g, '>')
+            .replace(/&lt;/g, '<')
+            .replace(/&amp;/g, '&')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .trim();
+        
+        // Apply consistent formatting
+        
+        const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
+                      "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n" +
+                      "PREFIX owl: <http://www.w3.org/2002/07/owl#> \n" +
+                      "SELECT DISTINCT ?class ?label \n" +
+                      "WHERE { \n" +
+                      `VALUES ?class {OWL subclass { ${cleanExpression} } } . \n` +
+                      "OPTIONAL { ?class rdfs:label ?label } \n" +
+                      "} \n" +
+                      "ORDER BY ?class \n";
+        this.query = query;
     },
     
   setQueryClassesExampleQuery(event) {
     if (event) event.preventDefault();
 const query = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
+      "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n" +
       "PREFIX owl: <http://www.w3.org/2002/07/owl#> \n" +
-            "SELECT DISTINCT ?class \n" + 
-      "WHERE { ?class rdf:type owl:Class . } \n" +
+            "SELECT DISTINCT ?class ?label \n" + 
+      "WHERE { \n" +
+      "?class rdf:type owl:Class . \n" +
+      "OPTIONAL { ?class rdfs:label ?label } \n" +
+      "} \n" +
       "ORDER BY ?class \n" +
       "LIMIT 10";
     
     this.query = query;
   },
   
-  setDDIEMFilterExampleQuery(event) {
-    if (event) event.preventDefault();
-const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
-    "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>   \n" +
-    "PREFIX obo: <http://purl.obolibrary.org/obo/>   \n" +   
-    "SELECT ?procedure ?evidenceCode ?phenotypeCorrected   \n" +   
-    "FROM <http://ddiem.phenomebrowser.net>    \n" +  
-    "WHERE {    \n" +     
-    "	?procedure rdf:type ?procedureType .    \n" +  
-    "	?procedure obo:RO_0002558 ?evidenceCode .     \n" + 
-    "	?procedure obo:RO_0002212 ?phenotypes .      \n" +
-    "	?phenotypes rdfs:label ?phenotypeCorrected .      \n" +
-    "	FILTER ( ?procedureType in (    \n" +
-    "		OWL equivalent <http://ddiem.phenomebrowser.net/sparql> <DDIEM> {     \n" +   
-    "			'metabolite replacement'       \n" +
-    "		}        \n" +
-    "	) ).     \n" +
-    "}";
-    
-    this.query = query;
-  },
-
     // Parse the raw JSON string into a structured object
     parseSparqlResults(rawJsonString) {
         try {
@@ -847,6 +846,24 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
         }
         
         return results.results.bindings.map(binding => {
+            // Check if we have both class and label variables
+            if (binding.class && binding.label) {
+                const classUri = binding.class.value;
+                const labelValue = binding.label.value;
+                
+                // Use the unified formatting function for consistency
+                const formattedLabel = this.formatManchesterAxiom(labelValue);
+                
+                // Create a clickable link for the class with formatted label
+                // Make sure to use the original classUri in the href, not any formatted version
+                const cleanUri = classUri.replace(/<[^>]*>/g, ''); // Remove any HTML tags from the URI
+                return {
+                    label: `<a href="#/Browse/${encodeURIComponent(cleanUri)}">${classUri}</a> (${formattedLabel})`,
+                    fullUri: cleanUri,
+                    isHtml: true
+                };
+            }
+            
             // Get the first variable in the binding
             const firstVarName = Object.keys(binding)[0];
             if (!firstVarName) {
@@ -854,44 +871,59 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
             }
             
             const value = binding[firstVarName].value;
-            // If it's a URI, extract the last part after # or /
-            let displayValue = value;
-            if (binding[firstVarName].type === 'uri') {
-                displayValue = value.includes('#')
-                    ? value.split('#').pop()
-                    : value.split('/').pop();
+            
+            // Check if this looks like a class URI
+            if (value.startsWith('http://') || value.startsWith('https://')) {
+                // Make sure to use the original value in the href, not any formatted version
+                const cleanValue = value.replace(/<[^>]*>/g, ''); // Remove any HTML tags
+                return {
+                    label: `<a href="#/Browse/${encodeURIComponent(cleanValue)}">${value}</a>`,
+                    fullUri: cleanValue,
+                    isHtml: true
+                };
+            }
+            
+            // Check if this looks like Manchester syntax and format it
+            if (value.includes("id='man-")) {
+                // Apply formatting and highlighting
+                const formatted = this.formatManchesterAxiom(value);
+                return {
+                    label: formatted,
+                    fullUri: value,
+                    isHtml: true
+                };
             }
             
             return {
-                label: displayValue,
+                label: value,
                 fullUri: value
             };
         });
     },
+
 
     
     executeSparql(event) {
     if (event) event.preventDefault();
     this.isLoading = true;
 
-    const sparqlUrl = '/api/api/runSparqlQuery.groovy';
-    const formData = new URLSearchParams();
-    formData.append('query', this.query.trim());
-    formData.append('endpoint', this.endpoint);
+const params = new URLSearchParams();
+params.append('query', this.query.trim());
+params.append('endpoint', this.endpoint);
 
-    const queryUrl = `${sparqlUrl}?${formData.toString()}`;
-    
-    fetch(queryUrl, {
-        method: 'GET',
-        headers: {
-      'Accept': 'application/sparql-results+json,*/*;q=0.9'
+const sparqlUrl = `/api/runSparqlQuery.groovy?${params.toString()}`;
+
+	fetch(sparqlUrl, {
+	    method: 'GET',
+	    headers: {
+		'Accept': 'application/sparql-results+json,*/*;q=0.9'
+	    }
+	})
+	.then(response => {
+        if (!response.ok) {
+            return response.text().then(text => { throw new Error(text || 'Network response was not ok') });
         }
-    })
-      .then(response => {
-    if (!response.ok) {
-        throw new Error('Network response was not ok');
-    }
-    return response.text(); // Get the raw response as text
+        return response.text(); // Get the raw response as text
       })
       .then(data => {
   // Store the original parsed results
@@ -908,6 +940,11 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
   this.rawSparqlResults = { results: { bindings: [{ error: { type: "literal", value: 'Error: ' + error.message } }] } };
   this.dlResults = [{label: 'Error: ' + error.message}];
       });
+    },
+
+    // Check if a result item contains HTML
+    isHtmlResult(item) {
+        return item && item.isHtml === true;
     },
     
   onEndpointChange(event) {
@@ -1116,12 +1153,30 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
   handleNodeClick(event, owlClass) {
     if (event) event.preventDefault();
     
-    const obj = this.classesMap.get(owlClass);
+    // Parse HTML if owlClass contains HTML to extract the actual class IRI
+    let cleanOwlClass = owlClass;
+    if (owlClass.includes('<') && owlClass.includes('>')) {
+        // Create a temporary element to parse HTML
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = owlClass;
+        // Extract text content, which should be the clean IRI
+        cleanOwlClass = tempDiv.textContent || tempDiv.innerText || owlClass;
+    }
+    
+    // Additional cleanup for any remaining HTML entities
+    cleanOwlClass = cleanOwlClass.replace(/&lt;/g, '<')
+                                 .replace(/&gt;/g, '>')
+                                 .replace(/&amp;/g, '&')
+                                 .replace(/&quot;/g, '"')
+                                 .replace(/&#39;/g, "'")
+                                 .trim();
+    
+    const obj = this.classesMap.get(cleanOwlClass);
     if (!obj) {
       // If the class is not in the map, fetch it from the backend
       // this.isLoading = true;
       
-      fetch(`/api/api/findRoot.groovy?query=${encodeURIComponent(owlClass)}`)
+      fetch(`/api/findRoot.groovy?query=${encodeURIComponent(owlClass)}`)
         .then(response => {
           if (!response.ok) {
             throw new Error('Network response was not ok');
@@ -1148,8 +1203,8 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
       return;
     }
     
-    // Update URL hash
-    window.location.hash = `/Browse/${encodeURIComponent(owlClass)}`;
+    // Update URL hash - use the clean owlClass without HTML
+    window.location.hash = `/Browse/${encodeURIComponent(cleanOwlClass)}`;
     
     // Set selected class
     this.selectedClass = obj;
@@ -1168,17 +1223,16 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
     
     // If we need to load children from the backend
     if (!obj.collapsed && (!obj.children || obj.children.length === 0)) {
-      this.loadChildrenForClass(owlClass);
+      this.loadChildrenForClass(cleanOwlClass);
     }
     
     // Execute a DL query to get subclasses when a node is selected
-    this.executeBrowseDLQuery(owlClass);
+    this.executeBrowseDLQuery(cleanOwlClass);
     
     // Set DL query expression based on class label
     if (this.selectedClass) {
-      // Use the class label directly without modification
-      // Our improved executeDLQuery will handle the conversion
-      this.dlQueryExp = this.selectedClass.label;
+      // Use the class label directly, but quote it if it has spaces
+      this.dlQueryExp = this.quoteIfSpaces(this.selectedClass.label);
     }
   },
   
@@ -1186,7 +1240,7 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
   loadChildrenForClass(owlClass) {
     // this.isLoading = true;
     
-    fetch(`/api/api/runQuery.groovy?direct=true&axioms=true&query=${encodeURIComponent(owlClass)}&type=subclass`)
+    fetch(`/api/runQuery.groovy?direct=true&axioms=true&query=${encodeURIComponent(owlClass)}&type=subclass`)
       .then(response => {
         if (!response.ok) {
           throw new Error('Network response was not ok');
@@ -1317,26 +1371,33 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
     const indexName = `class_index`;
     
     // Direct Elasticsearch query for label matches
-    fetch(`/elastic/${indexName}/_search`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    const esQuery = {
+      query: {
+        bool: {
+          must: {
+            query_string: {
+              query: `*${search.toLowerCase()}*`,
+              fields: ["label", "synonyms"]
+            }
+          },
+          should: [
+            { prefix: { label: { value: search.toLowerCase(), boost: 4 } } },
+            { prefix: { synonyms: { value: search.toLowerCase(), boost: 2 } } }
+          ]
+        }
       },
-      body: JSON.stringify({
-        query: {
-            bool: {
-		should: [
-		    {match: {label: {query: search.toLowerCase(), boost: 2}}},
-		    {match_bool_prefix: {label: search.toLowerCase()}}
-		]
-            // must: [	    
-              // {match_bool_prefix: {label: search.toLowerCase()}},
-            // ]
-          }
-        },
-        _source: {excludes: ['embedding_vector',]},
-        size: 10
-      })
+      _source: {excludes: ['embedding_vector',]},
+      size: 10
+    };
+
+    const params = new URLSearchParams({
+        index: indexName,
+        source: JSON.stringify(esQuery),
+        source_content_type: 'application/json'
+    });
+
+    fetch(`/api/elastic.groovy?${params.toString()}`, {
+      method: 'GET'
     })
     .then(response => {
       if (!response.ok) throw new Error('Network response was not ok');
@@ -1433,7 +1494,7 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
     }
     
     this.isLoading = true;
-    const dlQueryUrl = "/api/api/runQuery.groovy";
+    const dlQueryUrl = "/api/runQuery.groovy";
     
     // First detect parameters from natural language
     this.detectNLParams()
@@ -1460,7 +1521,7 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
                 
                 const top_result = searchResults[0].owlClass;
                 console.log("Top result from Elasticsearch:", top_result);
-                const formattedQuery = encodeURIComponent(this.getFormattedClass(top_result));
+                const formattedQuery = encodeURIComponent(top_result);
 
 		all_params.query = searchResults[0].label[0];
 		this.detectedParams = JSON.stringify(all_params, null, 2);
@@ -1549,16 +1610,19 @@ const query = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>      \n" +
   onLLMQueryChange(event) {
     this.llmQuery = event.target.value;
   },
-  
-  // Example queries for LLMQuery tab
-  setSuperclassesCheesyPizzaExample(event) {
+
+  setSuperclassLLMExample(event) {
     if (event) event.preventDefault();
-    this.llmQuery = "What are the superclasses of cheesy pizza?";
+    if (this.exampleSuperclassLabel) {
+        this.llmQuery = `What are the superclasses of ${this.exampleSuperclassLabel}?`;
+    }
   },
-  
-  setSubclassesCheesyPizzaExample(event) {
+
+  setSubclassLLMExample(event) {
     if (event) event.preventDefault();
-    this.llmQuery = "What are the subclasses of cheesy pizza?";
+    if (this.exampleSubclassExpressionText) {
+        this.llmQuery = `What are the subclasses of ${this.exampleSubclassExpressionText}?`;
+    }
   },
 
 }));

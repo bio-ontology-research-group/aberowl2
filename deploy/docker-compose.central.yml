@@ -1,0 +1,104 @@
+# Central AberOWL2 stack on server "onto" (cbontsr01.kaust.edu.sa)
+# Deploys to /data/aberowl/
+#
+# Services:
+#   - central-server: FastAPI app (registry, aggregator, API, frontend SPA)
+#   - redis: Registry + API key store
+#   - elasticsearch: Central class/ontology index
+#   - virtuoso: Central RDF/SPARQL store
+#
+# Usage:
+#   cd /data/aberowl
+#   docker compose -f deploy/docker-compose.central.yml up -d
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - aberowl-internal
+
+  elasticsearch:
+    image: elasticsearch:7.17.10
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms2g -Xmx2g
+      - xpack.security.enabled=false
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    networks:
+      - aberowl-internal
+    deploy:
+      resources:
+        limits:
+          memory: 4g
+
+  virtuoso:
+    image: openlink/virtuoso-opensource-7:7.2.12
+    restart: unless-stopped
+    environment:
+      - DBA_PASSWORD=${VIRTUOSO_DBA_PASSWORD:-dba}
+      - SPARQL_UPDATE=true
+      - VIRT_Parameters_NumberOfBuffers=340000
+      - VIRT_Parameters_MaxDirtyBuffers=250000
+      - VIRT_SPARQL_ResultSetMaxRows=50000
+      - VIRT_SPARQL_MaxQueryCostEstimationTime=30000
+      - VIRT_SPARQL_MaxQueryExecutionTime=30
+    volumes:
+      - virtuoso_data:/database
+      - ${ONTOLOGIES_PATH:-/data/aberowl/ontologies}:/data/ontologies:ro
+    networks:
+      - aberowl-internal
+    deploy:
+      resources:
+        limits:
+          memory: 8g
+
+  central-server:
+    build:
+      context: ..
+      dockerfile: central_server/Dockerfile
+    restart: unless-stopped
+    environment:
+      - CENTRAL_ES_URL=http://elasticsearch:9200
+      - VIRTUOSO_URL=http://virtuoso:8890
+      - VIRTUOSO_DBA_PASSWORD=${VIRTUOSO_DBA_PASSWORD:-dba}
+      - ADMIN_USER=${ADMIN_USER:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - ONTOLOGIES_HOST_PATH=${ONTOLOGIES_PATH:-/data/aberowl/ontologies}
+      - ABEROWL_REPO_PATH=/app
+      - ENABLE_MCP=${ENABLE_MCP:-false}
+      - SOURCE_SYNC_INTERVAL_SECONDS=86400
+      - UPDATE_CHECK_INTERVAL_SECONDS=86400
+      - PUBLIC_RATE_LIMIT=120
+      - API_KEY_RATE_LIMIT=1200
+    volumes:
+      - ${ONTOLOGIES_PATH:-/data/aberowl/ontologies}:/data/ontologies
+      - central_config:/app/config
+      # Mount the built SPA frontend
+      - ../central_server/app/static/dist:/code/app/static/dist:ro
+    ports:
+      - "${CENTRAL_PORT:-8000}:8000"
+    depends_on:
+      - redis
+      - elasticsearch
+      - virtuoso
+    networks:
+      - aberowl-internal
+      - aberowl-net
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+volumes:
+  redis_data:
+  es_data:
+  virtuoso_data:
+  central_config:
+
+networks:
+  aberowl-internal:
+  aberowl-net:
+    external: true

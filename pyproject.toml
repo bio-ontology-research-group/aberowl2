@@ -1,0 +1,43 @@
+[project]
+name = "aberowl2"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "jinja2",
+    "aiohttp",
+    "python-multipart",
+    "redis",
+    "websockets",
+    "pyyaml",
+    "aiofiles",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-timeout",
+    "requests",
+    "httpx",
+    "fakeredis",
+    "mcp",
+    "slowapi",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+timeout = 900          # 15 min hard cap per test (GO classification can be slow)
+testpaths = ["tests"]
+# Exclude pre-existing tests that require gevent (aberowlapi/, virtuoso/)
+norecursedirs = ["tests/aberowlapi", "tests/virtuoso"]
+markers = [
+    "slow: tests that spin up Docker containers and may take several minutes",
+    "bioportal: tests that call the live BioPortal API",
+    "unit: fast tests that do not require Docker",
+    "live: tests that run against beta.aber-owl.net",
+]
+
+[tool.uv]
+# run tests with:  uv run --extra test pytest tests/ -v

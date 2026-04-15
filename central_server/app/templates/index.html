@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AberOWL Central Server</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <a href="/about" class="btn btn-info btn-sm pull-right" style="margin-top: 20px; margin-left: 5px;">About</a>
+        <button type="button" class="btn btn-success btn-sm pull-right" data-toggle="modal" data-target="#mcpModal" style="margin-top: 20px; margin-left: 5px;">
+            MCP Documentation
+        </button>
+        <button type="button" class="btn btn-info btn-sm pull-right" data-toggle="modal" data-target="#documentationModal" style="margin-top: 20px;">
+            API Documentation
+        </button>
+        <h1>AberOWL Ontology Servers</h1>
+        <p>A list of currently registered and active AberOWL ontology instances.</p>
+
+        <div class="panel panel-default">
+            <div class="panel-heading">
+                <ul class="nav nav-tabs" id="queryTabs">
+                    <li class="active"><a href="#dlQueryTab" data-toggle="tab">DL Query</a></li>
+                    <li><a href="#textSearchTab" data-toggle="tab">Text Search</a></li>
+                </ul>
+            </div>
+            <div class="panel-body">
+                <div class="tab-content">
+                    <div class="tab-pane active" id="dlQueryTab">
+                        <form id="dlQueryForm" onsubmit="return false;">
+                            <div class="form-group">
+                                <label for="dlQueryInput">Manchester Syntax Query:</label>
+                                <input type="text" id="dlQueryInput" class="form-control" placeholder="e.g., 'has part' some 'cell nucleus'">
+                                <p class="help-block">
+                                    Try:
+                                    <a href="#" class="query-example" data-query="'has part' some nucleus">'has part' some nucleus</a>,
+                                    <a href="#" class="query-example" data-query="'part of' some 'apoptotic process'">'part of' some 'apoptotic process'</a>,
+                                    <a href="#" class="query-example" data-query="regulates some 'calcium ion transport'">regulates some 'calcium ion transport'</a>
+                                </p>
+                            </div>
+                            <div class="btn-group" role="group">
+                                <button type="submit" name="type" value="subclass" class="btn btn-primary">Subclasses</button>
+                                <button type="submit" name="type" value="superclass" class="btn btn-primary">Superclasses</button>
+                                <button type="submit" name="type" value="equivalent" class="btn btn-primary">Equivalent</button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="tab-pane" id="textSearchTab">
+                        <form id="textSearchForm" onsubmit="return false;">
+                            <div class="form-group">
+                                <label for="textSearchInput">Search Term:</label>
+                                <input type="text" id="textSearchInput" class="form-control" placeholder="e.g., cell, apoptosis">
+                            </div>
+                            <button type="submit" class="btn btn-primary">Search</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-3">
+                <h4>Filter by Ontology</h4>
+                <div id="ontologyFilterCheckboxes" class="ontology-filter-container">
+                    <!-- Ontology checkboxes will be populated here -->
+                </div>
+            </div>
+            <div class="col-md-9">
+                <div id="resultsContainer" style="display: none;">
+                    <h4>Query Results <span id="resultsCount" class="badge">0</span></h4>
+                    <div class="form-group">
+                        <input type="text" id="resultsFilterInput" class="form-control" placeholder="Filter results by text...">
+                    </div>
+                    <ul id="resultsList" class="list-group">
+                        <!-- Results will be inserted here -->
+                    </ul>
+                    <nav id="paginationContainer">
+                        <ul class="pagination">
+                            <!-- Pagination links will be inserted here -->
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <input type="text" id="searchInput" class="form-control" placeholder="Search for ontologies...">
+        </div>
+
+        <table class="table table-bordered table-striped">
+            <thead>
+                <tr>
+                    <th class="sortable" data-sort="ontology">Ontology <i class="glyphicon glyphicon-sort"></i></th>
+                    <th class="sortable" data-sort="title">Title <i class="glyphicon glyphicon-sort"></i></th>
+                    <th class="sortable" data-sort="description">Description <i class="glyphicon glyphicon-sort"></i></th>
+                    <th class="sortable" data-sort="class_count">Classes <i class="glyphicon glyphicon-sort"></i></th>
+                    <th class="sortable" data-sort="property_count">Properties <i class="glyphicon glyphicon-sort"></i></th>
+                    <th class="sortable" data-sort="status">Status <i class="glyphicon glyphicon-sort"></i></th>
+                    <th>URL</th>
+                </tr>
+            </thead>
+            <tbody id="serversTableBody">
+                <!-- Rows will be inserted here by JavaScript -->
+            </tbody>
+        </table>
+    </div>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+    <script src="/static/main.js"></script>
+
+    <!-- MCP Documentation Modal -->
+    <div class="modal fade" id="mcpModal" tabindex="-1" role="dialog" aria-labelledby="mcpModalLabel">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                    <h4 class="modal-title" id="mcpModalLabel">MCP Documentation for LLM Agents</h4>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-success">
+                        <strong>🤖 Agent Instructions:</strong> This AberOWL Central Server provides MCP (Model Context Protocol) tools for querying ontologies. You can use these tools to search for ontological terms, run Description Logic queries, and retrieve information about registered ontology servers.
+                    </div>
+
+                    <h3>Available MCP Tools</h3>
+                    
+                    <div class="panel panel-primary">
+                        <div class="panel-heading"><strong>1. list_ontology_servers</strong></div>
+                        <div class="panel-body">
+                            <p><strong>Purpose:</strong> Retrieve a comprehensive list of all registered ontology servers with their metadata.</p>
+                            <p><strong>Parameters:</strong> None required</p>
+                            <p><strong>Returns:</strong> List of ontology servers with status (online/offline), title, description, class count, property count, and access URL.</p>
+                            <p><strong>Use when:</strong> User asks about available ontologies, wants to know what ontologies are registered, or needs an overview of the system.</p>
+                            <div class="well">
+                                <strong>Example queries from users:</strong>
+                                <ul>
+                                    <li>"What ontologies are available?"</li>
+                                    <li>"Show me all registered servers"</li>
+                                    <li>"Which ontologies are currently online?"</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel panel-primary">
+                        <div class="panel-heading"><strong>2. search_ontologies</strong></div>
+                        <div class="panel-body">
+                            <p><strong>Purpose:</strong> Search for terms across all registered ontologies using text matching.</p>
+                            <p><strong>Parameters:</strong></p>
+                            <ul>
+                                <li><code>query</code> (required): The search term to look for</li>
+                                <li><code>ontologies</code> (optional): Array of specific ontology names to search in (e.g., ["GO", "CHEBI"])</li>
+                            </ul>
+                            <p><strong>Returns:</strong> Matching terms grouped by ontology, including labels and IRIs.</p>
+                            <p><strong>Use when:</strong> User wants to find terms containing specific text across ontologies.</p>
+                            <div class="well">
+                                <strong>Example queries from users:</strong>
+                                <ul>
+                                    <li>"Search for 'apoptosis' in all ontologies"</li>
+                                    <li>"Find terms related to 'protein' in GO and CHEBI"</li>
+                                    <li>"What terms contain 'cancer'?"</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel panel-primary">
+                        <div class="panel-heading"><strong>3. run_dl_query</strong></div>
+                        <div class="panel-body">
+                            <p><strong>Purpose:</strong> Execute Description Logic queries using Manchester OWL Syntax to find ontology classes based on logical relationships.</p>
+                            <p><strong>Parameters:</strong></p>
+                            <ul>
+                                <li><code>query</code> (required): Manchester OWL Syntax query (e.g., "'has part' some nucleus")</li>
+                                <li><code>query_type</code> (required): One of "subclass", "superclass", or "equivalent"</li>
+                                <li><code>ontologies</code> (optional): Array of specific ontology names to query</li>
+                            </ul>
+                            <p><strong>Returns:</strong> Classes matching the DL query, grouped by ontology.</p>
+                            <p><strong>Use when:</strong> User wants to find classes based on logical relationships and properties.</p>
+                            <div class="well">
+                                <strong>Example queries from users:</strong>
+                                <ul>
+                                    <li>"Find all subclasses of things that have nucleus as a part"</li>
+                                    <li>"What are the superclasses of 'biological process'?"</li>
+                                    <li>"Show me all classes equivalent to 'cell division'"</li>
+                                </ul>
+                                <strong>Common Manchester OWL Syntax patterns:</strong>
+                                <ul>
+                                    <li><code>'has part' some X</code> - things that have X as a part</li>
+                                    <li><code>'part of' some X</code> - things that are part of X</li>
+                                    <li><code>regulates some X</code> - things that regulate X</li>
+                                    <li><code>X and Y</code> - things that are both X and Y</li>
+                                    <li><code>X or Y</code> - things that are either X or Y</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel panel-primary">
+                        <div class="panel-heading"><strong>4. get_ontology_info</strong></div>
+                        <div class="panel-body">
+                            <p><strong>Purpose:</strong> Get detailed information about a specific ontology server.</p>
+                            <p><strong>Parameters:</strong></p>
+                            <ul>
+                                <li><code>ontology_name</code> (required): The name/ID of the ontology (e.g., "GO", "CHEBI", "HP")</li>
+                            </ul>
+                            <p><strong>Returns:</strong> Detailed information including title, description, statistics (class/property/individual counts), status, and access URL.</p>
+                            <p><strong>Use when:</strong> User asks for specific information about a particular ontology.</p>
+                            <div class="well">
+                                <strong>Example queries from users:</strong>
+                                <ul>
+                                    <li>"Tell me about the Gene Ontology"</li>
+                                    <li>"What is CHEBI?"</li>
+                                    <li>"How many classes are in the Human Phenotype Ontology?"</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h3>Query Strategy Guide for Agents</h3>
+                    
+                    <div class="panel panel-info">
+                        <div class="panel-body">
+                            <h4>🎯 Best Practices for Query Handling:</h4>
+                            <ol>
+                                <li><strong>Identify Intent:</strong> Determine if the user wants to search text, run logical queries, or get information.</li>
+                                <li><strong>Choose the Right Tool:</strong>
+                                    <ul>
+                                        <li>Use <code>search_ontologies</code> for text-based searches</li>
+                                        <li>Use <code>run_dl_query</code> for relationship-based queries</li>
+                                        <li>Use <code>get_ontology_info</code> for ontology metadata</li>
+                                        <li>Use <code>list_ontology_servers</code> for system overview</li>
+                                    </ul>
+                                </li>
+                                <li><strong>Handle Ambiguity:</strong> If unclear, start with text search, then refine with DL queries if needed.</li>
+                                <li><strong>Optimize Performance:</strong> When possible, specify target ontologies to reduce query time.</li>
+                            </ol>
+
+                            <h4>📊 Response Formatting Tips:</h4>
+                            <ul>
+                                <li>Group results by ontology for clarity</li>
+                                <li>Show both human-readable labels and technical IRIs</li>
+                                <li>Indicate online/offline status when listing servers</li>
+                                <li>Summarize large result sets (e.g., "Found 150 results across 5 ontologies")</li>
+                            </ul>
+
+                            <h4>🔄 Query Refinement Workflow:</h4>
+                            <ol>
+                                <li>Start with broad search if query is vague</li>
+                                <li>Identify relevant ontologies from initial results</li>
+                                <li>Run targeted queries on specific ontologies</li>
+                                <li>Use DL queries for precise logical relationships</li>
+                            </ol>
+                        </div>
+                    </div>
+
+                    <h3>Common Ontology Abbreviations</h3>
+                    <div class="panel panel-default">
+                        <div class="panel-body">
+                            <ul>
+                                <li><strong>GO:</strong> Gene Ontology</li>
+                                <li><strong>CHEBI:</strong> Chemical Entities of Biological Interest</li>
+                                <li><strong>HP:</strong> Human Phenotype Ontology</li>
+                                <li><strong>MONDO:</strong> Mondo Disease Ontology</li>
+                                <li><strong>UBERON:</strong> Uber-anatomy Ontology</li>
+                                <li><strong>CL:</strong> Cell Ontology</li>
+                                <li><strong>DOID:</strong> Disease Ontology</li>
+                                <li><strong>PATO:</strong> Phenotype And Trait Ontology</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info">
+                        <strong>💡 Pro Tip:</strong> When users ask natural language questions about ontologies, translate them into appropriate MCP tool calls. For example, "What diseases affect the heart?" could be translated to a DL query: <code>run_dl_query("'has location' some heart", "subclass", ["DOID", "MONDO"])</code>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Documentation Modal -->
+    <div class="modal fade" id="documentationModal" tabindex="-1" role="dialog" aria-labelledby="documentationModalLabel">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                    <h4 class="modal-title" id="documentationModalLabel">API Documentation</h4>
+                </div>
+                <div class="modal-body">
+                    <p>This document provides information about the AberOWL Central Server API and FAIR API (MOD-API).</p>
+                    
+                    <div class="panel panel-info">
+                        <div class="panel-heading"><strong>Server Management API</strong></div>
+                        <div class="panel-body">
+                            <p><strong>POST /register</strong></p>
+                            <p>Register an ontology server. Returns a secret key for updates.</p>
+                            <pre><code>curl -X POST -H "Content-Type: application/json" -d '{"ontology": "MYONT", "url": "http://my.server.com/ontology"}' {{ request.url.scheme }}://{{ request.url.netloc }}/register</code></pre>
+                        </div>
+                    </div>
+
+                    <div class="panel panel-info">
+                        <div class="panel-heading"><strong>Query API</strong></div>
+                        <div class="panel-body">
+                            <p><strong>GET /api/servers</strong></p>
+                            <p>Get a list of all registered servers and their metadata.</p>
+                            <p>Example: <a href="/api/servers" target="_blank">/api/servers</a></p>
+                            <hr>
+                            <p><strong>GET /api/search_all</strong></p>
+                            <p>Run a text search across all online servers.</p>
+                            <p>Parameters: <code>query</code> (required), <code>ontologies</code> (optional, comma-separated).</p>
+                            <p>Example: <a href="/api/search_all?query=cell" target="_blank">/api/search_all?query=cell</a></p>
+                            <hr>
+                            <p><strong>GET /api/dlquery_all</strong></p>
+                            <p>Run a DL query across all online servers.</p>
+                            <p>Parameters: <code>query</code> (required), <code>type</code> (required, e.g., subclass), <code>ontologies</code> (optional, comma-separated).</p>
+                            <p>Example: <a href="/api/dlquery_all?query='has part' some nucleus&type=subclass" target="_blank">/api/dlquery_all?query='has part' some nucleus&type=subclass</a></p>
+                        </div>
+                    </div>
+
+                    <div class="panel panel-info">
+                        <div class="panel-heading"><strong>FAIR API (MOD-API)</strong></div>
+                        <div class="panel-body">
+                            <h4>Catalogue</h4>
+                            <p><strong>GET /</strong>: Get information about the semantic artefact catalogue.</p>
+                            <p>Example: <a href="/?format=jsonld" target="_blank">/?format=jsonld</a></p>
+                            
+                            <h4>Records</h4>
+                            <p><strong>GET /records</strong>: Get all catalog records.</p>
+                            <p>Example: <a href="/records?format=jsonld" target="_blank">/records?format=jsonld</a></p>
+                            <p><strong>GET /records/{artefact_id}</strong>: Get a specific catalog record.</p>
+                            <p>Example: <a href="/records/GO?format=jsonld" target="_blank">/records/GO?format=jsonld</a> (replace GO with a registered ontology)</p>
+
+                            <h4>Artefacts</h4>
+                            <p><strong>GET /artefacts</strong>: Get all semantic artefacts.</p>
+                            <p>Example: <a href="/artefacts?format=jsonld" target="_blank">/artefacts?format=jsonld</a></p>
+                            <p><strong>GET /artefacts/{artefact_id}</strong>: Get a specific semantic artefact.</p>
+                            <p>Example: <a href="/artefacts/GO?format=jsonld" target="_blank">/artefacts/GO?format=jsonld</a> (replace GO with a registered ontology)</p>
+
+                            <h4>Distributions</h4>
+                            <p><strong>GET /artefacts/{artefact_id}/distributions</strong>: Get distributions for an artefact.</p>
+                            <p>Example: <a href="/artefacts/GO/distributions?format=jsonld" target="_blank">/artefacts/GO/distributions?format=jsonld</a> (replace GO with a registered ontology)</p>
+                            <p><strong>GET /artefacts/{artefact_id}/distributions/latest</strong>: Get the latest distribution.</p>
+                            <p>Example: <a href="/artefacts/GO/distributions/latest?format=jsonld" target="_blank">/artefacts/GO/distributions/latest?format=jsonld</a> (replace GO with a registered ontology)</p>
+
+                            <h4>Resources (Partially Implemented)</h4>
+                            <p>These endpoints provide information about resources within an artefact. Most will return empty collections.</p>
+                            <p><strong>GET /artefacts/{artefact_id}/resources</strong>: <a href="/artefacts/GO/resources" target="_blank">Example</a> (replace GO with a registered ontology)</p>
+                            <p><strong>GET /artefacts/{artefact_id}/resources/classes</strong>: <a href="/artefacts/GO/resources/classes" target="_blank">Example</a> (replace GO with a registered ontology)</p>
+                            <p><strong>GET /artefacts/{artefact_id}/resources/properties</strong>: <a href="/artefacts/GO/resources/properties" target="_blank">Example</a> (replace GO with a registered ontology)</p>
+
+                            <h4>Search</h4>
+                            <p><strong>GET /search</strong>: Search metadata and content.</p>
+                            <p>Example: <a href="/search?q=gene&format=jsonld" target="_blank">/search?q=gene&format=jsonld</a></p>
+                            <p><strong>GET /search/content</strong>: Search content only.</p>
+                            <p>Example: <a href="/search/content?q=cell&format=jsonld" target="_blank">/search/content?q=cell&format=jsonld</a></p>
+                            <p><strong>GET /search/metadata</strong>: Search metadata only.</p>
+                            <p>Example: <a href="/search/metadata?q=biological&format=jsonld" target="_blank">/search/metadata?q=biological&format=jsonld</a></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

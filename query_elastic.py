@@ -1,8 +1,10 @@
 import sys
+import os
 from elasticsearch import Elasticsearch
 
 # Connect to Elasticsearch server
-es = Elasticsearch("http://localhost:9200")
+es_url = os.getenv("ELASTICSEARCH_URL", "http://elasticsearch:9200")
+es = Elasticsearch(es_url)
 
 # Define parameters
 index_name = "owl_class_index"

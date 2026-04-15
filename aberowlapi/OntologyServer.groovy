@@ -16,6 +16,7 @@ println "--- OntologyServer.groovy execution started ---"
     @Grab(group='net.sourceforge.owlapi', module='owlapi-apibinding', version='4.5.29'),
     @Grab(group='net.sourceforge.owlapi', module='owlapi-impl', version='4.5.29'),
     @Grab(group='net.sourceforge.owlapi', module='owlapi-parsers', version='4.5.29'),
+    @Grab(group='net.sourceforge.owlapi', module='org.semanticweb.hermit', version='1.4.5.456'),
     @Grab(group='org.codehaus.gpars', module='gpars', version='1.1.0'),
     @Grab(group='com.google.guava', module='guava', version='19.0'),
     @Grab(group='ch.qos.reload4j', module='reload4j', version='1.2.18.5'),
@@ -42,12 +43,26 @@ import groovy.json.*
 import groovyx.gpars.GParsPool
 
 
-// Set Jetty logging (can be noisy)
-// Log.setLog(new StdErrLog())
-
 println "--- Imports and Grapes complete ---"
 
-def startServer(def ontologyFilePath, def port) {
+/**
+ * Start the Jetty server and load ontologies.
+ *
+ * Supports two modes:
+ *   1. Single ontology: pass a file path as first argument
+ *   2. Multi-ontology: pass a directory path or JSON config file as first argument
+ *
+ * In multi-ontology mode, the directory is scanned for .owl files, or the JSON
+ * config file lists ontologies with their IDs, paths, and reasoner types.
+ *
+ * JSON config format:
+ *   [
+ *     {"id": "GO", "path": "/data/go/go.owl", "reasoner": "elk"},
+ *     {"id": "HP", "path": "/data/hp/hp.owl", "reasoner": "elk"},
+ *     ...
+ *   ]
+ */
+def startServer(def ontologyArg, def port) {
 
     println "Starting Jetty server process..."
     Server server = new Server(port)
@@ -60,24 +75,34 @@ def startServer(def ontologyFilePath, def port) {
 
     // Set resource base relative to the script's CWD (which is set to aberowlapi/ by Popen)
     context.resourceBase = '.'
-    // Make sure this path is correct and accessible by the groovy process
     println "Setting Jetty resourceBase to: ${new File(context.resourceBase).absolutePath}"
 
     def localErrorHandler = new ErrorHandler()
     localErrorHandler.setShowStacks(true)
     context.setErrorHandler(localErrorHandler)
 
-    // Paths are relative to resourceBase ('.', which is /app/aberowlapi)
-    context.addServlet(GroovyServlet, '/health.groovy')
-    context.addServlet(GroovyServlet, '/api/runQuery.groovy')
-    context.addServlet(GroovyServlet, '/api/reloadOntology.groovy')
-    context.addServlet(GroovyServlet, '/api/findRoot.groovy')
-    context.addServlet(GroovyServlet, '/api/getObjectProperties.groovy')
-    context.addServlet(GroovyServlet, '/api/retrieveRSuccessors.groovy')
-    context.addServlet(GroovyServlet, '/api/retrieveAllLabels.groovy')
-    context.addServlet(GroovyServlet, '/api/getStatistics.groovy')
-    context.addServlet(GroovyServlet, '/api/sparql.groovy')
-    context.addServlet(GroovyServlet, '/api/runSparqlQuery.groovy')
+    // Register all servlets
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/health.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/health.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/runQuery.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/reloadOntology.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/findRoot.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/getObjectProperties.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/retrieveRSuccessors.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/retrieveAllLabels.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/getStatistics.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/sparql.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/runSparqlQuery.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/getSparqlExamples.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/elastic.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/updateOntology.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/updateStatus.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/validateOntology.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/triggerIndexing.groovy')
+    // Dynamic ontology management endpoints
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/addOntology.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/removeOntology.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/listLoadedOntologies.groovy')
 
     context.setAttribute('port', port)
     context.setAttribute('version', '0.2')
@@ -89,73 +114,103 @@ def startServer(def ontologyFilePath, def port) {
     } catch (Exception e) {
         println "FATAL ERROR during Jetty server start: ${e.getMessage()}"
         e.printStackTrace()
-        System.exit(1) // Exit if server fails to start
+        System.exit(1)
     }
 
-    def manager
-    def tryAgain = false
+    // Initialize shared context attributes
+    context.getServletContext().setAttribute("updateTasks", new ConcurrentHashMap())
 
-    // Extract filename to use as ID
-    String ontId = ontologyFilePath.tokenize('/')[-1]
-    println "Extracted ontology ID: ${ontId} from path: ${ontologyFilePath}"
+    // Create the multi-ontology RequestManager
+    def manager = new RequestManager()
 
-    // Explicitly check if the ontology file exists from Groovy's perspective
-    def ontFile = new File(ontologyFilePath)
-    if (!ontFile.exists()) {
-         println "ERROR from Groovy: Ontology file does not exist at path: ${ontologyFilePath} (absolute: ${ontFile.absolutePath})"
-         // Decide how to handle this - maybe don't start RequestManager?
-         // For now, we'll let RequestManager try and fail.
-    } else {
-         println "Verified from Groovy: Ontology file exists at path: ${ontologyFilePath}"
-    }
+    def ontologyFile = new File(ontologyArg)
 
-
-    println "Attempting to load ontology via RequestManager for ID: ${ontId} using path: ${ontologyFilePath}"
-    try {
-        manager = RequestManager.create(ontId, ontologyFilePath)
-        if (manager == null) {
-            println("Initial RequestManager creation returned null for ${ontId}. Retrying...")
-            tryAgain = true
+    if (ontologyFile.isDirectory()) {
+        // Multi-ontology mode: load all .owl files from the directory
+        println "Multi-ontology mode: scanning directory ${ontologyFile.absolutePath}"
+        def owlFiles = ontologyFile.listFiles({ dir, name -> name.endsWith('.owl') } as FilenameFilter)
+        if (owlFiles == null || owlFiles.length == 0) {
+            println "WARNING: No .owl files found in ${ontologyFile.absolutePath}"
         } else {
-             println("Initial RequestManager creation successful for ${ontId}.")
-             // Print the string representation of the manager or some status?
-             // println "Manager details: ${manager.toString()}" // If toString() is useful
-        }
-    } catch (Exception e) {
-         println("Exception during initial RequestManager.create for ${ontId}: ${e.getMessage()}")
-         // Print the stack trace to stderr for better debugging in Python logs
-         e.printStackTrace(System.err)
-         tryAgain = true // Attempt retry even on exception
-    }
-
-    if (tryAgain) {
-        println("Retrying RequestManager creation for ${ontId}...")
-        try {
-            manager = RequestManager.create(ontId, ontologyFilePath)
-            if (manager == null){
-                println("Retry RequestManager creation returned null for ${ontId}. Ontology may be unloadable.")
-            } else {
-                 println("Retry RequestManager creation successful for ${ontId}.")
-                 // println "Manager details (retry): ${manager.toString()}"
+            owlFiles.each { owlFile ->
+                def ontId = owlFile.name.replaceAll(/\.owl$/, '').replaceAll(/_active$/, '')
+                try {
+                    println "Loading ontology: ${ontId} from ${owlFile.absolutePath}"
+                    manager.loadOntology(ontId, owlFile.absolutePath)
+                } catch (Exception e) {
+                    println "ERROR loading ${ontId}: ${e.getMessage()}"
+                    e.printStackTrace()
+                }
             }
+            // Classify all loaded ontologies in parallel
+            println "Classifying all loaded ontologies..."
+            manager.createAllReasoners()
+        }
+    } else if (ontologyArg.endsWith('.json')) {
+        // Multi-ontology mode: JSON config file
+        println "Multi-ontology mode: reading config from ${ontologyArg}"
+        def config = new JsonSlurper().parse(new File(ontologyArg))
+        config.each { entry ->
+            def ontId = entry.id
+            def ontPath = entry.path
+            def reasonerType = entry.reasoner ?: "elk"
+            try {
+                println "Loading ontology: ${ontId} from ${ontPath} with reasoner: ${reasonerType}"
+                manager.loadOntology(ontId, ontPath, reasonerType)
+            } catch (Exception e) {
+                println "ERROR loading ${ontId}: ${e.getMessage()}"
+                e.printStackTrace()
+            }
+        }
+        println "Classifying all loaded ontologies..."
+        manager.createAllReasoners()
+    } else {
+        // Single ontology mode (backward compatibility)
+        println "Single ontology mode: ${ontologyArg}"
+        String ontId = System.getenv("ONTOLOGY_ID")
+        if (!ontId) {
+            // Derive from filename
+            ontId = ontologyFile.name.replaceAll(/\.owl$/, '').replaceAll(/_active$/, '')
+        }
+        String reasonerType = System.getenv("REASONER_TYPE") ?: "elk"
+
+        if (!ontologyFile.exists()) {
+            println "ERROR: Ontology file does not exist at path: ${ontologyArg} (absolute: ${ontologyFile.absolutePath})"
+        } else {
+            println "Verified: Ontology file exists at path: ${ontologyArg}"
+        }
+
+        println "Loading ontology: ${ontId} from ${ontologyArg} with reasoner: ${reasonerType}"
+        try {
+            manager.loadOntology(ontId, ontologyArg, reasonerType)
+            manager.createReasoner(ontId)
+            println "Successfully loaded and classified ${ontId}"
         } catch (Exception e) {
-             println("Exception during retry RequestManager.create for ${ontId}: ${e.getMessage()}")
-             e.printStackTrace(System.err)
+            println "ERROR loading ${ontId}: ${e.getMessage()}"
+            e.printStackTrace()
+            // Retry once
+            println "Retrying..."
+            try {
+                manager.loadOntology(ontId, ontologyArg, reasonerType)
+                manager.createReasoner(ontId)
+                println "Retry successful for ${ontId}"
+            } catch (Exception e2) {
+                println "Retry also failed for ${ontId}: ${e2.getMessage()}"
+                e2.printStackTrace()
+            }
         }
     }
 
-    if (manager != null) {
-        context.setAttribute("manager", manager)
-        println("RequestManager set in context for ${ontId}.")
+    def loadedCount = manager.listOntologies().size()
+    if (loadedCount > 0) {
+        context.getServletContext().setAttribute("manager", manager)
+        println "RequestManager set in context with ${loadedCount} ontologies."
     } else {
-        println("ERROR: Failed to create or set RequestManager in context for ${ontId}. API calls relying on it will fail.")
-        // Consider stopping the server if the manager is essential? Or let it run for health checks?
-        // server.stop() // Example: Stop server if manager fails
-        // System.exit(1)
+        println "ERROR: No ontologies loaded. API calls will fail."
+        // Still set the empty manager so servlets don't NPE
+        context.getServletContext().setAttribute("manager", manager)
     }
 
-    // Keep the script running while the server is active.
-    // server.join() // Don't join here, let the Python parent manage the process lifetime
     println "Ontology loading sequence complete. Jetty server is running."
 }
 
@@ -164,13 +219,11 @@ def startServer(def ontologyFilePath, def port) {
 println "--- Executable script part started ---"
 
 if (args.length < 1) {
-    System.err.println("FATAL ERROR: Ontology file path argument missing.")
-    System.exit(1) // Exit if no ontology path is provided
+    System.err.println("FATAL ERROR: Ontology file/directory path argument missing.")
+    System.exit(1)
 }
 def ontologyArg = args[0]
 println "OntologyServer.groovy received argument: ${ontologyArg} (Type: ${ontologyArg.getClass().getName()})"
-
-// Removed blocking System.in read
 
 println "Proceeding to start server with ontology: ${ontologyArg}"
 try {
@@ -178,9 +231,8 @@ try {
 } catch (Exception e) {
     println("FATAL ERROR during startServer call: ${e.getMessage()}")
     e.printStackTrace(System.err)
-    System.exit(1) // Exit if server startup fails critically
+    System.exit(1)
 }
 
 println "OntologyServer.groovy script main execution finished. Server should be running in background threads."
 // The script itself finishes, but the Jetty server thread keeps the process alive.
-

@@ -198,6 +198,7 @@ header {
   margin-bottom: 10px;
   max-height: 400px;
   overflow-y: auto;
+  overflow-x: auto;
 }
 
 .tree ul {
@@ -212,8 +213,6 @@ header {
 .tree li {
   margin: 5px 0;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .tree li.active > a {
@@ -468,4 +467,25 @@ textarea.search-input {
   padding: 15px;
   border-radius: 4px;
   margin-bottom: 20px;
+}
+
+/* OWL axiom highlighting styles */
+.owl-property {
+  color: #0066cc;
+  font-weight: bold;
+}
+
+.owl-quantifier {
+  color: #cc6600;
+  font-weight: bold;
+  font-style: italic;
+}
+
+.owl-operator {
+  color: #cc0066;
+  font-weight: bold;
+}
+
+.owl-class {
+  color: #006600;
 }

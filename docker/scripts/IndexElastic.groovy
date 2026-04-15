@@ -66,6 +66,8 @@ ontologyIndexName = args[3]
 owlClassIndexName = args[4]
 fileName = args[5]
 skip_embbedding = args[6]
+// args[7] (optional): "True" means skip deleteOntologyData (writing to a pre-created fresh index)
+freshIndex = (args.length > 7 && args[7] == "True")
 
 esUrls = new ArrayList<URL>();
 hosts = new HttpHost[urls.length];
@@ -293,8 +295,10 @@ void indexOntology(String fileName, def data) {
 	omap.description = StringEscapeUtils.escapeJson(description) // Use escapeJson for JSON context
     }
 
-    // Delete ontology data
-    deleteOntologyData(acronym)
+    // Delete ontology data only when not writing into a fresh index (freshIndex=true means index was just created)
+    if (!freshIndex) {
+        deleteOntologyData(acronym)
+    }
 
     index(ontologyIndexName, omap)
 

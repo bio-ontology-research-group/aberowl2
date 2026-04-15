@@ -3,6 +3,10 @@ import os
 import signal
 import logging
 import time
+import urllib.request
+import urllib.error
+import uuid
+
 import gevent # Make sure gevent is used for non-blocking IO
 from gevent.subprocess import Popen, PIPE
 
@@ -23,6 +27,9 @@ class OntologyServerManager:
         signal.signal(signal.SIGQUIT, self.stop_subprocesses)
 
         self.ontology = ontology
+        self.secret_key_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.aberowl_secret_key')
+        self.register = os.getenv('ABEROWL_REGISTER', 'false').lower() in ('true', '1', 't')
+        self.central_server_url = os.getenv('ABEROWL_CENTRAL_URL')
         # Check path existence *inside* the run method, after Popen is setup,
         # as the path is relative to the CWD of the Popen call.
         # However, the path passed to __init__ is absolute within the container /data/...
@@ -58,6 +65,64 @@ class OntologyServerManager:
         logging.info("Ontology server manager stopped.")
         # Use os._exit for immediate exit within signal handler if needed
         os._exit(0) # Use os._exit in signal handler to avoid potential issues with exit()
+
+    def _register_with_central_server(self):
+        if not self.register:
+            logging.info("Registration is disabled (ABEROWL_REGISTER is not 'true'). Skipping.")
+            return
+
+        logging.info("Attempting to register with central server...")
+
+        if not self.central_server_url:
+            logging.error("Registration is enabled, but ABEROWL_CENTRAL_URL is not set.")
+            return
+
+        public_url = os.getenv('ABEROWL_PUBLIC_URL')
+        if not public_url:
+            logging.error("Registration is enabled, but ABEROWL_PUBLIC_URL is not set.")
+            return
+
+        # Read secret key if it exists
+        secret_key = None
+        if os.path.exists(self.secret_key_path):
+            with open(self.secret_key_path, 'r') as f:
+                secret_key = f.read().strip()
+                logging.info("Found existing secret key for registration.")
+
+        # Use ONTOLOGY_ID env var if set, otherwise derive from path
+        ontology_id = os.getenv('ONTOLOGY_ID') or os.path.splitext(os.path.basename(self.ontology))[0].replace('_active', '')
+        payload = {
+            'ontology': ontology_id,
+            'url': public_url,
+            'secret_key': secret_key,
+        }
+        
+        registration_url = f"{self.central_server_url.rstrip('/')}/register"
+        logging.info(f"Registration endpoint: {registration_url}")
+        # Don't log the secret key
+        logging.info(f"Registration payload: {json.dumps({k: v for k, v in payload.items() if k != 'secret_key'})}")
+
+        try:
+            data = json.dumps(payload).encode('utf-8')
+            headers = {'Content-Type': 'application/json'}
+            req = urllib.request.Request(registration_url, data=data, headers=headers)
+            
+            with urllib.request.urlopen(req, timeout=10) as response:
+                if 200 <= response.status < 300:
+                    response_data = json.loads(response.read().decode())
+                    new_secret_key = response_data.get('secret_key')
+                    if new_secret_key:
+                        with open(self.secret_key_path, 'w') as f:
+                            f.write(new_secret_key)
+                        logging.info("Successfully registered and saved new secret key.")
+                    else:
+                        logging.info(f"Successfully updated registration with central server at {registration_url}")
+                else:
+                    logging.error(f"Failed to register with central server. Status: {response.status}, Body: {response.read().decode()}")
+        except urllib.error.URLError as e:
+            logging.error(f"Error registering with central server at {registration_url}: {e}")
+        except Exception as e:
+            logging.error(f"An unexpected error occurred during registration: {e}", exc_info=True)
 
     def run(self):
         """Starts the API server for a single ontology."""
@@ -135,8 +200,9 @@ class OntologyServerManager:
                         if 'Finished loading' in line:
                             # ... (parsing logic)
                              logging.info(f"Detected loading finished message: {line}")
-                        elif 'Server started successfully' in line:
-                             logging.info("Detected Jetty server started message.")
+                        elif 'Ontology loading sequence complete. Jetty server is running.' in line:
+                             logging.info("Detected server ready message. Triggering registration.")
+                             self._register_with_central_server()
                         elif 'Initial RequestManager creation successful' in line:
                               logging.info("Detected RequestManager created message.")
 

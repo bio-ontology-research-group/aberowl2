@@ -1,15 +1,7 @@
-// Run a query and ting
+// Run a DL query against a specific ontology
 
 import groovy.json.*
 import src.util.Util
-import groovyx.gpars.GParsPool
-import src.AberowlManchesterOwlParser
-import src.NewShortFormProvider
-import src.QueryParser
-import org.semanticweb.owlapi.expression.ShortFormEntityChecker
-import org.semanticweb.owlapi.util.BidirectionalShortFormProviderAdapter
-import org.semanticweb.owlapi.model.OWLClassExpression
-import java.util.function.Supplier
 
 if(!application) {
     application = request.getApplication(true)
@@ -22,61 +14,56 @@ def type = params.type
 def direct = params.direct
 def labels = params.labels
 def axioms = params.axioms
-def ontology = params.ontology
-def manager = application.manager
+def ontologyId = params.ontologyId ?: params.ontology
+def shortform = params.shortform
+def manager = application.getAttribute("manager")
 
 if (type == null) {
     type = "all"
 }
 
-direct = true; //(direct.equals("true")) ? true : false;
-labels = (labels.equals("true")) ? true : false;
-axioms = (axioms.equals("true")) ? true : false;
+direct = (direct != null && direct.equals("true")) ? true : false;
+labels = (labels != null && labels.equals("true")) ? true : false;
+axioms = (axioms != null && axioms.equals("true")) ? true : false;
 
 response.contentType = 'application/json'
+
+if (manager == null) {
+    response.setStatus(503)
+    print new JsonBuilder([ 'error': true, 'message': 'Manager not available.' ]).toString()
+    return
+}
+
+// Resolve ontologyId: use param, fall back to default
+if (!ontologyId && manager.ontologies.size() == 1) {
+    ontologyId = manager.getDefaultOntologyId()
+} else if (!ontologyId) {
+    response.setStatus(400)
+    print new JsonBuilder([ 'error': true, 'message': 'ontologyId parameter required (multiple ontologies loaded).' ]).toString()
+    return
+}
+
+if (!manager.hasOntology(ontologyId)) {
+    response.setStatus(404)
+    print new JsonBuilder([ 'error': true, 'message': "Ontology not found: ${ontologyId}" ]).toString()
+    return
+}
 
 try {
     def results = new HashMap()
     def start = System.currentTimeMillis()
-    def out
-    if (query.startsWith("http") || query.startsWith("<")) {
-        out = manager.runQuery(query, type, direct, labels, axioms)
-    } else {
-        def ont = manager.getOntology()
-        def sfp = new NewShortFormProvider(ont.getImportsClosure())
-        
-        // Use our enhanced QueryParser instead of direct Manchester syntax parser
-        def queryParser = new QueryParser(ont, sfp)
-        
-        try {
-            // Use our enhanced parse method that handles entity names with spaces
-            def expression = queryParser.parse(query, labels)
-            out = manager.runQuery(expression, type, direct, labels, axioms)
-        } catch (Exception e) {
-            // If our parser fails, try the original method as fallback
-            def bidiSfp = new BidirectionalShortFormProviderAdapter(ont.getImportsClosure(), sfp)
-            def checker = new ShortFormEntityChecker(bidiSfp)
-            def df = ont.getOWLOntologyManager().getOWLDataFactory()
-            def configSupplier = { -> ont.getOWLOntologyManager().getOntologyLoaderConfiguration() }
-            def parser = new org.semanticweb.owlapi.manchestersyntax.parser.ManchesterOWLSyntaxParserImpl(configSupplier, df)
-            parser.setStringToParse(query)
-            parser.setOWLEntityChecker(checker)
-            def expression = parser.parseClassExpression()
-            out = manager.runQuery(expression, type, direct, labels, axioms)
-        }
-    }
+    def out = manager.runQuery(ontologyId, query, type, direct, labels, axioms, shortform)
     def end = System.currentTimeMillis()
     results.put('time', (end - start))
     results.put('result', out)
     print new JsonBuilder(results).toString()
 } catch(java.lang.IllegalArgumentException e) {
     response.setStatus(400)
-    print new JsonBuilder([ 'error': true, 'message': 'Ontology not found.' ]).toString() 
+    print new JsonBuilder([ 'error': true, 'message': 'Ontology not found.' ]).toString()
 } catch(org.semanticweb.owlapi.manchestersyntax.parser.ManchesterOWLSyntaxParserException e) {
     response.setStatus(400)
-    print new JsonBuilder([ 'error': true, 'message': 'Query parsing error: ' + e.getMessage() ]).toString() 
+    print new JsonBuilder([ 'error': true, 'message': 'Query parsing error: ' + e.getMessage() ]).toString()
 } catch(Exception e) {
     response.setStatus(400)
-    print new JsonBuilder([ 'error': true, 'message': 'Generic query error: ' + e.getMessage() ]).toString() 
+    print new JsonBuilder([ 'error': true, 'message': 'Generic query error: ' + e.getMessage() ]).toString()
 }
-

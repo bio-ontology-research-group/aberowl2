@@ -9,3 +9,6 @@ camel-ai
 fastapi
 pillow
 unstructured
+aiohttp
+redis
+websockets

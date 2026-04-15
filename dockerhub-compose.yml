@@ -1,4 +1,25 @@
 services:
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  central-server:
+    build: ./central_server
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+    environment:
+      - MCP_SERVER_ADDRESS=mcp://0.0.0.0:8001
+    depends_on:
+      - redis
+      - elasticsearch
+    volumes:
+      - ./central_server/app/servers.json:/app/servers.json
+      - ./central_server/app/catalogue_config.json:/app/catalogue_config.json
+    restart: unless-stopped
+
   virtuoso:
     image: ferzcam/aberowl-virtuoso:latest
     environment:
@@ -80,4 +101,5 @@ volumes:
   virtuoso_data:
   virtuoso_logs:
   elasticsearch_data:
+  redis_data:
 
