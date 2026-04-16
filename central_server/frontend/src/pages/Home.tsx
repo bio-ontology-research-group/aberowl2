@@ -33,6 +33,12 @@ export default function Home() {
         (o.title || '').toLowerCase().includes(filter.toLowerCase()))
     : ontologies
   ).slice().sort((a, b) => {
+    // Offline ontologies always sort after online ones, regardless of
+    // the primary sort column or direction.
+    const aOffline = a.status === 'online' ? 0 : 1
+    const bOffline = b.status === 'online' ? 0 : 1
+    if (aOffline !== bOffline) return aOffline - bOffline
+
     let cmp = 0
     if (sortCol === 'id') cmp = a.id.localeCompare(b.id)
     else if (sortCol === 'title') cmp = (a.title || '').localeCompare(b.title || '')
