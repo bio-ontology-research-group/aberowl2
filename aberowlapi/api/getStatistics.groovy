@@ -1,4 +1,5 @@
 import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
 import src.RequestManager
 import org.semanticweb.owlapi.model.OWLOntology
 import org.semanticweb.owlapi.model.AxiomType
@@ -152,6 +153,32 @@ for (OWLAnnotation annotation : annotations) {
             creators.add(((OWLLiteral) value).getLiteral())
         }
     }
+}
+
+// Fallback to companion metadata.json (produced by deploy/fetch_metadata.py)
+// Many BioPortal ontologies — and some OBO ones — have no dc:title /
+// rdfs:label / dcterms:title annotation on the owl:Ontology element, so
+// the loop above leaves title/description/homepage/etc. empty. Sibling
+// metadata.json sourced from the OBO Foundry registry or BioPortal API
+// provides those fields.
+try {
+    def ontPath = manager.ontologyPaths?.get(ontologyId)
+    if (ontPath) {
+        def metaFile = new File(new File(ontPath).getParent(), "metadata.json")
+        if (metaFile.exists()) {
+            def meta = new JsonSlurper().parse(metaFile)
+            if (!title && meta.title) title = meta.title
+            if (!description && meta.description) description = meta.description
+            if (!homePage && meta.home_page) homePage = meta.home_page
+            if (!documentation && meta.documentation) documentation = meta.documentation
+            if (!license && meta.license) license = meta.license
+            if (!publication && meta.publication) publication = meta.publication
+            if (!versionIRI && meta.version_iri) versionIRI = meta.version_iri
+            if (creators.isEmpty() && meta.creators) creators.addAll(meta.creators)
+        }
+    }
+} catch (Exception ignored) {
+    // Non-fatal: fall back to whatever the OWL file gave us.
 }
 
 def classCount = ontology.getClassesInSignature(true).size()

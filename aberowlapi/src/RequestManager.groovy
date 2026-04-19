@@ -158,10 +158,15 @@ public class RequestManager {
         IRI originalOntologyIRI = originalOntology.getOntologyID().getOntologyIRI().orNull()
         Set<OWLAnnotation> originalAnnotations = originalOntology.getAnnotations().collect()
 
-        // Merge imports closure into a single ontology
+        // Merge imports closure into a single ontology.
+        // The merged ontology must use a SYNTHETIC IRI rather than the
+        // original's, because originalOntology is already registered in
+        // lManager at its own IRI — creating a second ontology at that
+        // same IRI in the same manager raises OWLOntologyAlreadyExists.
         OWLOntologyImportsClosureSetProvider provider = new OWLOntologyImportsClosureSetProvider(lManager, originalOntology)
         OWLOntologyMerger merger = new OWLOntologyMerger(provider, false)
-        def mergedOntology = merger.createMergedOntology(lManager, originalOntologyIRI ?: IRI.create("http://merged.owl"))
+        IRI mergedIRI = IRI.create("http://aberowl.local/merged/${ontId}")
+        def mergedOntology = merger.createMergedOntology(lManager, mergedIRI)
 
         originalAnnotations.each { annotation ->
             lManager.applyChange(new AddOntologyAnnotation(mergedOntology, annotation))

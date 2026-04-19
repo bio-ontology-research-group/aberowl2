@@ -193,6 +193,131 @@ metadata (class count, statistics) from each worker.
 2. Restart the worker: `docker restart aberowl-worker-N`
 3. Remove registration: `docker exec deploy-redis-1 redis-cli hdel registered_servers ONT_ID`
 
+## Bulk Onboarding (Full BioPortal + OBO Foundry)
+
+End-to-end workflow for pulling the complete OBO Foundry and BioPortal
+catalogs onto a fresh deployment. All scripts are in `deploy/` and
+expect to run on `onto`.
+
+### 1. Download OBO Foundry + BioPortal
+
+```bash
+# OBO Foundry (uses central_server/config/beta_ontologies.json list)
+uv run deploy/download_ontologies.py /data/aberowl/ontologies
+
+# BioPortal: dynamic catalog, skips OBO overlap, --min-size rejects
+# tiny stubs/error pages. curl --compressed handles gzip-served files.
+uv run deploy/download_bioportal.py /data/aberowl/ontologies \
+    --workers 6 --min-size 20000 \
+    --log /tmp/bp.log --results-json /tmp/bp_results.json
+```
+
+**Known failure modes surfaced by `--results-json`:**
+- `404 no_latest_submission` (~65 entries): abandoned BP submissions;
+  nothing to download. Skip.
+- `403 license_restricted` (~11): MEDDRA, SNOMEDCT, ICD10, ICNP,
+  ICPC2P, HERO, MDDB, NDDF, NDFRT, RCD, WHO-ART. Requires accepting
+  each ontology's license agreement on the BioPortal account page
+  (bioontology.org → per-ontology "request access"). Re-run the
+  downloader after approval.
+
+### 2. Repair malformed files (REQUIRED before planning)
+
+BioPortal occasionally returns zip archives named `.owl`, or gzip
+without a proper `Content-Encoding: gzip` header. Detect and repair
+BEFORE the bin-packer measures sizes — otherwise a 12MB zip gets
+placed on a low-RAM worker that later OOMs when the 253MB extracted
+OWL tries to load.
+
+```bash
+uv run deploy/fix_ontology_files.py /data/aberowl/ontologies
+```
+
+The script is idempotent — plain XML/text files are left alone. Files
+with gzip magic are gunzipped in-place; zip archives are replaced by
+their largest `.owl`/`.rdf`/`.ttl`/`.obo` member.
+
+### 3. Plan and launch workers
+
+```bash
+# Inventory on-disk ontologies
+find /data/aberowl/ontologies -maxdepth 2 -name "*.owl" -printf "%s %p\n" \
+    > /tmp/ont_sizes.txt
+
+# Bin-pack by size into worker configs (respects already-assigned
+# ontologies in existing worker_*_config.json)
+uv run deploy/plan_workers.py \
+    --sizes /tmp/ont_sizes.txt \
+    --existing /data/aberowl/ontologies \
+    --out /data/aberowl/ontologies \
+    --start 15
+
+# Launch. Idempotent; --recreate forces stop+rm before launch.
+uv run deploy/launch_workers.py \
+    --plan /data/aberowl/ontologies/worker_plan.json \
+    --env deploy/.env \
+    --port-start 9015
+```
+
+**Memory sizing — critical gotchas:**
+
+- `OWLOntologyMerger` (inside `RequestManager.loadOntology`) keeps the
+  original ontology AND the merged-imports-closure copy in memory at
+  the same time. Peak heap during load is ~2× the "parsed" size, which
+  itself can be 8-10× the raw OWL file size. Estimate: **40-50× the
+  file size for peak load heap** on ontologies with heavy axioms.
+- NCBITaxon (1.8 GB raw OWL) needs ~96 GB container / -Xmx77g to make
+  it through load+merge+classify. PR (1.4 GB) needs ~24 GB.
+- `launch_workers.py` sets `-Xmx = ram_gb - max(4, ram_gb/5)` — a
+  naive `-Xmx = ram - 2` gets SIGKILL'd by the kernel (not docker's
+  OOM-killer) because JVM non-heap (metaspace, JIT, direct buffers,
+  thread stacks) plus kernel page cache exceed the cgroup limit.
+- When a worker hits `java.lang.OutOfMemoryError` during load, bump
+  its `ram_gb` in `worker_plan.json` and relaunch with `--recreate`.
+
+### 4. Register with the central server
+
+```bash
+# Rate-limited (server caps at 120/min; use 100 to be safe).
+# --skip-existing avoids secret-key collisions on re-runs.
+uv run deploy/register_workers.py \
+    --plan /data/aberowl/ontologies/worker_plan.json \
+    --central http://localhost:8000 \
+    --rate-per-min 100 --skip-existing
+```
+
+### 5. Fetch display metadata
+
+Many BioPortal ontologies have a bare `<owl:Ontology>` element with no
+`dc:title`/`rdfs:label`. `getStatistics.groovy` reads the sibling
+`metadata.json` (written by this step) as fallback, so the frontend
+shows real names.
+
+```bash
+uv run deploy/fetch_metadata.py /data/aberowl/ontologies --workers 8
+```
+
+Each ontology directory gets a `metadata.json` with `title`,
+`description`, `home_page`, `documentation`, `license`, `creators`,
+etc. OBO Foundry ontologies are resolved against
+`purl.obolibrary.org/meta/ontologies.jsonld`; BioPortal ones via
+`/ontologies/{acronym}` + `/latest_submission`. The central server's
+60-second periodic poll picks up the new metadata automatically — no
+worker restart required.
+
+### Full procedure, in order
+
+```bash
+uv run deploy/download_ontologies.py /data/aberowl/ontologies
+uv run deploy/download_bioportal.py  /data/aberowl/ontologies --min-size 20000
+uv run deploy/fix_ontology_files.py  /data/aberowl/ontologies   # REQUIRED before plan
+find /data/aberowl/ontologies -maxdepth 2 -name "*.owl" -printf "%s %p\n" > /tmp/s.txt
+uv run deploy/plan_workers.py    --sizes /tmp/s.txt --existing /data/aberowl/ontologies --out /data/aberowl/ontologies --start 15
+uv run deploy/launch_workers.py  --plan  /data/aberowl/ontologies/worker_plan.json --env deploy/.env --port-start 9015
+uv run deploy/register_workers.py --plan /data/aberowl/ontologies/worker_plan.json --central http://localhost:8000 --skip-existing
+uv run deploy/fetch_metadata.py   /data/aberowl/ontologies
+```
+
 ## Nginx Configuration
 
 ### borg-server (/etc/nginx/sites-available/beta.aber-owl.net)
