@@ -81,7 +81,7 @@ ABEROWL_SECRET_KEY=$(openssl rand -hex 32)
 VIRTUOSO_DBA_PASSWORD=$(openssl rand -hex 16)
 ONTOLOGIES_PATH=/data/aberowl/ontologies
 CENTRAL_PORT=8000
-ENABLE_MCP=false
+ENABLE_MCP=true
 EOF
     echo "Created deploy/.env with random secrets"
 fi

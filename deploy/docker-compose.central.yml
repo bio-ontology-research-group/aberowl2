@@ -71,7 +71,10 @@ services:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - ONTOLOGIES_HOST_PATH=${ONTOLOGIES_PATH:-/data/aberowl/ontologies}
       - ABEROWL_REPO_PATH=/app
-      - ENABLE_MCP=${ENABLE_MCP:-false}
+      - ENABLE_MCP=${ENABLE_MCP:-true}
+      - MCP_ONTOLOGY_PORT=${MCP_ONTOLOGY_PORT:-8766}
+      - MCP_SPARQL_PORT=${MCP_SPARQL_PORT:-8767}
+      - CENTRAL_SERVER_URL=${CENTRAL_SERVER_URL:-http://localhost:8000}
       - SOURCE_SYNC_INTERVAL_SECONDS=86400
       - UPDATE_CHECK_INTERVAL_SECONDS=86400
       - PUBLIC_RATE_LIMIT=120
@@ -83,6 +86,8 @@ services:
       - ../central_server/app/static/dist:/code/app/static/dist:ro
     ports:
       - "${CENTRAL_PORT:-8000}:8000"
+      - "${MCP_ONTOLOGY_PORT:-8766}:8766"
+      - "${MCP_SPARQL_PORT:-8767}:8767"
     depends_on:
       - redis
       - elasticsearch

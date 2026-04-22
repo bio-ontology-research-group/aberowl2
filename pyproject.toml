@@ -9,7 +9,7 @@ dependencies = [
     "aiohttp",
     "python-multipart",
     "redis",
-    "websockets",
+    "mcp",
     "pyyaml",
     "aiofiles",
 ]
@@ -22,7 +22,6 @@ test = [
     "requests",
     "httpx",
     "fakeredis",
-    "mcp",
     "slowapi",
 ]
 

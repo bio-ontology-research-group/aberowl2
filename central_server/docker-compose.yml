@@ -1,11 +1,17 @@
 services:
   central-server:
-    build: .
+    build:
+      context: ..
+      dockerfile: central_server/Dockerfile
     ports:
-      - "${CENTRAL_SERVER_PORT:-8000}:80"
-      - "8765:8765"
+      - "${CENTRAL_SERVER_PORT:-8000}:8000"
+      - "${MCP_ONTOLOGY_PORT:-8766}:8766"
+      - "${MCP_SPARQL_PORT:-8767}:8767"
     environment:
-      - MCP_SERVER_ADDRESS=${MCP_SERVER_ADDRESS}
+      - ENABLE_MCP=${ENABLE_MCP:-true}
+      - MCP_ONTOLOGY_PORT=${MCP_ONTOLOGY_PORT:-8766}
+      - MCP_SPARQL_PORT=${MCP_SPARQL_PORT:-8767}
+      - CENTRAL_SERVER_URL=${CENTRAL_SERVER_URL:-http://localhost:8000}
       - VIRTUOSO_URL=http://virtuoso:8890
       - VIRTUOSO_DBA_PASSWORD=${VIRTUOSO_DBA_PASSWORD:-dba}
       - CENTRAL_ES_URL=http://elasticsearch:9200
@@ -17,7 +23,8 @@ services:
       - UPDATE_CHECK_INTERVAL_SECONDS=${UPDATE_CHECK_INTERVAL_SECONDS:-86400}
     volumes:
       - ./app:/code/app
-      - ./mcp_server.py:/code/mcp_server.py
+      - ./mcp_ontology_server.py:/code/mcp_ontology_server.py
+      - ./mcp_sparql_server.py:/code/mcp_sparql_server.py
       - ./config:/code/config
       - ${ONTOLOGIES_HOST_PATH:-./ontologies}:/data/ontologies
       - /var/run/docker.sock:/var/run/docker.sock

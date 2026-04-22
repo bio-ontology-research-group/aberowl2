@@ -36,11 +36,6 @@ from app.intake import updater as update_pipeline
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Enable detailed logging for the websockets library to debug connection issues
-websockets_logger = logging.getLogger("websockets.server")
-websockets_logger.setLevel(logging.DEBUG)
-websockets_logger.addHandler(logging.StreamHandler(sys.stdout))
-
 SERVERS_FILE_PATH = "app/servers.json"
 CATALOGUE_CONFIG_PATH = "app/catalogue_config.json"
 MANUAL_ONTOLOGIES_PATH = "config/manual_ontologies.json"
