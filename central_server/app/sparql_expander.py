@@ -50,7 +50,7 @@ async def _run_dl_query(
         "query": dl_query,
         "type": query_type,
         "labels": "false",
-        "ontologyId": ontology_id,
+        "ontologyId": ontology_id.lower(),
     }
     try:
         async with aiohttp.ClientSession() as session:
