@@ -5,10 +5,15 @@ services:
       dockerfile: central_server/Dockerfile
     ports:
       - "${CENTRAL_SERVER_PORT:-8000}:8000"
-      - "${MCP_ONTOLOGY_PORT:-8766}:8766"
-      - "${MCP_SPARQL_PORT:-8767}:8767"
+      # MCP ports default to loopback. Override MCP_BIND_HOST to expose
+      # to a specific interface (e.g. an internal network IP) so an
+      # external nginx can reach them. Never bind to 0.0.0.0 in prod.
+      - "${MCP_BIND_HOST:-127.0.0.1}:${MCP_ONTOLOGY_PORT:-8766}:8766"
+      - "${MCP_BIND_HOST:-127.0.0.1}:${MCP_SPARQL_PORT:-8767}:8767"
     environment:
       - ENABLE_MCP=${ENABLE_MCP:-true}
+      - ENABLE_MCP_ONTOLOGY=${ENABLE_MCP_ONTOLOGY:-true}
+      - ENABLE_MCP_SPARQL=${ENABLE_MCP_SPARQL:-false}
       - MCP_ONTOLOGY_PORT=${MCP_ONTOLOGY_PORT:-8766}
       - MCP_SPARQL_PORT=${MCP_SPARQL_PORT:-8767}
       - CENTRAL_SERVER_URL=${CENTRAL_SERVER_URL:-http://localhost:8000}

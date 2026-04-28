@@ -63,7 +63,37 @@ SPARQL_TOOLS = {
 }
 
 
-async def _call(session: ClientSession, tool: str, args: dict[str, Any]) -> CallOutcome:
+# Substrings that the MCP servers return when a call succeeds at the
+# transport level but produces no results. Treat as failure for fixtures
+# that are expected to hit, so we don't paper over silent regressions
+# (the original symptom: SPARQL expander lowercase bug returned 0 IRIs
+# but the test still passed).
+_EMPTY_MARKERS = (
+    "No results found",
+    "No results for DL query",
+    "No subclasses found",
+    "No superclasses found",
+    "No equivalent",
+    "No examples",
+    "Error:",
+)
+
+
+def _looks_empty(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return True
+    if stripped in ("[]", "{}", "null"):
+        return True
+    return any(stripped.startswith(m) for m in _EMPTY_MARKERS)
+
+
+async def _call(
+    session: ClientSession,
+    tool: str,
+    args: dict[str, Any],
+    expect_nonempty: bool = True,
+) -> CallOutcome:
     start = time.perf_counter()
     try:
         result = await session.call_tool(tool, args)
@@ -76,7 +106,11 @@ async def _call(session: ClientSession, tool: str, args: dict[str, Any]) -> Call
             first = content[0]
             first_text = getattr(first, "text", str(first))
         note = first_text[:120].replace("\n", " ")
-        return CallOutcome(tool, not is_error, elapsed, note)
+        ok = not is_error
+        if ok and expect_nonempty and _looks_empty(first_text):
+            ok = False
+            note = f"empty result: {note}"
+        return CallOutcome(tool, ok, elapsed, note)
     except Exception as e:
         elapsed = time.perf_counter() - start
         return CallOutcome(tool, False, elapsed, f"exception: {e}")

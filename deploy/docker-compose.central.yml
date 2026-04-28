@@ -72,6 +72,8 @@ services:
       - ONTOLOGIES_HOST_PATH=${ONTOLOGIES_PATH:-/data/aberowl/ontologies}
       - ABEROWL_REPO_PATH=/app
       - ENABLE_MCP=${ENABLE_MCP:-true}
+      - ENABLE_MCP_ONTOLOGY=${ENABLE_MCP_ONTOLOGY:-true}
+      - ENABLE_MCP_SPARQL=${ENABLE_MCP_SPARQL:-false}
       - MCP_ONTOLOGY_PORT=${MCP_ONTOLOGY_PORT:-8766}
       - MCP_SPARQL_PORT=${MCP_SPARQL_PORT:-8767}
       - CENTRAL_SERVER_URL=${CENTRAL_SERVER_URL:-http://localhost:8000}
@@ -86,8 +88,12 @@ services:
       - ../central_server/app/static/dist:/code/app/static/dist:ro
     ports:
       - "${CENTRAL_PORT:-8000}:8000"
-      - "${MCP_ONTOLOGY_PORT:-8766}:8766"
-      - "${MCP_SPARQL_PORT:-8767}:8767"
+      # MCP ports are NOT published to 0.0.0.0. Default binds to loopback;
+      # production sets MCP_BIND_HOST=10.67.24.207 (onto's internal IP) so
+      # the frontend nginx can reach them. Public internet must always go
+      # through the nginx route /aberowl-beta/mcp/{ontology,sparql}/.
+      - "${MCP_BIND_HOST:-127.0.0.1}:${MCP_ONTOLOGY_PORT:-8766}:8766"
+      - "${MCP_BIND_HOST:-127.0.0.1}:${MCP_SPARQL_PORT:-8767}:8767"
     depends_on:
       - redis
       - elasticsearch

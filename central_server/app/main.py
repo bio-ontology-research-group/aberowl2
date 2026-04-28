@@ -351,15 +351,28 @@ async def fetch_and_update_server_metadata(server: Dict[str, Any]):
 async def start_mcp_servers():
     """Start the MCP ontology and SPARQL servers as subprocesses if enabled."""
     global mcp_process
-    if not os.getenv("ENABLE_MCP", "").lower() in ("true", "1", "yes"):
+    def _truthy(name: str, default: str = "") -> bool:
+        return os.getenv(name, default).lower() in ("true", "1", "yes")
+
+    if not _truthy("ENABLE_MCP"):
         logger.info("MCP servers disabled (set ENABLE_MCP=true to enable)")
         return
 
-    # MCP servers are standalone scripts in the central_server directory
-    mcp_scripts = [
-        ("mcp_ontology_server.py", os.getenv("MCP_ONTOLOGY_PORT", "8766")),
-        ("mcp_sparql_server.py", os.getenv("MCP_SPARQL_PORT", "8767")),
-    ]
+    # Per-server toggles. Ontology MCP defaults on when ENABLE_MCP=true;
+    # SPARQL MCP defaults off until central Virtuoso is populated.
+    enable_ontology = _truthy("ENABLE_MCP_ONTOLOGY", "true")
+    enable_sparql = _truthy("ENABLE_MCP_SPARQL", "false")
+
+    mcp_scripts = []
+    if enable_ontology:
+        mcp_scripts.append(("mcp_ontology_server.py", os.getenv("MCP_ONTOLOGY_PORT", "8766")))
+    else:
+        logger.info("MCP ontology server disabled (ENABLE_MCP_ONTOLOGY=false)")
+    if enable_sparql:
+        mcp_scripts.append(("mcp_sparql_server.py", os.getenv("MCP_SPARQL_PORT", "8767")))
+    else:
+        logger.info("MCP SPARQL server disabled (ENABLE_MCP_SPARQL=false)")
+
     for script_name, port in mcp_scripts:
         script_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), script_name)
         if not os.path.exists(script_path):
