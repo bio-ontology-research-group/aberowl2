@@ -4,83 +4,113 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AberOWL 2 is a distributed ontology query system for biological/biomedical ontologies. Each ontology runs in its own Docker container stack (Virtuoso + Groovy API + Elasticsearch + Nginx + LLM). A central server acts as a registry and query aggregator across all instances.
+AberOWL 2 is a distributed ontology query system for biological/biomedical ontologies. A **central server** (Virtuoso + Elasticsearch + Redis + FastAPI) owns shared infrastructure and the registry. **Worker containers** (one Groovy/OWLAPI process per container) each host **one or many ontologies** in-memory and serve DL reasoning queries. Workers register themselves with the central server; the central server dispatches queries to the correct worker by `ontologyId`.
 
 ## Architecture
 
-**Per-ontology Docker stack** (docker-compose.yml):
-- **Virtuoso**: RDF/SPARQL store, loads OWL files
-- **ontology-api**: Groovy/OWLAPI-based reasoning engine (Jetty on port 8080), managed by Python (`docker/scripts/api_server.py`)
-- **Elasticsearch 7.x**: Full-text indexing of ontology terms
-- **indexer**: One-shot Groovy job that indexes terms into ES
-- **nginx**: Reverse proxy exposing everything on a single port (`/api/` → ontology-api, `/virtuoso/` → Virtuoso SPARQL, `/llm` → LLM service)
-- **llm**: FastAPI + CAMEL framework for natural language → DL query parsing (uses OpenRouter/DeepSeek)
-
-**Central server** (`central_server/`):
-- FastAPI app with Redis backend for server registry
-- Aggregates queries across registered ontology instances
-- MCP server (`central_server/mcp_server.py`) for LLM agent integration
+**Central server stack** (`central_server/docker-compose.yml`):
+- **FastAPI app** (`app/main.py`): registry, query aggregator, source-sync (OBO Foundry + BioPortal daily), update pipeline, catalogue API. Exposes port 8000.
+- **Virtuoso**: shared RDF/SPARQL store for all ontologies.
+- **Elasticsearch 7.x**: shared full-text index (indices `ontology_index` and `owl_class_index`). Boosted `dis_max` search replaces the old scatter-gather across workers.
+- **Redis**: ontology registry, task queue, rate-limit state.
+- **MCP servers**: `mcp_ontology_server.py` (port 8766, 6 tools) and `mcp_sparql_server.py` (port 8767, 3 tools). Built on the official `mcp` SDK, support stdio + streamable HTTP. Auto-spawned by `app/main.py` when `ENABLE_MCP=true`.
 - Run with: `cd central_server && docker compose up -d`
 
+**Worker stack** (`docker-compose.yml` at repo root):
+- **ontology-api**: Groovy Jetty server (`aberowlapi/OntologyServer.groovy`) managed by `aberowlapi/server_manager.py`. A single `RequestManager` holds a `ConcurrentHashMap<String, …>` of ontologies + reasoners keyed by `ontologyId` — one worker can host many ontologies.
+- **nginx**: reverse proxy (`/api/` → ontology-api).
+- Three startup modes, selected by the `ONTOLOGY_PATH` env var:
+  - **File** (`/data/foo.owl`) — single-ontology (backward compatible).
+  - **Directory** (`/data/`) — loads every `.owl` file in the directory; id derived from filename.
+  - **JSON config** (`/data/ontologies.json`) — explicit list of ontologies loaded by one worker: `[{"id": "GO", "path": "/data/go.owl", "reasoner": "elk"}, …]`.
+- The LLM service (natural-language → DL query) lives in `agents/query_parser.py` (FastAPI + CAMEL + OpenRouter). It is optional and not part of the worker by default.
+
+**Registration & dispatch**:
+- In multi-ontology mode each loaded ontology still gets its own registry entry in the central server, but all entries can share the same worker URL. The worker routes internally by `ontologyId`.
+- Workers expose runtime management endpoints: `addOntology.groovy`, `removeOntology.groovy`, `listLoadedOntologies.groovy`, `updateOntology.groovy` (hot-swap). These require an `ABEROWL_SECRET_KEY` set on the worker.
+
 **Key code layout**:
-- `aberowlapi/OntologyServer.groovy` — Jetty server hosting API servlets
-- `aberowlapi/api/*.groovy` — Individual API endpoints (runQuery, findRoot, reloadOntology, etc.)
-- `aberowlapi/src/*.groovy` — Core logic: RequestManager (ontology lifecycle), QueryEngine, QueryParser, ShortFormProviders
-- `aberowlapi/server_manager.py` — Python process that launches the Groovy server
-- `aberowlapi/virtuoso_manager.py` — Virtuoso SQL client
-- `agents/query_parser.py` — LLM query parser (FastAPI)
-- `central_server/app/main.py` — Central server FastAPI app
+- `aberowlapi/OntologyServer.groovy` — Jetty server hosting API servlets; picks single/multi/json mode from argv.
+- `aberowlapi/api/*.groovy` — Individual API servlets. Every servlet that needs reasoning accepts an `ontologyId` parameter (auto-resolves when only one ontology is loaded).
+- `aberowlapi/src/RequestManager.groovy` — Multi-ontology lifecycle: `loadOntology`, `createReasoner`, `createAllReasoners`, `reloadOntology`, `disposeOntology`, `hasOntology`.
+- `aberowlapi/src/ReasonerFactory.groovy` — ELK (default), StructuralReasoner, HermiT.
+- `aberowlapi/src/*.groovy` — QueryEngine, QueryParser, ShortFormProviders.
+- `aberowlapi/server_manager.py` — Python process launcher; handles optional self-registration with the central server (single-ontology mode).
+- `aberowlapi/virtuoso_manager.py` — Virtuoso SQL client.
+- `agents/query_parser.py` — LLM query parser (FastAPI).
+- `central_server/app/main.py` — FastAPI app: registry, source-sync, daily update check, server list, MCP launcher.
+- `central_server/app/intake/` — OBO Foundry, BioPortal, and manual-list intake; writes registry metadata only (does not spin up workers).
+- `central_server/app/sparql_expander.py` — Parses SPARQL for `VALUES OWL …` / `FILTER OWL(…)` patterns, resolves DL queries against workers, rewrites the SPARQL, executes it against central Virtuoso.
 
 ## Common Commands
 
-### Start an ontology instance (foreground)
+### Start the central server (once)
 ```bash
-./start_docker.sh data/ontology.owl 8080
+cd central_server && docker compose up -d
+# API:           http://localhost:8000
+# MCP ontology:  http://localhost:8766/mcp
+# MCP SPARQL:    http://localhost:8767/mcp
 ```
 
-### Start an ontology instance (detached, with options)
+### Start a single-ontology worker (backward-compatible)
 ```bash
-./reload_docker.sh -d data/ontology.owl 8080
-./reload_docker.sh --build -d data/ontology.owl 8080              # force rebuild
-./reload_docker.sh --register http://localhost:8000 -d data/go.owl 8080  # with central server registration
+./reload_docker.sh -d --ontology-id go --register http://localhost:8000 8081
+./reload_docker.sh --stop 8081
 ```
 
-### Stop an instance
+### Start a multi-ontology worker (one container, many ontologies)
+Create a JSON config (e.g. `data/ontologies.json`) listing the ontologies the worker should load:
+```json
+[
+  {"id": "pizza", "path": "/data/pizza.owl", "reasoner": "elk"},
+  {"id": "go",    "path": "/data/go.owl",    "reasoner": "elk"}
+]
+```
+Start the worker stack with `ONTOLOGY_PATH` pointing at the config:
 ```bash
-./reload_docker.sh --stop 8080
+ABEROWL_PUBLIC_URL=http://localhost:8081 \
+ABEROWL_REGISTER=false \
+ONTOLOGIES_HOST_PATH=./data \
+ONTOLOGY_PATH=/data/ontologies.json \
+NGINX_PORT=8081 \
+docker compose -p aberowl_multi up -d --build
+```
+Then register each ontology with the central server (all entries point at the same worker URL — the worker routes internally by `ontologyId`).
+
+### View worker logs
+```bash
+docker compose -p aberowl_multi logs -f ontology-api
 ```
 
-### View logs
-```bash
-docker compose -p aberowl_8080 logs -f ontology-api
-```
-
-### Local development (without Docker)
+### Local dev (no Docker)
 ```bash
 conda env create -f environment.yml
 conda activate aberowl2
-python manage.py runontapi -o data/pizza.owl   # starts Groovy server on port 8080
-```
-
-### Central server
-```bash
-cd central_server && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+python manage.py runontapi -o data/pizza.owl   # Groovy server on port 8080
 ```
 
 ### Run tests
 ```bash
-pytest tests/                        # all tests
-pytest tests/aberowlapi/             # ontology API tests
-pytest tests/aberowlapi/test_health.py -v  # single test file
+pytest tests/                           # all tests
+pytest tests/test_mcp_servers.py -v     # MCP schema + mocked-HTTP unit tests
+pytest tests/aberowlapi/ -v             # worker integration tests (needs running worker)
 ```
 
-Tests expect a running instance at `http://localhost:88/api` (Docker). They use `gevent.monkey.patch_all()` — the `import requests` must come after the gevent monkey-patch.
+Worker integration tests expect a worker at `http://localhost:88/api` (or whatever `ABEROWL_SERVER_URL` points to). They use `gevent.monkey.patch_all()` — `import requests` must come after the monkey-patch.
+
+End-to-end MCP testing:
+```bash
+python agents/mcp_test_client.py \
+    --ontology http://localhost:8766 \
+    --sparql   http://localhost:8767
+```
 
 ## Key Technical Details
 
-- **Groovy servlets**: Each `aberowlapi/api/*.groovy` file is a servlet with implicit `request`/`response` objects. Parameters extracted via `Util.extractParams(request)`. All servlets share an application-scoped `RequestManager` via `application.manager`.
-- **Java/Groovy dependencies**: Managed via `@Grab` annotations (Grapes). Key deps: OWLAPI 4.5.29, ELK 0.4.3 reasoner, Jetty 9.4.7, RDF4J 2.5.4.
-- **Port isolation**: Each instance uses port-specific ES indices (`ontology_index_{PORT}`, `class_index_{PORT}`) and a unique Docker Compose project name (`aberowl_${PORT}`).
-- **Docker network**: All instances share the `aberowl-net` external network for cross-container communication.
+- **Groovy servlets**: each file in `aberowlapi/api/` is a servlet with implicit `request`/`response`. Parameters via `Util.extractParams(request)`. All servlets share the application-scoped `RequestManager` (`application.manager`). Most servlets accept an `ontologyId` param; they auto-resolve when the manager holds exactly one ontology.
+- **Java/Groovy deps**: `@Grab` (Grapes). Key: OWLAPI 4.5.29, ELK 0.4.3, HermiT 1.4.5, Jetty 9.4.7, RDF4J 2.5.4.
+- **Search path**: `/api/search_all` and `/api/queryNames` query the **central** Elasticsearch directly with a boosted `dis_max` query (obo_id=10000, label=100, synonym=75). The old per-worker scatter-gather is gone.
+- **Dynamic management**: worker exposes `addOntology`, `removeOntology`, `listLoadedOntologies`, and `updateOntology` (async hot-swap with `task_id` + `updateStatus` polling). All require `ABEROWL_SECRET_KEY`.
+- **Docker network**: workers and central server share the `aberowl-net` external network — create it once with `docker network create aberowl-net`.
 - **Env files**: `reload_docker.sh` generates `env_files/aberowl_{PORT}.env` for reproducible configuration.
-- **Security**: `reloadOntology.groovy` validates file paths (must be under `/data/`). Each ontology gets an auto-generated secret key for registration updates.
+- **Security**: path traversal checks on `owlPath` (must start with `/data/`); secret-key auth on mutating endpoints; MCP servers are public for now (auth deferred — see `central_server/app/auth.py`).

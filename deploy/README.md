@@ -47,6 +47,24 @@ onto / cbontsr01 (10.67.24.207, 256 CPUs, 1TB RAM)
 
 All containers share the `aberowl-net` Docker network for inter-container communication.
 
+### MCP servers
+
+The central-server container also hosts two MCP (Model Context Protocol)
+servers as in-container subprocesses, controlled by env flags:
+
+| Port | Server | Default flag | Status |
+|------|--------|--------------|--------|
+| 8766 | `mcp_ontology_server.py` | `ENABLE_MCP_ONTOLOGY=true` | shipping |
+| 8767 | `mcp_sparql_server.py`   | `ENABLE_MCP_SPARQL=false` | gated until central Virtuoso is populated |
+
+Both are gated behind `ENABLE_MCP=true` (the parent switch). The MCP
+ports are **not** published to `0.0.0.0`. The compose file binds them
+to `${MCP_BIND_HOST}` (default `127.0.0.1`); for prod we set
+`MCP_BIND_HOST=10.67.24.207` so the frontend nginx can reach them, but
+nothing else can. Public access is exclusively via the nginx routes
+`/aberowl-beta/mcp/ontology/` and `/aberowl-beta/mcp/sparql/` — see
+`deploy/nginx/frontend-aberowl-beta.conf`.
+
 ## Server Access
 
 | Server | SSH | User | Notes |
@@ -426,6 +444,50 @@ ssh onto "cd /data/aberowl && docker compose -f deploy/docker-compose.central.ym
 ssh onto "docker restart aberowl-worker-{1..14}"
 ```
 
+### Data preservation across central-stack rebuilds
+
+`docker compose up --build -d` recreates the central-server container
+but **keeps the named volumes** (`redis_data`, `es_data`,
+`virtuoso_data`, `central_config`) and the bind-mounted ontologies in
+`/data/aberowl/ontologies`. So Redis registry, Elasticsearch indices,
+Virtuoso store, and downloaded OWL files all survive an upgrade.
+
+What would destroy data:
+- `docker compose down -v` (the `-v` removes named volumes — never run this without a backup).
+- `rm -rf /data/aberowl/ontologies` or `/var/lib/docker/volumes/deploy_*`.
+- Renaming the compose project (`-p` flag) — would create new volumes with the new prefix.
+
+For the MCP rollout specifically, the upgrade sequence is:
+
+```bash
+# On dev machine:
+git checkout feat/mcp-features
+rsync -avz --exclude node_modules --exclude .venv --exclude .git \
+    ./ onto:/data/aberowl/
+
+ssh onto
+cd /data/aberowl
+
+# Add the new MCP env vars to deploy/.env if not present
+grep -q ENABLE_MCP_ONTOLOGY deploy/.env || cat >> deploy/.env <<'EOF'
+ENABLE_MCP_ONTOLOGY=true
+ENABLE_MCP_SPARQL=false
+MCP_BIND_HOST=10.67.24.207
+EOF
+
+# Rebuild central stack — volumes are preserved
+docker compose -f deploy/docker-compose.central.yml --env-file deploy/.env up --build -d
+
+# Smoke-check (from onto)
+curl -sf http://10.67.24.207:8766/mcp -H 'Accept: text/event-stream' \
+    -H 'Content-Type: application/json' -X POST -d '{}' | head
+
+# Workers don't need to be touched for an MCP-only upgrade.
+```
+
+Then push the nginx route to the frontend (one of `frontend` /
+`frontend1`, then the other) — see "Updating nginx" below.
+
 ## Port Allocation
 
 | Port | Service |
@@ -448,6 +510,11 @@ ssh onto "docker restart aberowl-worker-{1..14}"
 
 Ports 8080, 8085, 8086 are used by other services on onto (Rub-al-Khali, etc.)
 and must not be used for AberOWL workers.
+
+| Port | Service | Binding |
+|------|---------|---------|
+| 8766 | MCP ontology server | `${MCP_BIND_HOST}` only — never `0.0.0.0` |
+| 8767 | MCP SPARQL server   | `${MCP_BIND_HOST}` only — never `0.0.0.0` |
 
 ## Transitioning to Production (aber-owl.net)
 

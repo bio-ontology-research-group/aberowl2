@@ -6,12 +6,18 @@ services:
     restart: unless-stopped
 
   central-server:
-    build: ./central_server
+    build:
+      context: .
+      dockerfile: central_server/Dockerfile
     ports:
       - "8000:8000"
-      - "8001:8001"
+      - "${MCP_ONTOLOGY_PORT:-8766}:8766"
+      - "${MCP_SPARQL_PORT:-8767}:8767"
     environment:
-      - MCP_SERVER_ADDRESS=mcp://0.0.0.0:8001
+      - ENABLE_MCP=${ENABLE_MCP:-true}
+      - MCP_ONTOLOGY_PORT=${MCP_ONTOLOGY_PORT:-8766}
+      - MCP_SPARQL_PORT=${MCP_SPARQL_PORT:-8767}
+      - CENTRAL_SERVER_URL=${CENTRAL_SERVER_URL:-http://localhost:8000}
     depends_on:
       - redis
       - elasticsearch

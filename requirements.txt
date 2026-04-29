@@ -11,4 +11,4 @@ pillow
 unstructured
 aiohttp
 redis
-websockets
+mcp

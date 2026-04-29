@@ -1368,7 +1368,7 @@ const sparqlUrl = `/api/runSparqlQuery.groovy?${params.toString()}`;
     // Get the port number from the URL
     const port = window.location.port;
     // Use the port number to construct the correct index name
-    const indexName = `class_index_${port}`;
+    const indexName = `class_index`;
     
     // Direct Elasticsearch query for label matches
     const esQuery = {
