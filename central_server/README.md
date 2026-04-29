@@ -180,23 +180,43 @@ Claude Desktop configuration (`~/Library/Application Support/Claude/claude_deskt
 
 ### Using the MCP servers from Claude Code (CLI)
 
-With the central stack running (`docker compose up -d` in `central_server/`) the ontology MCP server is reachable at `http://localhost:8766/mcp`. Register it with the Claude Code CLI:
+The ontology MCP server is exposed over streamable HTTP and can be registered with the Claude Code CLI using `claude mcp add`.
+
+**Option A — public deployment (recommended)**
+
+The production server is live at `https://beta.aber-owl.net/mcp/ontology/mcp`. To use it from any machine with Claude Code installed:
+
+```bash
+claude mcp add aberowl-ontology https://beta.aber-owl.net/mcp/ontology/mcp --transport http
+```
+
+**Option B — local stack**
+
+With the central stack running (`docker compose up -d` in `central_server/`) the server is reachable at `http://localhost:8766/mcp`:
 
 ```bash
 claude mcp add aberowl-ontology http://localhost:8766/mcp --transport http
 ```
 
-By default this lands in project scope (`.mcp.json` in the current directory). Use `--scope user` for a global registration or `--scope local` for a per-project, per-user override.
+**Scope**
 
-Verify:
+By default `claude mcp add` writes to project scope (`.mcp.json` in the current directory, shared via git). Use `--scope user` to register globally for your user across all projects, or `--scope local` for a per-project, per-user override that is not committed.
+
+**Verify**
 
 ```bash
-claude mcp list        # shows the server and its transport
+claude mcp list        # shows the server, URL, and transport
 ```
 
-Start (or restart) a Claude Code session and type `/mcp` — the server should show `connected` with `6 tools`.
+Start (or restart) a Claude Code session and type `/mcp` — the `aberowl-ontology` entry should show `connected` with `6 tools`.
 
-> The SPARQL MCP server is also shipped (port 8767) but is not yet usable end-to-end because the central Virtuoso is not populated with RDF from registered ontologies. That wiring is tracked as a separate follow-up and its example prompts are omitted here.
+**Remove**
+
+```bash
+claude mcp remove aberowl-ontology
+```
+
+> The SPARQL MCP server is also shipped (port 8767 locally) but is gated off in the public deployment because the central Virtuoso is not yet populated with RDF from registered ontologies. That wiring is tracked as a separate follow-up and its example prompts are omitted here.
 
 #### Example prompts to try
 
