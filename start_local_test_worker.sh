@@ -53,8 +53,11 @@ docker network create aberowl-net 2>/dev/null || true
 
 # ---- Bring up the worker -------------------------------------------------
 SECRET_KEY="${ABEROWL_SECRET_KEY:-$(openssl rand -hex 32)}"
-HOST_IP=$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7}' | head -n 1 || echo "host.docker.internal")
-PUBLIC_URL="http://${HOST_IP}:${NGINX_PORT}/"
+# Register the worker by its Docker DNS name on the shared aberowl-net.
+# That URL is what the central-server container actually resolves; using
+# the host IP would require host-network access from inside the central
+# container, which the production-equivalent compose doesn't grant.
+PUBLIC_URL="http://${PROJECT_NAME}-ontology-api-1:8080/"
 
 echo "Starting multi-ontology worker:"
 echo "  project:       ${PROJECT_NAME}"
