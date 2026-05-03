@@ -16,9 +16,6 @@ import org.semanticweb.owlapi.util.*
 import org.semanticweb.owlapi.search.*
 import org.semanticweb.owlapi.manchestersyntax.renderer.*
 import org.semanticweb.owlapi.reasoner.structural.*
-import org.semanticweb.owlapi.expression.ShortFormEntityChecker
-import org.semanticweb.owlapi.manchestersyntax.parser.ManchesterOWLSyntaxParserImpl
-import org.semanticweb.owlapi.util.BidirectionalShortFormProviderAdapter
 
 import java.util.concurrent.*
 import java.util.concurrent.atomic.*
@@ -389,49 +386,40 @@ public class RequestManager {
 
     /**
      * Run a DL query against a specific ontology (by string, Manchester OWL Syntax or IRI).
+     *
+     * Both IRI form (`<http://...>` / `http://...`) and label form
+     * (`'cell'`, `Pizza`, `'part of' some 'cell'`) are dispatched through
+     * the per-ontology QueryEngine, which uses QueryParser + BasicEntityChecker
+     * to resolve entities by IRI fragment, rdfs:label, or underscore-folded
+     * variants. A previous code path built a generic OWLAPI parser inline
+     * for label-form queries that bypassed BasicEntityChecker; that path
+     * silently failed for any single-word rdfs:label like `'cell'`.
      */
     Set runQuery(String ontId, String mOwlQuery, String type, boolean direct, boolean labels, boolean axioms, String shortform) {
-        if (mOwlQuery.startsWith("http") || mOwlQuery.startsWith("<")) {
-            type = type.toLowerCase()
-            def requestType
-            switch (type) {
-                case "superclass": requestType = RequestType.SUPERCLASS; break
-                case "subclass": requestType = RequestType.SUBCLASS; break
-                case "equivalent": requestType = RequestType.EQUIVALENT; break
-                case "supeq": requestType = RequestType.SUPEQ; break
-                case "subeq": requestType = RequestType.SUBEQ; break
-                case "realize": requestType = RequestType.REALIZE; break
-                default: requestType = RequestType.SUBEQ; break
-            }
-
-            def qEngine = queryEngines.get(ontId)
-            if (qEngine == null) {
-                throw new IllegalArgumentException("Ontology not loaded or not classified: ${ontId}")
-            }
-
-            def currentSfp = (shortform == 'iri') ? iriShortFormProviders.get(ontId) : shortFormProviders.get(ontId)
-
-            Set resultSet = Sets.newHashSet(Iterables.limit(qEngine.getClasses(mOwlQuery, requestType, direct, labels), MAX_REASONER_RESULTS))
-            resultSet.remove(df.getOWLNothing())
-            resultSet.remove(df.getOWLThing())
-            def classes = classes2info(ontId, resultSet, axioms, currentSfp)
-            return classes.sort { x, y -> x["label"].compareTo(y["label"]) }
-        } else {
-            def ont = ontologies.get(ontId)
-            if (ont == null) {
-                throw new IllegalArgumentException("Ontology not loaded: ${ontId}")
-            }
-            def sfp = new NewShortFormProvider(ont.getImportsClosure())
-            def bidiSfp = new BidirectionalShortFormProviderAdapter(ont.getImportsClosure(), sfp)
-            def checker = new ShortFormEntityChecker(bidiSfp)
-            def dataFactory = ont.getOWLOntologyManager().getOWLDataFactory()
-            def configSupplier = { -> ont.getOWLOntologyManager().getOntologyLoaderConfiguration() }
-            def parser = new org.semanticweb.owlapi.manchestersyntax.parser.ManchesterOWLSyntaxParserImpl(configSupplier, dataFactory)
-            parser.setStringToParse(mOwlQuery)
-            parser.setOWLEntityChecker(checker)
-            def expression = parser.parseClassExpression()
-            return runQuery(ontId, expression, type, direct, labels, axioms, shortform)
+        type = type.toLowerCase()
+        def requestType
+        switch (type) {
+            case "superclass": requestType = RequestType.SUPERCLASS; break
+            case "subclass": requestType = RequestType.SUBCLASS; break
+            case "equivalent": requestType = RequestType.EQUIVALENT; break
+            case "supeq": requestType = RequestType.SUPEQ; break
+            case "subeq": requestType = RequestType.SUBEQ; break
+            case "realize": requestType = RequestType.REALIZE; break
+            default: requestType = RequestType.SUBEQ; break
         }
+
+        def qEngine = queryEngines.get(ontId)
+        if (qEngine == null) {
+            throw new IllegalArgumentException("Ontology not loaded or not classified: ${ontId}")
+        }
+
+        def currentSfp = (shortform == 'iri') ? iriShortFormProviders.get(ontId) : shortFormProviders.get(ontId)
+
+        Set resultSet = Sets.newHashSet(Iterables.limit(qEngine.getClasses(mOwlQuery, requestType, direct, labels), MAX_REASONER_RESULTS))
+        resultSet.remove(df.getOWLNothing())
+        resultSet.remove(df.getOWLThing())
+        def classes = classes2info(ontId, resultSet, axioms, currentSfp)
+        return classes.sort { x, y -> x["label"].compareTo(y["label"]) }
     }
 
     Set runQuery(String ontId, String mOwlQuery, String type, boolean direct, boolean labels, boolean axioms) {

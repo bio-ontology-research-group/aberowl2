@@ -26,6 +26,7 @@ import org.semanticweb.owlapi.model.OWLDataFactory;
 import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.util.BidirectionalShortFormProvider;
 import org.semanticweb.owlapi.model.*
+import org.semanticweb.owlapi.search.EntitySearcher;
 import org.semanticweb.owlapi.util.BidirectionalShortFormProviderAdapter;
 
 /**
@@ -61,17 +62,49 @@ public class QueryParser {
          result = this.ontology.getOWLOntologyManager().getOWLDataFactory().getOWLClass(iri);
         }else{
      try {
-                // First try to find the class directly by name
+                // Strip the surrounding quotes (if any) once for direct-lookup attempts.
+                // Quoted form like 'cell' or 'cell death' is the standard Manchester
+                // way to refer to a class by its rdfs:label; for a query that is a
+                // single class name we can resolve it without involving the OWLAPI
+                // parser at all (its tokenizer rejects quoted single tokens like
+                // 'cell' even when the label exists).
+                String unquoted = mOwl
+                if ((unquoted.startsWith("'") && unquoted.endsWith("'")) ||
+                    (unquoted.startsWith('"') && unquoted.endsWith('"'))) {
+                    unquoted = unquoted.substring(1, unquoted.length() - 1)
+                }
+
+                // First try to find the class directly by IRI fragment (case- and
+                // underscore-insensitive).
                 for (OWLClass cls : ontology.getClassesInSignature(true)) {
                     String shortForm = cls.getIRI().getFragment()
-                    if (shortForm.equalsIgnoreCase(mOwl) ||
-                        shortForm.replace("_", "").equalsIgnoreCase(mOwl.replace("_", ""))) {
+                    if (shortForm == null) continue
+                    if (shortForm.equalsIgnoreCase(unquoted) ||
+                        shortForm.replace("_", "").equalsIgnoreCase(unquoted.replace("_", ""))) {
                         return cls
                     }
                 }
-                
-                // If not found directly, try with quotes for Manchester syntax
-                // Check if the input contains spaces and is not already quoted
+
+                // Then try rdfs:label (case-insensitive). This catches the common
+                // case where the user writes 'cell' or 'cell death' and the class
+                // has a matching rdfs:label but an opaque IRI fragment (e.g.
+                // GO_0005623). Only applied when the query is a bare label or a
+                // single quoted label — compound expressions go to the parser.
+                if (!unquoted.contains("(") && !unquoted.contains("{")
+                        && !unquoted.toLowerCase().matches('.*\\s+(some|only|and|or|not|min|max|exactly|value|that|inverse)\\s+.*')) {
+                    for (OWLClass cls : ontology.getClassesInSignature(true)) {
+                        for (OWLAnnotation a : EntitySearcher.getAnnotations(cls, ontology)) {
+                            if (a.getProperty().isLabel() && a.getValue() instanceof OWLLiteral) {
+                                String label = ((OWLLiteral) a.getValue()).getLiteral()
+                                if (label.equalsIgnoreCase(unquoted)) {
+                                    return cls
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // If not found directly, try with quotes for Manchester syntax.
                 if (mOwl.contains(" ") && !mOwl.startsWith("'") && !mOwl.endsWith("'")) {
                     // Add quotes around the entity name
                     mOwl = "'" + mOwl + "'";
@@ -79,7 +112,7 @@ public class QueryParser {
                     // For single words, also try with quotes
                     mOwl = "'" + mOwl + "'";
                 }
-                
+
                 OWLDataFactory dFactory = this.ontology.getOWLOntologyManager().getOWLDataFactory();
   def eChecker = new BasicEntityChecker(dFactory, ontology)
   def parser = new ManchesterOWLSyntaxClassExpressionParser(dFactory, eChecker);

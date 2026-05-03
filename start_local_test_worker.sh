@@ -71,7 +71,6 @@ export ABEROWL_PUBLIC_URL="${PUBLIC_URL}"
 export ABEROWL_REGISTER="false"
 export ABEROWL_CENTRAL_URL="http://aberowl-central-server:8000"
 export ABEROWL_SECRET_KEY="${SECRET_KEY}"
-export CENTRAL_VIRTUOSO_URL="http://aberowl-central-virtuoso:8890"
 export CENTRAL_ES_URL="http://aberowl-central-elasticsearch:9200"
 export CONTAINER_ID="local-multi"
 # Single-ontology fields left empty in multi mode
@@ -99,13 +98,33 @@ while : ; do
 done
 
 # ---- Register each ontology with the central server ---------------------
+# When a previous run left a registry entry, the central server requires
+# the original secret_key for any update (URL change, etc.). To make local
+# iteration painless across IP changes / restarts, we look up the stored
+# key from /api/servers and reuse it; only on first registration do we
+# leave secret_key null and let the central server mint a fresh one.
+get_stored_key() {
+    local ont_id="$1"
+    curl -sf "${CENTRAL_URL}/api/servers" 2>/dev/null \
+        | python3 -c "import json,sys;
+servers = json.load(sys.stdin);
+print(next((s.get('secret_key','') for s in servers if s.get('ontology') == '${ont_id}'), ''))" \
+        2>/dev/null || true
+}
+
 register_one() {
     local ont_id="$1"
+    local stored_key
+    stored_key="$(get_stored_key "$ont_id")"
+    local key_field="null"
+    if [ -n "$stored_key" ]; then
+        key_field="\"${stored_key}\""
+    fi
     echo "Registering ${ont_id} -> ${PUBLIC_URL}"
     curl -sf -X POST "${CENTRAL_URL}/register" \
         -H 'Content-Type: application/json' \
-        -d "{\"ontology\":\"${ont_id}\",\"url\":\"${PUBLIC_URL}\",\"secret_key\":null}" \
-        || { echo "  registration failed (may already be registered with a different key)"; return 1; }
+        -d "{\"ontology\":\"${ont_id}\",\"url\":\"${PUBLIC_URL}\",\"secret_key\":${key_field}}" \
+        || { echo "  registration failed for ${ont_id}"; return 1; }
     echo
 }
 

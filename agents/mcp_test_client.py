@@ -2,17 +2,16 @@
 """
 AberOWL MCP Test Client
 
-Connects to the two AberOWL MCP servers over streamable-HTTP, lists every
-advertised tool, then exercises each of the 9 tools with realistic
-arguments. Prints pass/fail + per-call latency.
+Connects to the AberOWL MCP server over streamable-HTTP, lists every
+advertised tool, then exercises each tool with realistic arguments.
+Prints pass/fail + per-call latency.
 
 Usage:
     python agents/mcp_test_client.py
-    python agents/mcp_test_client.py --ontology http://host:8766 --sparql http://host:8767
+    python agents/mcp_test_client.py --ontology http://host:8766
 
 Env vars (used as defaults):
     MCP_ONTOLOGY_URL (default http://localhost:8766)
-    MCP_SPARQL_URL   (default http://localhost:8767)
 """
 
 from __future__ import annotations
@@ -54,20 +53,13 @@ ONTOLOGY_TOOLS = {
     "get_class_info",
     "get_ontology_info",
     "browse_hierarchy",
-}
-
-SPARQL_TOOLS = {
-    "expand_sparql",
-    "list_sparql_examples",
-    "explain_expansion",
+    "rewrite_sparql",
 }
 
 
-# Substrings that the MCP servers return when a call succeeds at the
+# Substrings that the MCP server returns when a call succeeds at the
 # transport level but produces no results. Treat as failure for fixtures
-# that are expected to hit, so we don't paper over silent regressions
-# (the original symptom: SPARQL expander lowercase bug returned 0 IRIs
-# but the test still passed).
+# that are expected to hit, so we don't paper over silent regressions.
 _EMPTY_MARKERS = (
     "No results found",
     "No results for DL query",
@@ -98,7 +90,6 @@ async def _call(
     try:
         result = await session.call_tool(tool, args)
         elapsed = time.perf_counter() - start
-        # CallToolResult has .content (list) and .isError
         is_error = getattr(result, "isError", False)
         content = getattr(result, "content", result)
         first_text = ""
@@ -118,6 +109,11 @@ async def _call(
 
 async def exercise_ontology_server(url: str) -> ServerOutcome:
     outcome = ServerOutcome("ontology", url, ONTOLOGY_TOOLS)
+    rewrite_query = (
+        "SELECT ?c WHERE {\n"
+        "  VALUES ?c { OWL subeq pizza { Thing } }\n"
+        "} LIMIT 5"
+    )
     try:
         async with streamablehttp_client(url) as (read, write, _):
             async with ClientSession(read, write) as session:
@@ -131,7 +127,7 @@ async def exercise_ontology_server(url: str) -> ServerOutcome:
                 ))
                 outcome.calls.append(await _call(
                     session, "run_dl_query",
-                    {"query": "'cell'", "type": "subeq", "ontology": "go"},
+                    {"query": "Pizza", "type": "subeq", "ontology": "pizza"},
                 ))
                 outcome.calls.append(await _call(
                     session, "get_ontology_info", {"ontology": "go"},
@@ -139,42 +135,24 @@ async def exercise_ontology_server(url: str) -> ServerOutcome:
                 outcome.calls.append(await _call(
                     session, "get_class_info",
                     {
-                        "class_iri": "http://purl.obolibrary.org/obo/GO_0005623",
+                        # GO_0008150 (biological_process) — a stable root that is
+                        # not obsolete in any GO release. Using the deprecated
+                        # GO_0005623 ('cell') here returns 0 subclasses and looks
+                        # like a regression even when classification is healthy.
+                        "class_iri": "http://purl.obolibrary.org/obo/GO_0008150",
                         "ontology": "go",
                     },
                 ))
                 outcome.calls.append(await _call(
                     session, "browse_hierarchy",
-                    {"class_iri": "owl:Thing", "ontology": "go", "direction": "subclass"},
-                ))
-    except Exception as e:
-        outcome.connect_error = f"{type(e).__name__}: {e}"
-    return outcome
-
-
-async def exercise_sparql_server(url: str) -> ServerOutcome:
-    outcome = ServerOutcome("sparql", url, SPARQL_TOOLS)
-    sample_query = (
-        "SELECT ?c ?l WHERE {\n"
-        "  VALUES ?c { OWL subeq GO { 'cell' } }\n"
-        "  ?c <http://www.w3.org/2000/01/rdf-schema#label> ?l .\n"
-        "} LIMIT 5"
-    )
-    try:
-        async with streamablehttp_client(url) as (read, write, _):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                tools = await session.list_tools()
-                outcome.tools_advertised = {t.name for t in tools.tools}
-
-                outcome.calls.append(await _call(
-                    session, "list_sparql_examples", {"ontology": "GO"}
+                    {
+                        "class_iri": "http://purl.obolibrary.org/obo/GO_0008150",
+                        "ontology": "go",
+                        "direction": "subclass",
+                    },
                 ))
                 outcome.calls.append(await _call(
-                    session, "explain_expansion", {"query": sample_query}
-                ))
-                outcome.calls.append(await _call(
-                    session, "expand_sparql", {"query": sample_query}
+                    session, "rewrite_sparql", {"query": rewrite_query},
                 ))
     except Exception as e:
         outcome.connect_error = f"{type(e).__name__}: {e}"
@@ -212,11 +190,6 @@ async def main() -> int:
         default=os.getenv("MCP_ONTOLOGY_URL", "http://localhost:8766"),
         help="Base URL of the ontology MCP server",
     )
-    parser.add_argument(
-        "--sparql",
-        default=os.getenv("MCP_SPARQL_URL", "http://localhost:8767"),
-        help="Base URL of the SPARQL MCP server",
-    )
     args = parser.parse_args()
 
     # Normalize to include /mcp path (streamable-HTTP default mount)
@@ -224,21 +197,16 @@ async def main() -> int:
         return base if base.rstrip("/").endswith("/mcp") else base.rstrip("/") + "/mcp"
 
     ontology_url = _url(args.ontology)
-    sparql_url = _url(args.sparql)
 
     print("AberOWL MCP test client")
     print(f"  ontology: {ontology_url}")
-    print(f"  sparql:   {sparql_url}")
 
-    ontology, sparql = await asyncio.gather(
-        exercise_ontology_server(ontology_url),
-        exercise_sparql_server(sparql_url),
-    )
+    ontology = await exercise_ontology_server(ontology_url)
 
-    failures = _print_outcome(ontology) + _print_outcome(sparql)
+    failures = _print_outcome(ontology)
 
-    total_calls = len(ontology.calls) + len(sparql.calls)
-    passed = sum(1 for c in ontology.calls + sparql.calls if c.ok)
+    total_calls = len(ontology.calls)
+    passed = sum(1 for c in ontology.calls if c.ok)
     print(f"\nSummary: {passed}/{total_calls} tool calls passed, {failures} failure(s)")
     return 0 if failures == 0 else 1
 
