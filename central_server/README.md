@@ -192,7 +192,7 @@ By default `claude mcp add` writes to project scope (`.mcp.json` in the current 
 claude mcp list        # shows the server, URL, and transport
 ```
 
-Start (or restart) a Claude Code session and type `/mcp` — the `aberowl-ontology` entry should show `connected` with `6 tools`.
+Start (or restart) a Claude Code session and type `/mcp` — the `aberowl-ontology` entry should show `connected` with `8 tools`.
 
 **Remove**
 
@@ -202,14 +202,15 @@ claude mcp remove aberowl-ontology
 
 #### Example prompts to try
 
-Use IRIs for DL queries — label-based DL queries currently return 0 results (tracked as a known issue, see the `feat/mcp-features` working notes).
+DL queries accept either an IRI (`<http://purl.obolibrary.org/obo/GO_0008150>`) or a label in Manchester syntax (`'biological process'`, `'part of' some 'cell'`). Note that `'cell'` returns 0 in current GO releases because GO_0005623 was obsoleted — use `'biological process'` (or any non-deprecated label) for smoke tests.
 
 - *"List the ontologies available via the aberowl tools."* — `list_ontologies`
 - *"Search GO for apoptosis using aberowl."* — `search_classes`
-- *"Using aberowl, show me the class info for `<http://purl.obolibrary.org/obo/GO_0005623>`."* — `get_class_info`
+- *"Using aberowl, show me the class info for `<http://purl.obolibrary.org/obo/GO_0008150>`."* — `get_class_info`
 - *"Using aberowl, get the metadata for the `go` ontology."* — `get_ontology_info`
-- *"Using aberowl, give me direct subclasses of `<http://purl.obolibrary.org/obo/GO_0005575>` in GO."* — `browse_hierarchy`
-- *"Using aberowl, run a DL query for subclasses of `<http://purl.obolibrary.org/obo/GO_0008150>` in GO."* — `run_dl_query`
+- *"Using aberowl, give me direct subclasses of `<http://purl.obolibrary.org/obo/GO_0008150>` in GO."* — `browse_hierarchy`
+- *"Using aberowl, run a DL query for subclasses of 'biological process' in GO."* — `run_dl_query` (label form)
+- *"Using aberowl, show me example SPARQL queries with OWL DL frames."* — `list_sparql_examples`
 - *"Using aberowl, rewrite this SPARQL: `SELECT ?c WHERE { VALUES ?c { OWL subeq go-plus { 'cell death' } } }`"* — `rewrite_sparql`
 
 If Claude Code answers from general knowledge instead of calling a tool, add *"use the aberowl MCP tool"* to the prompt.
