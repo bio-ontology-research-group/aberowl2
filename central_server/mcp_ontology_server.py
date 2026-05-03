@@ -15,6 +15,7 @@ Tools:
   - browse_hierarchy: Get subclasses/superclasses of a class
   - rewrite_sparql: Rewrite SPARQL with embedded OWL DL frames into plain SPARQL
   - list_sparql_examples: Curated SPARQL+OWL example queries to use as templates
+  - query_sparql: Rewrite + execute against an external endpoint (Ontobee by default)
 
 Usage:
   python mcp_ontology_server.py          # streamable HTTP on port 8766
@@ -425,6 +426,132 @@ async def list_sparql_examples() -> str:
         "AberOWL returns the rewritten SPARQL with concrete IRIs spliced "
         "in; you then run it against the suggested endpoint."
     )
+    return "\n".join(lines)
+
+
+DEFAULT_SPARQL_ENDPOINT = "https://sparql.hegroup.org/sparql"  # Ontobee
+
+
+async def _execute_sparql(endpoint: str, query: str, timeout: int = 60) -> dict[str, Any]:
+    """POST a SPARQL query to an external endpoint and return the JSON results.
+
+    AberOWL itself does not host a SPARQL store; this helper just forwards
+    to whatever endpoint the user chose.
+    """
+    headers = {
+        "Accept": "application/sparql-results+json",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                endpoint,
+                data={"query": query},
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=timeout),
+            ) as resp:
+                text = await resp.text()
+                if resp.status != 200:
+                    return {"error": f"endpoint returned HTTP {resp.status}: {text[:500]}"}
+                try:
+                    return json.loads(text)
+                except json.JSONDecodeError:
+                    return {"error": f"endpoint returned non-JSON: {text[:500]}"}
+    except Exception as e:
+        return {"error": f"endpoint unreachable: {e}"}
+
+
+def _format_sparql_results(results: dict[str, Any], limit: int = 50) -> list[str]:
+    """Render a SPARQL JSON results object as compact text rows."""
+    head = results.get("head", {})
+    body = results.get("results", {})
+    bindings = body.get("bindings", []) if isinstance(body, dict) else []
+    vars_ = head.get("vars", []) if isinstance(head, dict) else []
+
+    if not bindings:
+        # ASK queries put the answer in `boolean`.
+        if "boolean" in results:
+            return [f"ASK result: {results['boolean']}"]
+        return ["No results."]
+
+    lines: list[str] = [f"{len(bindings)} row(s)" + (f" (showing first {limit})" if len(bindings) > limit else "") + ":"]
+    for row in bindings[:limit]:
+        cells = []
+        for v in vars_:
+            cell = row.get(v, {})
+            value = cell.get("value", "") if isinstance(cell, dict) else ""
+            cells.append(f"{v}={value}")
+        lines.append("  " + " | ".join(cells))
+    return lines
+
+
+@mcp.tool(
+    description=(
+        "Rewrite a SPARQL query containing OWL DL frames AND execute it "
+        "against an external SPARQL endpoint, returning the result rows. "
+        "AberOWL still only does the rewriting; this tool just forwards "
+        "the rewritten SPARQL to the chosen endpoint and formats whatever "
+        "comes back.\n\n"
+        "If `endpoint` is omitted, the rewritten query runs against "
+        f"Ontobee ({DEFAULT_SPARQL_ENDPOINT}). Common alternatives:\n"
+        "  - https://sparql.uniprot.org/sparql       (UniProt)\n"
+        "  - https://query.wikidata.org/sparql       (Wikidata)\n"
+        "  - https://dbpedia.org/sparql              (DBpedia)\n"
+        "  - https://bio2rdf.org/sparql              (Bio2RDF)\n\n"
+        "Frame syntax is identical to `rewrite_sparql`. Per-frame "
+        "resolution failures (unknown ontology, offline worker, DL parse "
+        "error) are reported but the rest of the query is still executed.\n\n"
+        "Example: SELECT ?c ?label WHERE { VALUES ?c { OWL subeq go-plus { 'cell death' } } "
+        "?c <http://www.w3.org/2000/01/rdf-schema#label> ?label . } LIMIT 50"
+    ),
+)
+async def query_sparql(query: str, endpoint: str | None = None) -> str:
+    """
+    Args:
+        query:    SPARQL query string. May contain OWL DL frames; they will
+                  be resolved by AberOWL before the query is executed.
+        endpoint: SPARQL endpoint to execute against. Defaults to Ontobee
+                  (https://sparql.hegroup.org/sparql).
+    """
+    target = (endpoint or DEFAULT_SPARQL_ENDPOINT).strip()
+
+    rewrite = await _api_post("/api/sparql", {"query": query})
+    if rewrite.get("error") and "rewritten_query" not in rewrite:
+        return f"Rewrite error: {rewrite['error']}"
+
+    rewritten = rewrite.get("rewritten_query", "") or query
+    expansions = rewrite.get("expansions") or []
+    errors = rewrite.get("errors") or []
+
+    lines: list[str] = [f"Endpoint: {target}"]
+    if expansions:
+        lines.append(f"Resolved {len(expansions)} OWL frame(s):")
+        for exp in expansions:
+            lines.append(
+                f"  - {exp.get('pattern')} {exp.get('variable')}: "
+                f"{exp.get('type')} on {exp.get('ontology')} → "
+                f"{exp.get('result_count')} classes"
+            )
+    if errors:
+        lines.append(f"Could not resolve {len(errors)} frame(s) "
+                     "(replaced with an empty match in the executed query):")
+        for err in errors:
+            lines.append(
+                f"  - {err.get('pattern')} {err.get('variable')} "
+                f"({err.get('type')} on {err.get('ontology')}): {err.get('error')}"
+            )
+
+    results = await _execute_sparql(target, rewritten)
+    if results.get("error"):
+        lines.append("")
+        lines.append(f"Endpoint error: {results['error']}")
+        lines.append("")
+        lines.append("Rewritten query (you can re-run this manually):")
+        lines.append(rewritten)
+        return "\n".join(lines)
+
+    lines.append("")
+    lines.extend(_format_sparql_results(results))
     return "\n".join(lines)
 
 

@@ -68,6 +68,8 @@ The central server ships with one MCP server that lets LLM agents (Claude Deskto
 - `get_ontology_info` — metadata for one ontology
 - `browse_hierarchy` — direct subclasses or superclasses of a class
 - `rewrite_sparql` — rewrite a SPARQL query containing `VALUES ?x { OWL subeq GO { ... } }` or `FILTER OWL(?x, subeq, GO, "...")` frames to one with concrete IRIs spliced in. AberOWL only rewrites; the caller runs the result against any SPARQL endpoint (Ontobee, UniProt, …).
+- `list_sparql_examples` — curated SPARQL+OWL example queries to use as templates.
+- `query_sparql` — same rewrite, but also forwards the result to an external SPARQL endpoint (Ontobee by default; pass `endpoint=` for UniProt / Wikidata / DBpedia / etc.) and returns the rows. AberOWL still doesn't host a SPARQL store — this just chains rewrite → POST → format.
 
 ### Deploying with Docker (streamable HTTP)
 
@@ -192,7 +194,7 @@ By default `claude mcp add` writes to project scope (`.mcp.json` in the current 
 claude mcp list        # shows the server, URL, and transport
 ```
 
-Start (or restart) a Claude Code session and type `/mcp` — the `aberowl-ontology` entry should show `connected` with `8 tools`.
+Start (or restart) a Claude Code session and type `/mcp` — the `aberowl-ontology` entry should show `connected` with `9 tools`.
 
 **Remove**
 
@@ -212,6 +214,7 @@ DL queries accept either an IRI (`<http://purl.obolibrary.org/obo/GO_0008150>`) 
 - *"Using aberowl, run a DL query for subclasses of 'biological process' in GO."* — `run_dl_query` (label form)
 - *"Using aberowl, show me example SPARQL queries with OWL DL frames."* — `list_sparql_examples`
 - *"Using aberowl, rewrite this SPARQL: `SELECT ?c WHERE { VALUES ?c { OWL subeq go-plus { 'cell death' } } }`"* — `rewrite_sparql`
+- *"Using aberowl, run this SPARQL against Ontobee: `SELECT ?c ?l WHERE { VALUES ?c { OWL subeq go-plus { 'cell death' } } ?c <http://www.w3.org/2000/01/rdf-schema#label> ?l . } LIMIT 10`"* — `query_sparql`
 
 If Claude Code answers from general knowledge instead of calling a tool, add *"use the aberowl MCP tool"* to the prompt.
 

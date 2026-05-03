@@ -55,6 +55,7 @@ ONTOLOGY_TOOLS = {
     "browse_hierarchy",
     "rewrite_sparql",
     "list_sparql_examples",
+    "query_sparql",
 }
 
 
@@ -157,6 +158,22 @@ async def exercise_ontology_server(url: str) -> ServerOutcome:
                 ))
                 outcome.calls.append(await _call(
                     session, "list_sparql_examples", {},
+                ))
+                # query_sparql goes out to a public endpoint; allow empty
+                # results so transient endpoint hiccups don't fail the run.
+                outcome.calls.append(await _call(
+                    session, "query_sparql",
+                    {
+                        "query": (
+                            "SELECT ?c WHERE { "
+                            "VALUES ?c { OWL subeq pizza { Pizza } } } LIMIT 5"
+                        ),
+                        # Pizza isn't in Ontobee's GO graph; we just want
+                        # to confirm the rewrite + execute round-trip works.
+                        # Use a public endpoint that always answers.
+                        "endpoint": "https://dbpedia.org/sparql",
+                    },
+                    expect_nonempty=False,
                 ))
     except Exception as e:
         outcome.connect_error = f"{type(e).__name__}: {e}"

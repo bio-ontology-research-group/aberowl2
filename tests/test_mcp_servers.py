@@ -51,6 +51,7 @@ class TestMCPOntologyServerSchemas:
             "browse_hierarchy",
             "rewrite_sparql",
             "list_sparql_examples",
+            "query_sparql",
         }
         assert tool_names == expected, f"Missing tools: {expected - tool_names}"
 
@@ -273,3 +274,84 @@ class TestRewriteSparqlTool:
         text = _text(result)
         assert "No OWL DL frames found" in text
         assert plain in text
+
+
+# ---------------------------------------------------------------------------
+# MCP Ontology Server — query_sparql tool
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+class TestQuerySparqlTool:
+
+    async def test_query_sparql_schema(self):
+        from mcp_ontology_server import mcp
+        tools = await mcp.list_tools()
+        q = next(t for t in tools if t.name == "query_sparql")
+        assert "query" in q.inputSchema["required"]
+        assert "endpoint" in q.inputSchema["properties"]
+
+    async def test_query_sparql_default_endpoint_is_ontobee(self):
+        from mcp_ontology_server import mcp
+        tools = await mcp.list_tools()
+        q = next(t for t in tools if t.name == "query_sparql")
+        assert "sparql.hegroup.org" in q.description.lower() or "ontobee" in q.description.lower()
+
+    async def test_query_sparql_runs_rewritten_query(self):
+        import mcp_ontology_server as srv
+        rewrite_payload = {
+            "rewritten_query": "SELECT ?c WHERE { VALUES ?c { <http://x/1> } }",
+            "expansions": [{
+                "pattern": "VALUES", "variable": "?c", "type": "subeq",
+                "ontology": "pizza", "dl_query": "Pizza", "result_count": 1,
+            }],
+            "errors": [],
+        }
+        endpoint_results = {
+            "head": {"vars": ["c"]},
+            "results": {"bindings": [
+                {"c": {"type": "uri", "value": "http://x/1"}},
+            ]},
+        }
+        with patch.object(srv, "_api_post", new=AsyncMock(return_value=rewrite_payload)), \
+             patch.object(srv, "_execute_sparql", new=AsyncMock(return_value=endpoint_results)) as exec_mock:
+            result = await srv.mcp.call_tool(
+                "query_sparql",
+                {"query": "SELECT ?c WHERE { VALUES ?c { OWL subeq pizza { Pizza } } }"},
+            )
+        text = _text(result)
+        assert "sparql.hegroup.org" in text  # default endpoint
+        assert "Resolved 1 OWL frame" in text
+        assert "1 row" in text
+        assert "c=http://x/1" in text
+        # default endpoint passed through to _execute_sparql
+        called_endpoint = exec_mock.call_args[0][0]
+        assert called_endpoint == srv.DEFAULT_SPARQL_ENDPOINT
+
+    async def test_query_sparql_uses_custom_endpoint(self):
+        import mcp_ontology_server as srv
+        rewrite_payload = {"rewritten_query": "ASK {}", "expansions": [], "errors": []}
+        endpoint_results = {"boolean": True, "head": {}}
+        with patch.object(srv, "_api_post", new=AsyncMock(return_value=rewrite_payload)), \
+             patch.object(srv, "_execute_sparql", new=AsyncMock(return_value=endpoint_results)) as exec_mock:
+            result = await srv.mcp.call_tool(
+                "query_sparql",
+                {"query": "ASK {}", "endpoint": "https://example.org/sparql"},
+            )
+        text = _text(result)
+        assert "https://example.org/sparql" in text
+        assert "ASK result: True" in text
+        assert exec_mock.call_args[0][0] == "https://example.org/sparql"
+
+    async def test_query_sparql_reports_endpoint_error(self):
+        import mcp_ontology_server as srv
+        rewrite_payload = {"rewritten_query": "SELECT * WHERE {}", "expansions": [], "errors": []}
+        with patch.object(srv, "_api_post", new=AsyncMock(return_value=rewrite_payload)), \
+             patch.object(srv, "_execute_sparql", new=AsyncMock(return_value={"error": "endpoint returned HTTP 503: down"})):
+            result = await srv.mcp.call_tool(
+                "query_sparql", {"query": "SELECT * WHERE {}"},
+            )
+        text = _text(result)
+        assert "Endpoint error" in text
+        assert "HTTP 503" in text
+        # The rewritten query is included so the user can re-run manually.
+        assert "Rewritten query" in text
