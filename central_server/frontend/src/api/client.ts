@@ -67,6 +67,6 @@ export async function queryOntologies(term: string): Promise<{ result: unknown[]
   return get('/api/queryOntologies', { term })
 }
 
-export async function runSparql(query: string, endpoint?: string) {
-  return post('/api/sparql', { query, endpoint })
+export async function rewriteSparql(query: string) {
+  return post('/api/sparql', { query })
 }

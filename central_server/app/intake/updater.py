@@ -5,13 +5,11 @@ Orchestrates the full update process for a single ontology:
   1. HTTP version check (ETag / Last-Modified / MD5 fallback)
   2. Download to staging file
   3. Validate via OntologyServer validateOntology endpoint
-  4. Load into Virtuoso staging graph (LOAD <file:///...>)
-  5. Trigger ES indexing via OntologyServer triggerIndexing endpoint
-  6. Trigger hot-swap on OntologyServer
-  7. Promote Virtuoso staging → live graph (COPY + DROP)
-  8. Promote ES staging index → alias
-  9. Archive previous OWL file
- 10. Update Redis metadata
+  4. Trigger ES indexing via OntologyServer triggerIndexing endpoint
+  5. Trigger hot-swap on OntologyServer
+  6. Promote ES staging index → alias
+  7. Archive previous OWL file
+  8. Update Redis metadata
 """
 
 import asyncio
@@ -343,7 +341,6 @@ async def execute_update_pipeline(
     ontology_id: str,
     registry_entry: Dict[str, Any],
     redis_client,
-    virtuoso_mgr,
     es_mgr,
     ontologies_base_path: str,
     es_url: str,
@@ -425,17 +422,7 @@ async def execute_update_pipeline(
             _cleanup_staging(staging_path_host)
             return {"success": False, "error": "owl_validation_failed"}
 
-    # Step 4: Virtuoso staging load
-    staging_path_virtuoso = f"/data/ontologies/{ontology_id}/{ontology_id}_staging.owl"
-    ok = await virtuoso_mgr.load_to_staging(ontology_id, staging_path_virtuoso)
-    if not ok:
-        await _update_registry_status(
-            redis_client, ontology_id, "virtuoso_load_failed", "SPARQL LOAD failed"
-        )
-        _cleanup_staging(staging_path_host)
-        return {"success": False, "error": "virtuoso_staging_failed"}
-
-    # Step 5: ES staging index
+    # Step 4: ES staging index
     new_es_index = await es_mgr.get_next_index_name(ontology_id)
     old_es_index = await es_mgr.get_current_index(ontology_id)
 
@@ -458,7 +445,6 @@ async def execute_update_pipeline(
             es_ok = False
 
     if not es_ok:
-        await virtuoso_mgr.drop_staging(ontology_id)
         await es_mgr.delete_index(new_es_index)
         await _update_registry_status(
             redis_client, ontology_id, "indexing_failed", "ES indexing failed"
@@ -466,7 +452,7 @@ async def execute_update_pipeline(
         _cleanup_staging(staging_path_host)
         return {"success": False, "error": "es_indexing_failed"}
 
-    # Step 6: Hot-swap OntologyServer
+    # Step 5: Hot-swap OntologyServer
     if server_url:
         task_id = await trigger_hotswap(
             server_url=server_url,
@@ -475,7 +461,6 @@ async def execute_update_pipeline(
             owl_path_on_server=staging_path_container,
         )
         if not task_id:
-            await virtuoso_mgr.drop_staging(ontology_id)
             await es_mgr.delete_index(new_es_index)
             await _update_registry_status(
                 redis_client, ontology_id, "hotswap_failed", "Could not start hot-swap"
@@ -485,7 +470,6 @@ async def execute_update_pipeline(
 
         swap_ok = await wait_for_hotswap(server_url, task_id)
         if not swap_ok:
-            await virtuoso_mgr.drop_staging(ontology_id)
             await es_mgr.delete_index(new_es_index)
             await _update_registry_status(
                 redis_client, ontology_id, "hotswap_failed", "Hot-swap did not succeed"
@@ -493,11 +477,7 @@ async def execute_update_pipeline(
             _cleanup_staging(staging_path_host)
             return {"success": False, "error": "hotswap_failed"}
 
-    # Step 7 & 8: Promote Virtuoso graph and ES alias
-    virt_ok = await virtuoso_mgr.promote_staging(ontology_id)
-    if not virt_ok:
-        logger.error("Virtuoso graph promotion failed for %s — live and staging may be inconsistent", ontology_id)
-
+    # Step 6: Promote ES alias
     if server_url:
         alias_ok = await es_mgr.swap_alias(ontology_id, new_es_index, old_es_index)
         if alias_ok and old_es_index:

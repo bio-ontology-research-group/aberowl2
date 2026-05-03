@@ -9,16 +9,11 @@ services:
       # to a specific interface (e.g. an internal network IP) so an
       # external nginx can reach them. Never bind to 0.0.0.0 in prod.
       - "${MCP_BIND_HOST:-127.0.0.1}:${MCP_ONTOLOGY_PORT:-8766}:8766"
-      - "${MCP_BIND_HOST:-127.0.0.1}:${MCP_SPARQL_PORT:-8767}:8767"
     environment:
       - ENABLE_MCP=${ENABLE_MCP:-true}
       - ENABLE_MCP_ONTOLOGY=${ENABLE_MCP_ONTOLOGY:-true}
-      - ENABLE_MCP_SPARQL=${ENABLE_MCP_SPARQL:-false}
       - MCP_ONTOLOGY_PORT=${MCP_ONTOLOGY_PORT:-8766}
-      - MCP_SPARQL_PORT=${MCP_SPARQL_PORT:-8767}
       - CENTRAL_SERVER_URL=${CENTRAL_SERVER_URL:-http://localhost:8000}
-      - VIRTUOSO_URL=http://virtuoso:8890
-      - VIRTUOSO_DBA_PASSWORD=${VIRTUOSO_DBA_PASSWORD:-dba}
       - CENTRAL_ES_URL=http://elasticsearch:9200
       - ONTOLOGIES_HOST_PATH=${ONTOLOGIES_HOST_PATH:-./ontologies}
       - ADMIN_USER=${ADMIN_USER:-admin}
@@ -29,7 +24,6 @@ services:
     volumes:
       - ./app:/code/app
       - ./mcp_ontology_server.py:/code/mcp_ontology_server.py
-      - ./mcp_sparql_server.py:/code/mcp_sparql_server.py
       - ./config:/code/config
       - ${ONTOLOGIES_HOST_PATH:-./ontologies}:/data/ontologies
       - /var/run/docker.sock:/var/run/docker.sock
@@ -54,24 +48,6 @@ services:
     networks:
       - aberowl-net
 
-  virtuoso:
-    build:
-      context: ..
-      dockerfile: Dockerfile.virtuoso
-    environment:
-      - DBA_PASSWORD=${VIRTUOSO_DBA_PASSWORD:-dba}
-      - SPARQL_UPDATE=true
-      - DEFAULT_GRAPH=http://aberowl.net/
-    volumes:
-      - virtuoso_data:/opt/virtuoso-opensource/database/data
-      - virtuoso_logs:/opt/virtuoso-opensource/database/logs
-      - ${ONTOLOGIES_HOST_PATH:-./ontologies}:/data/ontologies:ro
-      - ./docker/virtuoso.ini:/opt/virtuoso-opensource/database/virtuoso.ini
-    restart: unless-stopped
-    container_name: aberowl-central-virtuoso
-    networks:
-      - aberowl-net
-
   elasticsearch:
     image: elasticsearch:7.17.10
     environment:
@@ -91,8 +67,6 @@ services:
 
 volumes:
   redis_data:
-  virtuoso_data:
-  virtuoso_logs:
   elasticsearch_data:
 
 networks:

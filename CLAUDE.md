@@ -4,17 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AberOWL 2 is a distributed ontology query system for biological/biomedical ontologies. A **central server** (Virtuoso + Elasticsearch + Redis + FastAPI) owns shared infrastructure and the registry. **Worker containers** (one Groovy/OWLAPI process per container) each host **one or many ontologies** in-memory and serve DL reasoning queries. Workers register themselves with the central server; the central server dispatches queries to the correct worker by `ontologyId`.
+AberOWL 2 is a distributed ontology query system for biological/biomedical ontologies. A **central server** (Elasticsearch + Redis + FastAPI) owns shared infrastructure and the registry. **Worker containers** (one Groovy/OWLAPI process per container) each host **one or many ontologies** in-memory and serve DL reasoning queries. Workers register themselves with the central server; the central server dispatches queries to the correct worker by `ontologyId`.
 
 ## Architecture
 
 **Central server stack** (`central_server/docker-compose.yml`):
-- **FastAPI app** (`app/main.py`): registry, query aggregator, source-sync (OBO Foundry + BioPortal daily), update pipeline, catalogue API. Exposes port 8000.
-- **Virtuoso**: shared RDF/SPARQL store for all ontologies.
+- **FastAPI app** (`app/main.py`): registry, query aggregator, source-sync (OBO Foundry + BioPortal daily), update pipeline, catalogue API, SPARQL rewriter (`/api/sparql`). Exposes port 8000.
 - **Elasticsearch 7.x**: shared full-text index (indices `ontology_index` and `owl_class_index`). Boosted `dis_max` search replaces the old scatter-gather across workers.
 - **Redis**: ontology registry, task queue, rate-limit state.
-- **MCP servers**: `mcp_ontology_server.py` (port 8766, 6 tools) and `mcp_sparql_server.py` (port 8767, 3 tools). Built on the official `mcp` SDK, support stdio + streamable HTTP. Auto-spawned by `app/main.py` when `ENABLE_MCP=true`.
+- **MCP server**: `mcp_ontology_server.py` (port 8766, 7 tools — including `rewrite_sparql`). Built on the official `mcp` SDK, supports stdio + streamable HTTP. Auto-spawned by `app/main.py` when `ENABLE_MCP=true`.
 - Run with: `cd central_server && docker compose up -d`
+
+The central server does not store triples and does not execute SPARQL. `/api/sparql` rewrites queries containing OWL DL frames (`VALUES ?x { OWL subeq go-plus { 'cell death' } }` or `FILTER OWL(?x, subeq, GO, "...")`) into plain SPARQL with concrete IRIs spliced in; the caller runs the rewritten query against any endpoint they choose (Ontobee, UniProt, Wikidata, …).
 
 **Worker stack** (`docker-compose.yml` at repo root):
 - **ontology-api**: Groovy Jetty server (`aberowlapi/OntologyServer.groovy`) managed by `aberowlapi/server_manager.py`. A single `RequestManager` holds a `ConcurrentHashMap<String, …>` of ontologies + reasoners keyed by `ontologyId` — one worker can host many ontologies.
@@ -40,7 +41,7 @@ AberOWL 2 is a distributed ontology query system for biological/biomedical ontol
 - `agents/query_parser.py` — LLM query parser (FastAPI).
 - `central_server/app/main.py` — FastAPI app: registry, source-sync, daily update check, server list, MCP launcher.
 - `central_server/app/intake/` — OBO Foundry, BioPortal, and manual-list intake; writes registry metadata only (does not spin up workers).
-- `central_server/app/sparql_expander.py` — Parses SPARQL for `VALUES OWL …` / `FILTER OWL(…)` patterns, resolves DL queries against workers, rewrites the SPARQL, executes it against central Virtuoso.
+- `central_server/app/sparql_expander.py` — Parses SPARQL for `VALUES OWL …` / `FILTER OWL(…)` frames, resolves DL queries against the appropriate worker, and returns the rewritten SPARQL with concrete IRIs spliced in. Per-frame errors (unknown ontology, offline worker, DL parse failure) are surfaced in the response without aborting the whole rewrite.
 
 ## Common Commands
 

@@ -22,9 +22,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, HttpUrl
 
-from app.virtuoso_manager import CentralVirtuosoManager
 from app.es_manager import CentralESManager
-from app.sparql_expander import expand_sparql_query, execute_sparql
+from app.sparql_expander import expand_sparql_query
 from app.auth import (
     get_rate_limit_key, create_api_key, revoke_api_key, list_api_keys,
     PUBLIC_RATE_LIMIT, API_KEY_RATE_LIMIT,
@@ -48,7 +47,6 @@ ELASTICSEARCH_URL = os.getenv("CENTRAL_ES_URL", "http://elasticsearch:9200")
 mcp_process: Optional[asyncio.subprocess.Process] = None
 
 # Central service managers (initialised in lifespan)
-virtuoso_mgr: Optional[CentralVirtuosoManager] = None
 es_mgr: Optional[CentralESManager] = None
 
 # HTTP Basic Auth for admin endpoints
@@ -205,7 +203,6 @@ async def _check_and_update_all() -> None:
                     ontology_id=ontology_id,
                     registry_entry=entry,
                     redis_client=redis_client,
-                    virtuoso_mgr=virtuoso_mgr,
                     es_mgr=es_mgr,
                     ontologies_base_path=ONTOLOGIES_BASE_PATH,
                     es_url=ELASTICSEARCH_URL,
@@ -358,20 +355,13 @@ async def start_mcp_servers():
         logger.info("MCP servers disabled (set ENABLE_MCP=true to enable)")
         return
 
-    # Per-server toggles. Ontology MCP defaults on when ENABLE_MCP=true;
-    # SPARQL MCP defaults off until central Virtuoso is populated.
     enable_ontology = _truthy("ENABLE_MCP_ONTOLOGY", "true")
-    enable_sparql = _truthy("ENABLE_MCP_SPARQL", "false")
 
     mcp_scripts = []
     if enable_ontology:
         mcp_scripts.append(("mcp_ontology_server.py", os.getenv("MCP_ONTOLOGY_PORT", "8766")))
     else:
         logger.info("MCP ontology server disabled (ENABLE_MCP_ONTOLOGY=false)")
-    if enable_sparql:
-        mcp_scripts.append(("mcp_sparql_server.py", os.getenv("MCP_SPARQL_PORT", "8767")))
-    else:
-        logger.info("MCP SPARQL server disabled (ENABLE_MCP_SPARQL=false)")
 
     for script_name, port in mcp_scripts:
         script_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), script_name)
@@ -457,12 +447,11 @@ async def periodic_metadata_fetch_task():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    global redis_client, virtuoso_mgr, es_mgr
+    global redis_client, es_mgr
     redis_client = redis.from_url("redis://redis", decode_responses=True)
     await redis_client.ping()
     logger.info("Successfully connected to Redis.")
 
-    virtuoso_mgr = CentralVirtuosoManager()
     es_mgr = CentralESManager()
     await es_mgr.ensure_ontologies_index()
     logger.info("Central service managers initialised.")
@@ -933,63 +922,63 @@ async def get_statuses_api():
 
 @app.post("/api/sparql")
 @app.get("/api/sparql")
-async def sparql_expand_api(request: Request):
-    """Execute a SPARQL query with optional OWL DL query expansion.
+async def sparql_rewrite_api(request: Request):
+    """Rewrite a SPARQL query by resolving embedded OWL DL frames to IRIs.
 
-    Supports two embedded expansion patterns:
+    AberOWL only rewrites — it does not execute. Send the returned
+    `rewritten_query` to whatever SPARQL endpoint you choose (Ontobee,
+    UniProt, Wikidata, …).
+
+    Supported expansion patterns:
 
     1. VALUES pattern:
        VALUES ?var { OWL type ontology_id { dl_query } }
-       Example: VALUES ?class { OWL subeq GO { 'part of' some 'cell' } }
+       Example: VALUES ?class { OWL subeq go-plus { 'part of' some 'cell' } }
 
     2. FILTER pattern:
        FILTER OWL(?var, type, ontology_id, "dl_query")
        Example: FILTER OWL(?class, subeq, GO, "'part of' some 'cell'")
 
-    Query params (GET) or form fields (POST):
-        query    - SPARQL query string (required)
-        endpoint - SPARQL endpoint URL (optional, defaults to central Virtuoso)
+    Query params (GET) or JSON/form body (POST):
+        query - SPARQL query string with OWL frames (required)
+
+    Response:
+        {
+          "rewritten_query": "...",       # SPARQL with IRIs spliced in
+          "expansions":      [...],        # per-frame info: pattern, variable,
+                                           # ontology, type, dl_query, result_count
+          "errors":          [...]         # per-frame failures (unknown ontology,
+                                           # DL parse error, …); empty list on success
+        }
     """
     if request.method == "POST":
         try:
             body = await request.json()
             query = body.get("query", "")
-            endpoint = body.get("endpoint")
         except Exception:
             form = await request.form()
             query = form.get("query", "")
-            endpoint = form.get("endpoint")
     else:
         query = request.query_params.get("query", "")
-        endpoint = request.query_params.get("endpoint")
 
     if not query:
         return JSONResponse({"error": "Missing 'query' parameter"}, status_code=400)
 
-    # Default to central Virtuoso
-    virtuoso_url = os.getenv("VIRTUOSO_URL", "http://virtuoso:8890")
-    if not endpoint:
-        endpoint = f"{virtuoso_url}/sparql"
-
-    # Build server lookup from registered servers
+    # Build the ontology → worker URL lookup from registered servers.
     server_data_json = await redis_client.hvals("registered_servers")
     servers = [json.loads(s) for s in server_data_json]
     server_lookup = {
         s.get("ontology", "").lower(): s.get("url", "")
         for s in servers
-        if s.get("status") == "online"
+        if s.get("status") == "online" and s.get("url")
     }
 
-    # Expand OWL patterns in the query
-    expanded_query, expansions = await expand_sparql_query(query, server_lookup)
-
-    # Execute the expanded query
-    results = await execute_sparql(expanded_query, endpoint)
+    rewritten_query, expansions, errors = await expand_sparql_query(query, server_lookup)
 
     return {
-        "results": results,
-        "expanded_query": expanded_query if expansions else None,
-        "expansions": expansions if expansions else None,
+        "rewritten_query": rewritten_query,
+        "expansions": expansions,
+        "errors": errors,
     }
 
 
@@ -2105,7 +2094,6 @@ async def admin_dashboard(
         entry["server_status"] = srv.get("status", "unknown")
         entry["server_url"] = srv.get("url", entry.get("server_url", ""))
 
-    virt_ok = await virtuoso_mgr.health_check()
     es_ok = await es_mgr.health_check()
 
     return _admin_templates.TemplateResponse(
@@ -2113,7 +2101,6 @@ async def admin_dashboard(
         {
             "request": request,
             "entries": sorted(entries, key=lambda e: e.get("ontology_id", "")),
-            "virtuoso_ok": virt_ok,
             "es_ok": es_ok,
             "total": len(entries),
             "online": sum(1 for e in entries if e.get("server_status") == "online"),
@@ -2138,15 +2125,12 @@ async def admin_ontology_detail(
     if active_index:
         doc_count = await es_mgr.get_doc_count(active_index)
 
-    triple_count = await virtuoso_mgr.get_triple_count(ontology_id)
-
     return _admin_templates.TemplateResponse(
         "ontology_detail.html",
         {
             "request": request,
             "entry": entry,
             "doc_count": doc_count,
-            "triple_count": triple_count,
         },
     )
 
@@ -2167,7 +2151,6 @@ async def admin_trigger_update(
                 ontology_id=ontology_id,
                 registry_entry=entry,
                 redis_client=redis_client,
-                virtuoso_mgr=virtuoso_mgr,
                 es_mgr=es_mgr,
                 ontologies_base_path=ONTOLOGIES_BASE_PATH,
                 es_url=ELASTICSEARCH_URL,
@@ -2208,7 +2191,6 @@ async def webhook_trigger_update(ontology_id: str, request: Request):
                 ontology_id=ontology_id,
                 registry_entry=entry,
                 redis_client=redis_client,
-                virtuoso_mgr=virtuoso_mgr,
                 es_mgr=es_mgr,
                 ontologies_base_path=ONTOLOGIES_BASE_PATH,
                 es_url=ELASTICSEARCH_URL,
@@ -2253,9 +2235,8 @@ async def admin_enable_ontology(
 async def admin_infrastructure(
     credentials: HTTPBasicCredentials = Depends(_require_admin),
 ):
-    """Health status of Virtuoso and Elasticsearch."""
+    """Health status of Elasticsearch."""
     return {
-        "virtuoso": "ok" if await virtuoso_mgr.health_check() else "error",
         "elasticsearch": "ok" if await es_mgr.health_check() else "error",
     }
 
@@ -2310,7 +2291,6 @@ async def admin_provision_ontology(
         reload_script,
         "--ontology-id", ontology_id,
         "--source-url", payload.source_url,
-        "--central-virtuoso-url", os.getenv("VIRTUOSO_URL", "http://virtuoso:8890"),
         "--central-es-url", ELASTICSEARCH_URL,
     ]
     if payload.detach:

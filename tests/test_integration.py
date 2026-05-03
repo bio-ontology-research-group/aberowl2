@@ -18,11 +18,7 @@ Test map
    – Loads pizza data into the test ES index, then queries via the Groovy
      proxy endpoint and verifies the Pizza class is returned.
 
-4. test_central_virtuoso_sparql
-   – Central Virtuoso fixture.  Loads a small named graph with CentralVirtuosoManager,
-     queries it back via the SPARQL HTTP endpoint, verifies triple count.
-
-5. test_ontology_update_hotswap
+4. test_ontology_update_hotswap
    – Pizza stack, /api/updateOntology.groovy + /api/updateStatus.groovy.
    – Writes a modified copy of pizza.owl to the staging path, triggers a
      hot-swap via the new endpoint, polls until done, and verifies the new
@@ -43,7 +39,6 @@ from tests.conftest import (
     DATA_DIR,
     ONT_HOST_PATH,
     PORT_ES,
-    PORT_VIRT,
     TEST_SECRET_KEY,
 )
 
@@ -281,90 +276,7 @@ def test_es_search_via_groovy_api(pizza_stack):
 
 
 # ---------------------------------------------------------------------------
-# 4. Central Virtuoso SPARQL (CentralVirtuosoManager)
-# ---------------------------------------------------------------------------
-
-@pytest.mark.slow
-@pytest.mark.timeout(120)
-def test_central_virtuoso_sparql(central_virtuoso):
-    """
-    Use CentralVirtuosoManager to:
-    1. Load a small well-known named graph (pizza.owl via LOAD <file://...>
-       is not available to the test container, so we INSERT triples directly).
-    2. Verify the triple count matches what we inserted.
-    3. Query the SPARQL endpoint directly via HTTP to confirm data is live.
-    """
-    import asyncio
-
-    # Add central_server to sys.path so imports resolve without installing
-    import sys
-    sys.path.insert(0, str(REPO / "central_server"))
-
-    from app.virtuoso_manager import CentralVirtuosoManager
-
-    # Point the manager at the test Virtuoso
-    os.environ["VIRTUOSO_URL"] = central_virtuoso
-    os.environ["VIRTUOSO_DBA_PASSWORD"] = "dba"
-
-    mgr = CentralVirtuosoManager()
-    ont_id = "test_pizza"
-    graph_uri = mgr._graph_uri(ont_id)
-
-    async def run():
-        # --- Insert 5 triples via SPARQL Update ---
-        insert_sparql = f"""
-        INSERT DATA {{
-            GRAPH <{graph_uri}> {{
-                <http://example.org/Pizza>
-                    a <http://www.w3.org/2002/07/owl#Class> ;
-                    <http://www.w3.org/2000/01/rdf-schema#label> "Pizza"@en .
-                <http://example.org/Margherita>
-                    a <http://www.w3.org/2002/07/owl#Class> ;
-                    <http://www.w3.org/2002/07/owl#subClassOf> <http://example.org/Pizza> ;
-                    <http://www.w3.org/2000/01/rdf-schema#label> "Margherita"@en .
-                <http://example.org/Veneziana>
-                    a <http://www.w3.org/2002/07/owl#Class> ;
-                    <http://www.w3.org/2002/07/owl#subClassOf> <http://example.org/Pizza> ;
-                    <http://www.w3.org/2000/01/rdf-schema#label> "Veneziana"@en .
-            }}
-        }}
-        """
-        ok = await mgr._execute_update(insert_sparql)
-        assert ok, "SPARQL INSERT DATA failed"
-
-        # --- Verify triple count ---
-        count = await mgr.get_triple_count(ont_id)
-        assert count is not None, "get_triple_count returned None"
-        assert count >= 8, f"Expected at least 8 triples, got {count}"
-
-        # --- Query live SPARQL endpoint directly ---
-        r = requests.get(
-            f"{central_virtuoso}/sparql",
-            params={
-                "query": f"SELECT (COUNT(*) AS ?n) WHERE {{ GRAPH <{graph_uri}> {{ ?s ?p ?o }} }}",
-                "format": "application/sparql-results+json",
-            },
-            timeout=30,
-        )
-        assert r.status_code == 200, f"SPARQL HTTP query failed: {r.status_code}"
-        sparql_count = int(
-            r.json()["results"]["bindings"][0]["n"]["value"]
-        )
-        assert sparql_count == count, (
-            f"Triple count mismatch: manager={count}, SPARQL endpoint={sparql_count}"
-        )
-
-        # --- Cleanup ---
-        await mgr.drop_staging(ont_id)  # staging graph
-        await mgr._execute_update(f"DROP SILENT GRAPH <{graph_uri}>")
-
-        print(f"\n  Virtuoso: inserted and confirmed {count} triples in <{graph_uri}>")
-
-    asyncio.run(run())
-
-
-# ---------------------------------------------------------------------------
-# 5. Ontology update / hot-swap
+# 4. Ontology update / hot-swap
 # ---------------------------------------------------------------------------
 
 @pytest.mark.slow

@@ -16,7 +16,6 @@ uv run --extra test pytest tests/ -v
 | `test_go_manchester_subclass_query` | `test_integration.py` | `slow` | GO loaded + classified by ELK; Manchester subClassOf query returns known children of biological\_process (GO:0008150) |
 | `test_bioportal_fetch_dedup` | `test_integration.py` | `bioportal` | BioPortal REST API returns ontologies; OBOFoundry IDs are excluded; schema is correct |
 | `test_es_search_via_groovy_api` | `test_integration.py` | `slow` | pizza stack proxies an ES query via `elastic.groovy`; the Pizza class is found |
-| `test_central_virtuoso_sparql` | `test_integration.py` | `slow` | `CentralVirtuosoManager` inserts triples into a named graph; triple count matches via HTTP SPARQL |
 | `test_ontology_update_hotswap` | `test_integration.py` | `slow` | `updateOntology.groovy` hot-swaps pizza; `updateStatus.groovy` reports success; subsequent query still works |
 
 ---
@@ -57,7 +56,6 @@ uv run --extra test pytest tests/ -v -k test_ontology_update_hotswap
 | `data/pizza.owl` | Pizza ontology (160 KB); included in repo |
 | `Dockerfile.api` | Per-ontology API image |
 | `Dockerfile.nginx` | Nginx image |
-| `Dockerfile.virtuoso` | Virtuoso image (used by central\_virtuoso fixture) |
 | `docker-compose.yml` | New-format per-ontology compose file |
 
 ---
@@ -74,20 +72,12 @@ Yields: `http://localhost:19200`
 
 Teardown: `docker rm -f aberowl_test_es`
 
-### `central_virtuoso`
-
-Builds the Virtuoso image from `Dockerfile.virtuoso`, starts it, exposes SPARQL HTTP on `PORT_VIRT` (default **18890**), waits up to 90 s.
-
-Yields: `http://localhost:18890`
-
-Teardown: `docker rm -f aberowl_test_virtuoso`
-
 ### `pizza_stack`
 
-Depends on `central_es` and `central_virtuoso`.
+Depends on `central_es`.
 
 1. Creates `{ONT_HOST_PATH}/pizza/pizza_active.owl` (copied from `data/pizza.owl`).
-2. Writes a new-format env file with `ONTOLOGY_ID=pizza`, `NGINX_PORT=PORT_PIZZA` (default **8082**), and sets `ELASTICSEARCH_URL` / `CENTRAL_VIRTUOSO_URL` pointing to the test ES and Virtuoso.
+2. Writes a new-format env file with `ONTOLOGY_ID=pizza`, `NGINX_PORT=PORT_PIZZA` (default **8082**), and sets `ELASTICSEARCH_URL` pointing to the test ES.
 3. Runs `docker compose up --build -d`.
 4. Polls `/api/health.groovy` for up to 180 s.
 
@@ -113,14 +103,13 @@ All ports can be overridden with environment variables so the tests can run alon
 | `ABEROWL_TEST_PORT_GO` | `8080` | nginx port for GO stack |
 | `ABEROWL_TEST_CENTRAL_PORT` | `8099` | central-server port |
 | `ABEROWL_TEST_ES_PORT` | `19200` | host-side ES port |
-| `ABEROWL_TEST_VIRTUOSO_PORT` | `18890` | host-side Virtuoso HTTP port |
 | `ABEROWL_TEST_ONT_PATH` | `/tmp/aberowl_test_ontologies` | host path for shared OWL files |
 | `ABEROWL_REPO_PATH` | (parent of `tests/`) | repository root |
 
 Example — run on non-default ports to avoid conflicts:
 
 ```bash
-ABEROWL_TEST_ES_PORT=29200 ABEROWL_TEST_VIRTUOSO_PORT=28890 \
+ABEROWL_TEST_ES_PORT=29200 \
     uv run --extra test pytest tests/ -v -m slow
 ```
 
@@ -180,21 +169,7 @@ Steps:
 
 This validates that `ELASTICSEARCH_URL` is wired correctly inside the container and that the Groovy HTTP proxy works end-to-end.
 
-### 4 · `test_central_virtuoso_sparql`
-
-**Marker**: `slow`
-**Timeout**: 120 s
-**Fixture**: `central_virtuoso`
-
-Uses `CentralVirtuosoManager` (sets `VIRTUOSO_URL` and `VIRTUOSO_DBA_PASSWORD` env vars before instantiation):
-
-1. Inserts 8 triples into graph `http://aberowl.net/ontology/test_pizza` via `_execute_update()`.
-2. Calls `get_triple_count("test_pizza")` and asserts result ≥ 8.
-3. Queries the raw SPARQL HTTP endpoint (`/sparql`) to get a COUNT(*) independently.
-4. Asserts both counts agree.
-5. Drops the test graph.
-
-### 5 · `test_ontology_update_hotswap`
+### 4 · `test_ontology_update_hotswap`
 
 **Marker**: `slow`
 **Timeout**: 300 s
@@ -219,7 +194,6 @@ Full hot-swap lifecycle:
 | Symptom | Likely cause |
 |---------|-------------|
 | `go_stack` fixture times out | GO classification took > 10 min; increase `ABEROWL_TEST_TIMEOUT_GO` or check container RAM |
-| `central_virtuoso` fixture fails | `Dockerfile.virtuoso` build error or `DBA_PASSWORD` not accepted; check Virtuoso container logs |
 | `test_bioportal_fetch_dedup` skipped or fails | BioPortal API key expired or rate limited; update `BIOPORTAL_API_KEY` in `bioportal.py` |
 | `test_es_search_via_groovy_api` — 0 hits | ES document not refreshed in time; the test uses `?refresh=true` which forces immediate visibility |
 | `test_ontology_update_hotswap` — `status=failed` | `ABEROWL_SECRET_KEY` mismatch or OWL file path wrong; check container env and volume mount |
