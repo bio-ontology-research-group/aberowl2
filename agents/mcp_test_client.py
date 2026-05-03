@@ -54,6 +54,7 @@ ONTOLOGY_TOOLS = {
     "get_ontology_info",
     "browse_hierarchy",
     "rewrite_sparql",
+    "list_sparql_examples",
 }
 
 
@@ -153,6 +154,9 @@ async def exercise_ontology_server(url: str) -> ServerOutcome:
                 ))
                 outcome.calls.append(await _call(
                     session, "rewrite_sparql", {"query": rewrite_query},
+                ))
+                outcome.calls.append(await _call(
+                    session, "list_sparql_examples", {},
                 ))
     except Exception as e:
         outcome.connect_error = f"{type(e).__name__}: {e}"

@@ -15,7 +15,6 @@ services:
     environment:
       - CONTAINER_ID=worker-${WORKER_ID:-1}
       - ABEROWL_SECRET_KEY=${ABEROWL_SECRET_KEY}
-      - CENTRAL_VIRTUOSO_URL=http://virtuoso:8890
       - CENTRAL_ES_URL=http://elasticsearch:9200
       - ELASTICSEARCH_URL=http://elasticsearch:9200
       - ONTOLOGY_PATH=/data

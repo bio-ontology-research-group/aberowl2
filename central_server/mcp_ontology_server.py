@@ -14,6 +14,7 @@ Tools:
   - get_ontology_info: Get metadata about a specific ontology
   - browse_hierarchy: Get subclasses/superclasses of a class
   - rewrite_sparql: Rewrite SPARQL with embedded OWL DL frames into plain SPARQL
+  - list_sparql_examples: Curated SPARQL+OWL example queries to use as templates
 
 Usage:
   python mcp_ontology_server.py          # streamable HTTP on port 8766
@@ -252,11 +253,27 @@ async def browse_hierarchy(class_iri: str, ontology: str, direction: str = "subc
         "  1. VALUES ?var { OWL <type> <ontology_id> { dl_query } }\n"
         "  2. FILTER OWL(?var, <type>, <ontology_id>, \"dl_query\")\n\n"
         "Where <type> is subclass | superclass | equivalent | subeq | supeq, "
-        "<ontology_id> is a registered AberOWL ontology id (e.g. go-plus, "
-        "chebi), and <dl_query> is a Manchester OWL Syntax expression "
-        "(e.g. 'part of' some 'cell').\n\n"
-        "Example input:\n"
-        "  SELECT ?c WHERE { VALUES ?c { OWL subeq go-plus { 'cell death' } } }\n\n"
+        "<ontology_id> is a registered AberOWL ontology id (case-insensitive; "
+        "may contain '-' or '.', e.g. go-plus, chebi.ext), and <dl_query> is "
+        "a Manchester OWL Syntax expression — a class label like 'cell death' "
+        "or a compound such as 'part of' some 'cell'.\n\n"
+        "Examples (call list_sparql_examples for the full set):\n"
+        "  • Subclasses of 'cell death' in go-plus (VALUES form):\n"
+        "      SELECT ?c ?label WHERE {\n"
+        "        VALUES ?c { OWL subeq go-plus { 'cell death' } }\n"
+        "        ?c <http://www.w3.org/2000/01/rdf-schema#label> ?label .\n"
+        "      }\n\n"
+        "  • UniProt federation — proteins classified under GO subclasses:\n"
+        "      SELECT ?protein ?goClass WHERE {\n"
+        "        VALUES ?goClass { OWL subeq go-plus { 'cell death' } }\n"
+        "        ?protein a <http://purl.uniprot.org/core/Protein> ;\n"
+        "                 <http://purl.uniprot.org/core/classifiedWith> ?goClass .\n"
+        "      } LIMIT 50\n\n"
+        "  • FILTER form, equivalent semantics:\n"
+        "      SELECT ?c WHERE {\n"
+        "        ?c <http://www.w3.org/2000/01/rdf-schema#label> ?l .\n"
+        "        FILTER OWL(?c, subeq, go-plus, \"'part of' some 'cell'\")\n"
+        "      }\n\n"
         "Frames whose ontology is unknown or whose worker is offline are "
         "reported as errors and replaced with an empty match in the rewritten "
         "query, so the rest of the query is still usable."
@@ -299,6 +316,115 @@ async def rewrite_sparql(query: str) -> str:
 
     lines.append("Rewritten query:")
     lines.append(rewritten or "(empty)")
+    return "\n".join(lines)
+
+
+_SPARQL_EXAMPLES: list[dict[str, str]] = [
+    {
+        "title": "Subclasses of 'cell death' in GO (VALUES form)",
+        "ontology": "go-plus",
+        "endpoint": "https://sparql.hegroup.org/sparql",
+        "description": (
+            "Resolves every subclass of 'cell death' in GO via the reasoner, "
+            "then asks Ontobee for each class's label."
+        ),
+        "query": (
+            "SELECT ?c ?label WHERE {\n"
+            "  VALUES ?c { OWL subeq go-plus { 'cell death' } }\n"
+            "  ?c <http://www.w3.org/2000/01/rdf-schema#label> ?label .\n"
+            "} LIMIT 50"
+        ),
+    },
+    {
+        "title": "UniProt: proteins classified under a GO subtree",
+        "ontology": "go-plus",
+        "endpoint": "https://sparql.uniprot.org/sparql",
+        "description": (
+            "Federation pattern — AberOWL resolves the GO subtree, the "
+            "rewritten query goes to UniProt to find matching proteins."
+        ),
+        "query": (
+            "PREFIX up: <http://purl.uniprot.org/core/>\n"
+            "SELECT ?protein ?mnemonic ?goClass WHERE {\n"
+            "  VALUES ?goClass { OWL subeq go-plus { 'cell death' } }\n"
+            "  ?protein a up:Protein ;\n"
+            "           up:classifiedWith ?goClass ;\n"
+            "           up:mnemonic ?mnemonic .\n"
+            "} LIMIT 50"
+        ),
+    },
+    {
+        "title": "Manchester compound DL query (FILTER form)",
+        "ontology": "go-plus",
+        "endpoint": "https://sparql.hegroup.org/sparql",
+        "description": (
+            "Compound DL queries work the same way: any Manchester syntax "
+            "is accepted inside the OWL frame."
+        ),
+        "query": (
+            "SELECT ?c ?label WHERE {\n"
+            "  ?c <http://www.w3.org/2000/01/rdf-schema#label> ?label .\n"
+            "  FILTER OWL(?c, subeq, go-plus, \"'part of' some 'cell'\")\n"
+            "} LIMIT 50"
+        ),
+    },
+    {
+        "title": "Multiple frames in one query",
+        "ontology": "go-plus, chebi",
+        "endpoint": "https://sparql.hegroup.org/sparql",
+        "description": (
+            "Each OWL frame is resolved independently against the named "
+            "ontology — mix and match across ontologies in one rewrite."
+        ),
+        "query": (
+            "SELECT ?go ?chem WHERE {\n"
+            "  VALUES ?go   { OWL subeq go-plus { 'apoptotic process' } }\n"
+            "  VALUES ?chem { OWL subeq chebi   { 'small molecule' } }\n"
+            "}"
+        ),
+    },
+    {
+        "title": "Pizza demo — works against the local test worker",
+        "ontology": "pizza",
+        "endpoint": "(use the /api/sparql rewriter only — no public endpoint)",
+        "description": (
+            "Smallest reproducible example, useful for verifying the local "
+            "test harness before pointing at GO / UniProt."
+        ),
+        "query": (
+            "SELECT ?c WHERE {\n"
+            "  VALUES ?c { OWL subeq pizza { Pizza } }\n"
+            "}"
+        ),
+    },
+]
+
+
+@mcp.tool(
+    description=(
+        "Return curated SPARQL example queries that demonstrate the OWL DL "
+        "frame syntax accepted by `rewrite_sparql`. Each example includes a "
+        "title, target ontology, suggested SPARQL endpoint to run the "
+        "rewritten query against, and the query itself. Use these as "
+        "templates when building new queries."
+    ),
+)
+async def list_sparql_examples() -> str:
+    lines: list[str] = [f"{len(_SPARQL_EXAMPLES)} SPARQL + OWL examples:\n"]
+    for i, ex in enumerate(_SPARQL_EXAMPLES, 1):
+        lines.append(f"--- {i}. {ex['title']} ---")
+        lines.append(f"Ontology: {ex['ontology']}")
+        lines.append(f"Endpoint: {ex['endpoint']}")
+        lines.append(f"What it does: {ex['description']}")
+        lines.append("Query:")
+        for q_line in ex["query"].splitlines():
+            lines.append(f"  {q_line}")
+        lines.append("")
+    lines.append(
+        "To resolve any of these, pass the query to `rewrite_sparql`. "
+        "AberOWL returns the rewritten SPARQL with concrete IRIs spliced "
+        "in; you then run it against the suggested endpoint."
+    )
     return "\n".join(lines)
 
 

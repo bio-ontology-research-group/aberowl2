@@ -50,6 +50,7 @@ class TestMCPOntologyServerSchemas:
             "get_ontology_info",
             "browse_hierarchy",
             "rewrite_sparql",
+            "list_sparql_examples",
         }
         assert tool_names == expected, f"Missing tools: {expected - tool_names}"
 

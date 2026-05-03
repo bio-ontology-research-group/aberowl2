@@ -2,10 +2,9 @@
 # Deploys to /data/aberowl/
 #
 # Services:
-#   - central-server: FastAPI app (registry, aggregator, API, frontend SPA)
+#   - central-server: FastAPI app (registry, aggregator, API, SPARQL rewriter, frontend SPA)
 #   - redis: Registry + API key store
 #   - elasticsearch: Central class/ontology index
-#   - virtuoso: Central RDF/SPARQL store
 #
 # Usage:
 #   cd /data/aberowl
@@ -37,27 +36,6 @@ services:
         limits:
           memory: 4g
 
-  virtuoso:
-    image: openlink/virtuoso-opensource-7:7.2.12
-    restart: unless-stopped
-    environment:
-      - DBA_PASSWORD=${VIRTUOSO_DBA_PASSWORD:-dba}
-      - SPARQL_UPDATE=true
-      - VIRT_Parameters_NumberOfBuffers=340000
-      - VIRT_Parameters_MaxDirtyBuffers=250000
-      - VIRT_SPARQL_ResultSetMaxRows=50000
-      - VIRT_SPARQL_MaxQueryCostEstimationTime=30000
-      - VIRT_SPARQL_MaxQueryExecutionTime=30
-    volumes:
-      - virtuoso_data:/database
-      - ${ONTOLOGIES_PATH:-/data/aberowl/ontologies}:/data/ontologies:ro
-    networks:
-      - aberowl-internal
-    deploy:
-      resources:
-        limits:
-          memory: 8g
-
   central-server:
     build:
       context: ..
@@ -65,17 +43,13 @@ services:
     restart: unless-stopped
     environment:
       - CENTRAL_ES_URL=http://elasticsearch:9200
-      - VIRTUOSO_URL=http://virtuoso:8890
-      - VIRTUOSO_DBA_PASSWORD=${VIRTUOSO_DBA_PASSWORD:-dba}
       - ADMIN_USER=${ADMIN_USER:-admin}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - ONTOLOGIES_HOST_PATH=${ONTOLOGIES_PATH:-/data/aberowl/ontologies}
       - ABEROWL_REPO_PATH=/app
       - ENABLE_MCP=${ENABLE_MCP:-true}
       - ENABLE_MCP_ONTOLOGY=${ENABLE_MCP_ONTOLOGY:-true}
-      - ENABLE_MCP_SPARQL=${ENABLE_MCP_SPARQL:-false}
       - MCP_ONTOLOGY_PORT=${MCP_ONTOLOGY_PORT:-8766}
-      - MCP_SPARQL_PORT=${MCP_SPARQL_PORT:-8767}
       - CENTRAL_SERVER_URL=${CENTRAL_SERVER_URL:-http://localhost:8000}
       - SOURCE_SYNC_INTERVAL_SECONDS=86400
       - UPDATE_CHECK_INTERVAL_SECONDS=86400
@@ -88,16 +62,14 @@ services:
       - ../central_server/app/static/dist:/code/app/static/dist:ro
     ports:
       - "${CENTRAL_PORT:-8000}:8000"
-      # MCP ports are NOT published to 0.0.0.0. Default binds to loopback;
+      # MCP port is NOT published to 0.0.0.0. Default binds to loopback;
       # production sets MCP_BIND_HOST=10.67.24.207 (onto's internal IP) so
-      # the frontend nginx can reach them. Public internet must always go
-      # through the nginx route /aberowl-beta/mcp/{ontology,sparql}/.
+      # the frontend nginx can reach it. Public internet must always go
+      # through the nginx route /aberowl-beta/mcp/ontology/.
       - "${MCP_BIND_HOST:-127.0.0.1}:${MCP_ONTOLOGY_PORT:-8766}:8766"
-      - "${MCP_BIND_HOST:-127.0.0.1}:${MCP_SPARQL_PORT:-8767}:8767"
     depends_on:
       - redis
       - elasticsearch
-      - virtuoso
     networks:
       - aberowl-internal
       - aberowl-net
@@ -106,7 +78,6 @@ services:
 volumes:
   redis_data:
   es_data:
-  virtuoso_data:
   central_config:
 
 networks:

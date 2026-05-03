@@ -23,10 +23,9 @@ frontend / frontend1 (10.254.146.242 / 10.254.147.211)
 onto / cbontsr01 (10.67.24.207, 256 CPUs, 1TB RAM)
    │
    ├── Central Stack (docker compose project "deploy")
-   │   ├── central-server  :8000  FastAPI + SPA frontend
+   │   ├── central-server  :8000  FastAPI + SPA frontend + SPARQL rewriter
    │   ├── redis                  Registry + API key store
-   │   ├── elasticsearch          Central class/ontology index
-   │   └── virtuoso               Central SPARQL store
+   │   └── elasticsearch          Central class/ontology index
    │
    └── Worker Containers (aberowl-worker-1 through aberowl-worker-14)
        ├── worker-1   :8081  PR (1.4GB, dedicated)
@@ -47,22 +46,21 @@ onto / cbontsr01 (10.67.24.207, 256 CPUs, 1TB RAM)
 
 All containers share the `aberowl-net` Docker network for inter-container communication.
 
-### MCP servers
+### MCP server
 
-The central-server container also hosts two MCP (Model Context Protocol)
-servers as in-container subprocesses, controlled by env flags:
+The central-server container also hosts an MCP (Model Context Protocol)
+server as an in-container subprocess, controlled by env flags:
 
 | Port | Server | Default flag | Status |
 |------|--------|--------------|--------|
-| 8766 | `mcp_ontology_server.py` | `ENABLE_MCP_ONTOLOGY=true` | shipping |
-| 8767 | `mcp_sparql_server.py`   | `ENABLE_MCP_SPARQL=false` | gated until central Virtuoso is populated |
+| 8766 | `mcp_ontology_server.py` | `ENABLE_MCP_ONTOLOGY=true` | shipping (7 tools, including `rewrite_sparql`) |
 
-Both are gated behind `ENABLE_MCP=true` (the parent switch). The MCP
-ports are **not** published to `0.0.0.0`. The compose file binds them
-to `${MCP_BIND_HOST}` (default `127.0.0.1`); for prod we set
-`MCP_BIND_HOST=10.67.24.207` so the frontend nginx can reach them, but
-nothing else can. Public access is exclusively via the nginx routes
-`/aberowl-beta/mcp/ontology/` and `/aberowl-beta/mcp/sparql/` — see
+Gated behind `ENABLE_MCP=true` (the parent switch). The MCP port is
+**not** published to `0.0.0.0`. The compose file binds it to
+`${MCP_BIND_HOST}` (default `127.0.0.1`); for prod we set
+`MCP_BIND_HOST=10.67.24.207` so the frontend nginx can reach it, but
+nothing else can. Public access is exclusively via the nginx route
+`/aberowl-beta/mcp/ontology/` — see
 `deploy/nginx/frontend-aberowl-beta.conf`.
 
 ## Server Access
@@ -81,7 +79,7 @@ nothing else can. Public access is exclusively via the nginx routes
 ├── deploy/
 │   ├── docker-compose.central.yml   # Central stack definition
 │   ├── docker-compose.worker.yml    # Worker template (not used directly)
-│   ├── .env                         # Secrets (ADMIN_PASSWORD, ABEROWL_SECRET_KEY, VIRTUOSO_DBA_PASSWORD)
+│   ├── .env                         # Secrets (ADMIN_PASSWORD, ABEROWL_SECRET_KEY)
 │   ├── deploy.sh                    # Deployment script
 │   ├── download_ontologies.py       # OBO Foundry downloader
 │   ├── download_bioportal.py        # BioPortal downloader
@@ -149,7 +147,6 @@ docker run -d \
     --network aberowl-net \
     -e CONTAINER_ID=worker-N \
     -e ABEROWL_SECRET_KEY="${ABEROWL_SECRET_KEY}" \
-    -e CENTRAL_VIRTUOSO_URL=http://deploy-virtuoso-1:8890 \
     -e CENTRAL_ES_URL=http://deploy-elasticsearch-1:9200 \
     -e ELASTICSEARCH_URL=http://deploy-elasticsearch-1:9200 \
     -e ONTOLOGY_PATH=/data/worker_N_config.json \
@@ -398,7 +395,6 @@ All secrets are in `/data/aberowl/deploy/.env` on `onto`:
 |----------|---------|
 | `ADMIN_PASSWORD` | HTTP Basic auth for `/admin/*` endpoints |
 | `ABEROWL_SECRET_KEY` | Inter-service auth (worker ↔ central) |
-| `VIRTUOSO_DBA_PASSWORD` | Virtuoso admin password |
 
 ## Monitoring
 
@@ -448,9 +444,9 @@ ssh onto "docker restart aberowl-worker-{1..14}"
 
 `docker compose up --build -d` recreates the central-server container
 but **keeps the named volumes** (`redis_data`, `es_data`,
-`virtuoso_data`, `central_config`) and the bind-mounted ontologies in
+`central_config`) and the bind-mounted ontologies in
 `/data/aberowl/ontologies`. So Redis registry, Elasticsearch indices,
-Virtuoso store, and downloaded OWL files all survive an upgrade.
+and downloaded OWL files all survive an upgrade.
 
 What would destroy data:
 - `docker compose down -v` (the `-v` removes named volumes — never run this without a backup).
@@ -471,7 +467,6 @@ cd /data/aberowl
 # Add the new MCP env vars to deploy/.env if not present
 grep -q ENABLE_MCP_ONTOLOGY deploy/.env || cat >> deploy/.env <<'EOF'
 ENABLE_MCP_ONTOLOGY=true
-ENABLE_MCP_SPARQL=false
 MCP_BIND_HOST=10.67.24.207
 EOF
 
@@ -514,7 +509,6 @@ and must not be used for AberOWL workers.
 | Port | Service | Binding |
 |------|---------|---------|
 | 8766 | MCP ontology server | `${MCP_BIND_HOST}` only — never `0.0.0.0` |
-| 8767 | MCP SPARQL server   | `${MCP_BIND_HOST}` only — never `0.0.0.0` |
 
 ## Transitioning to Production (aber-owl.net)
 

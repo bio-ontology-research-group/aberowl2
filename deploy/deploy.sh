@@ -78,17 +78,13 @@ if [ ! -f deploy/.env ]; then
     cat > deploy/.env <<EOF
 ADMIN_PASSWORD=$(openssl rand -hex 16)
 ABEROWL_SECRET_KEY=$(openssl rand -hex 32)
-VIRTUOSO_DBA_PASSWORD=$(openssl rand -hex 16)
 ONTOLOGIES_PATH=/data/aberowl/ontologies
 CENTRAL_PORT=8000
 ENABLE_MCP=true
 ENABLE_MCP_ONTOLOGY=true
-# SPARQL MCP stays off until central Virtuoso is populated with
-# ontology RDF (see deploy/README.md "MCP servers" section).
-ENABLE_MCP_SPARQL=false
-# Interface the MCP ports bind to on the host. 127.0.0.1 keeps them
+# Interface the MCP port binds to on the host. 127.0.0.1 keeps it
 # private; set to onto's internal IP (10.67.24.207) so the frontend
-# nginx route /aberowl-beta/mcp/* can reach them. Never 0.0.0.0.
+# nginx route /aberowl-beta/mcp/ontology/ can reach it. Never 0.0.0.0.
 MCP_BIND_HOST=127.0.0.1
 EOF
     echo "Created deploy/.env with random secrets"

@@ -82,7 +82,6 @@ def build_docker_cmd(worker: dict, env: dict, port: int) -> list[str]:
         "--network", "aberowl-net",
         "-e", f"CONTAINER_ID=worker-{n}",
         "-e", f"ABEROWL_SECRET_KEY={env['ABEROWL_SECRET_KEY']}",
-        "-e", "CENTRAL_VIRTUOSO_URL=http://deploy-virtuoso-1:8890",
         "-e", "CENTRAL_ES_URL=http://deploy-elasticsearch-1:9200",
         "-e", "ELASTICSEARCH_URL=http://deploy-elasticsearch-1:9200",
         "-e", f"ONTOLOGY_PATH={cfg_path_in_container}",
