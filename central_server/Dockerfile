@@ -7,7 +7,6 @@ RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
 
 COPY ./central_server/app /code/app
 COPY ./central_server/mcp_ontology_server.py /code/mcp_ontology_server.py
-COPY ./central_server/mcp_sparql_server.py /code/mcp_sparql_server.py
 COPY ./central_server/config /code/config
 
 # Create config directory if not present

@@ -89,7 +89,6 @@
               </tr>
               <tr><th>Last Checked</th><td class="small">{{ (entry.last_checked or '')[:19].replace('T',' ') or '—' }}</td></tr>
               <tr><th>Last Updated</th><td class="small">{{ (entry.last_updated or '')[:19].replace('T',' ') or '—' }}</td></tr>
-              <tr><th>Triples</th><td>{{ triple_count if triple_count is not none else '—' }}</td></tr>
               <tr><th>ES Docs</th><td>{{ doc_count if doc_count is not none else '—' }}</td></tr>
               <tr><th>ES Index</th><td><code class="small">{{ entry.active_es_index or '—' }}</code></td></tr>
             </tbody>

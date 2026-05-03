@@ -13,6 +13,7 @@ Tools:
   - get_class_info: Get detailed annotations for a specific class
   - get_ontology_info: Get metadata about a specific ontology
   - browse_hierarchy: Get subclasses/superclasses of a class
+  - rewrite_sparql: Rewrite SPARQL with embedded OWL DL frames into plain SPARQL
 
 Usage:
   python mcp_ontology_server.py          # streamable HTTP on port 8766
@@ -42,6 +43,17 @@ async def _api_get(path: str, params: dict | None = None) -> dict:
     url = f"{CENTRAL_SERVER_URL.rstrip('/')}{path}"
     async with aiohttp.ClientSession() as session:
         async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+            if resp.status == 200:
+                return await resp.json()
+            text = await resp.text()
+            return {"error": f"HTTP {resp.status}: {text[:500]}"}
+
+
+async def _api_post(path: str, body: dict) -> dict:
+    """Make a POST request to the central AberOWL API."""
+    url = f"{CENTRAL_SERVER_URL.rstrip('/')}{path}"
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, json=body, timeout=aiohttp.ClientTimeout(total=60)) as resp:
             if resp.status == 200:
                 return await resp.json()
             text = await resp.text()
@@ -227,6 +239,66 @@ async def browse_hierarchy(class_iri: str, ontology: str, direction: str = "subc
         lbl = r.get("label", r.get("owlClass", "?"))
         iri = r.get("class", "")
         lines.append(f"  {lbl} - {iri}")
+    return "\n".join(lines)
+
+
+@mcp.tool(
+    description=(
+        "Rewrite a SPARQL query that contains embedded OWL DL frames into "
+        "plain SPARQL with concrete class IRIs spliced in. AberOWL only "
+        "rewrites — it does not execute. Run the returned query against "
+        "any SPARQL endpoint you choose (Ontobee, UniProt, Wikidata, …).\n\n"
+        "Two embedded frame patterns are supported:\n"
+        "  1. VALUES ?var { OWL <type> <ontology_id> { dl_query } }\n"
+        "  2. FILTER OWL(?var, <type>, <ontology_id>, \"dl_query\")\n\n"
+        "Where <type> is subclass | superclass | equivalent | subeq | supeq, "
+        "<ontology_id> is a registered AberOWL ontology id (e.g. go-plus, "
+        "chebi), and <dl_query> is a Manchester OWL Syntax expression "
+        "(e.g. 'part of' some 'cell').\n\n"
+        "Example input:\n"
+        "  SELECT ?c WHERE { VALUES ?c { OWL subeq go-plus { 'cell death' } } }\n\n"
+        "Frames whose ontology is unknown or whose worker is offline are "
+        "reported as errors and replaced with an empty match in the rewritten "
+        "query, so the rest of the query is still usable."
+    ),
+)
+async def rewrite_sparql(query: str) -> str:
+    """
+    Args:
+        query: SPARQL query string containing one or more OWL DL frames.
+    """
+    data = await _api_post("/api/sparql", {"query": query})
+    if data.get("error") and "rewritten_query" not in data:
+        return f"Error: {data['error']}"
+
+    rewritten = data.get("rewritten_query", "")
+    expansions = data.get("expansions") or []
+    errors = data.get("errors") or []
+
+    lines: list[str] = []
+    if expansions:
+        lines.append(f"Resolved {len(expansions)} OWL frame(s):")
+        for exp in expansions:
+            lines.append(
+                f"  - {exp.get('pattern')} {exp.get('variable')}: "
+                f"{exp.get('type')} on {exp.get('ontology')} → "
+                f"{exp.get('result_count')} classes"
+            )
+        lines.append("")
+    if errors:
+        lines.append(f"Could not resolve {len(errors)} frame(s) "
+                     "(replaced with an empty match in the rewritten query):")
+        for err in errors:
+            lines.append(
+                f"  - {err.get('pattern')} {err.get('variable')} "
+                f"({err.get('type')} on {err.get('ontology')}): {err.get('error')}"
+            )
+        lines.append("")
+    if not expansions and not errors:
+        lines.append("No OWL DL frames found in the query — returned unchanged.\n")
+
+    lines.append("Rewritten query:")
+    lines.append(rewritten or "(empty)")
     return "\n".join(lines)
 
 

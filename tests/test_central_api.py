@@ -2,7 +2,7 @@
 Unit tests for the central server FastAPI endpoints.
 
 Uses httpx TestClient with a test FastAPI app to avoid needing
-Docker for most tests. Tests that need real ES/Virtuoso/ontology
+Docker for most tests. Tests that need real ES/ontology
 containers are marked as 'slow'.
 """
 
@@ -100,7 +100,6 @@ def test_app(populated_redis):
 
     main_module.redis_client = populated_redis
     main_module.es_mgr = MagicMock()
-    main_module.virtuoso_mgr = MagicMock()
 
     from httpx import ASGITransport, AsyncClient
     return main_module.app

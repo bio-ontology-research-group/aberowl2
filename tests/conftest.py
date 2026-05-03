@@ -23,7 +23,6 @@ Environment overrides
     ABEROWL_TEST_PORT_GO      – nginx port for go stack     (default: 8080)
     ABEROWL_TEST_CENTRAL_PORT – port for central-server     (default: 8099)
     ABEROWL_TEST_ES_PORT      – host-side ES port           (default: 19200)
-    ABEROWL_TEST_VIRTUOSO_PORT– host-side Virtuoso HTTP port(default: 18890)
 """
 
 import os
@@ -47,7 +46,6 @@ PORT_PIZZA   = int(os.getenv("ABEROWL_TEST_PORT_PIZZA",    "8082"))
 PORT_GO      = int(os.getenv("ABEROWL_TEST_PORT_GO",       "8080"))
 PORT_CENTRAL = int(os.getenv("ABEROWL_TEST_CENTRAL_PORT",  "8099"))
 PORT_ES      = int(os.getenv("ABEROWL_TEST_ES_PORT",       "19200"))
-PORT_VIRT    = int(os.getenv("ABEROWL_TEST_VIRTUOSO_PORT", "18890"))
 
 # Shared ontologies volume on the host
 ONT_HOST_PATH = Path(os.getenv("ABEROWL_TEST_ONT_PATH", "/tmp/aberowl_test_ontologies"))
@@ -115,18 +113,16 @@ def _write_ont_env(
     ontology_id: str,
     nginx_port: int,
     es_host_port: int,
-    virtuoso_host_port: int,
     secret_key: str,
 ):
     """Write a new-format env file for a per-ontology docker-compose stack."""
-    # ES and Virtuoso are on the HOST network from the container perspective;
+    # ES is on the HOST network from the container perspective;
     # we use the host-gateway alias so containers can reach host-exposed ports.
     env_file.write_text(
         f"COMPOSE_PROJECT_NAME=aberowl_{nginx_port}\n"
         f"NGINX_PORT={nginx_port}\n"
         f"ONTOLOGY_ID={ontology_id}\n"
         f"ONTOLOGIES_HOST_PATH={ONT_HOST_PATH}\n"
-        f"CENTRAL_VIRTUOSO_URL=http://host.docker.internal:{virtuoso_host_port}\n"
         f"CENTRAL_ES_URL=http://host.docker.internal:{es_host_port}\n"
         f"ELASTICSEARCH_URL=http://host.docker.internal:{es_host_port}\n"
         f"ABEROWL_PUBLIC_URL=http://localhost:{nginx_port}\n"
@@ -137,8 +133,8 @@ def _write_ont_env(
 
 
 # ---------------------------------------------------------------------------
-# Session-scoped: central infrastructure (ES + Virtuoso as standalone
-# containers with host-accessible ports)
+# Session-scoped: central infrastructure (ES standalone container with
+# host-accessible port)
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="session")
@@ -165,44 +161,6 @@ def central_es() -> Generator[str, None, None]:
     url = f"http://localhost:{PORT_ES}"
     ready = _wait_http(f"{url}/_cluster/health?wait_for_status=yellow", timeout=120)
     assert ready, "Elasticsearch did not become healthy within 120 s"
-
-    yield url
-
-    subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
-
-
-@pytest.fixture(scope="session")
-def central_virtuoso(tmp_path_factory) -> Generator[str, None, None]:
-    """
-    Start a Virtuoso container (built from the repo's Dockerfile.virtuoso)
-    and expose SPARQL HTTP on PORT_VIRT.
-    Yields the base URL ``http://localhost:{PORT_VIRT}``.
-    """
-    _ensure_network()
-    container_name = "aberowl_test_virtuoso"
-    subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
-
-    # Build the Virtuoso image from the repo
-    subprocess.run(
-        ["docker", "build", "-f", "Dockerfile.virtuoso", "-t", "aberowl-test-virtuoso", "."],
-        check=True,
-        cwd=str(REPO),
-    )
-    subprocess.run(
-        [
-            "docker", "run", "-d",
-            "--name", container_name,
-            "--network", "aberowl-net",
-            "-p", f"{PORT_VIRT}:8890",
-            "-e", "DBA_PASSWORD=dba",
-            "-e", "SPARQL_UPDATE=true",
-            "aberowl-test-virtuoso",
-        ],
-        check=True,
-    )
-    url = f"http://localhost:{PORT_VIRT}"
-    ready = _wait_http(f"{url}/sparql", timeout=90)
-    assert ready, "Virtuoso did not become reachable within 90 s"
 
     yield url
 
@@ -240,7 +198,6 @@ def _make_ont_stack(ontology_id: str, owl_src: Path, nginx_port: int):
         ontology_id=ontology_id,
         nginx_port=nginx_port,
         es_host_port=PORT_ES,
-        virtuoso_host_port=PORT_VIRT,
         secret_key=TEST_SECRET_KEY,
     )
 
@@ -257,12 +214,12 @@ def _make_ont_stack(ontology_id: str, owl_src: Path, nginx_port: int):
 
 
 @pytest.fixture(scope="session")
-def pizza_stack(central_es, central_virtuoso) -> Generator[str, None, None]:
+def pizza_stack(central_es) -> Generator[str, None, None]:
     """
     Start the pizza ontology stack.  Yields the base API URL
     ``http://localhost:{PORT_PIZZA}/api``.
 
-    Depends on central_es and central_virtuoso so infrastructure starts first.
+    Depends on central_es so infrastructure starts first.
     """
     api_url, env_file, compose_file, project = _make_ont_stack(
         "pizza", DATA_DIR / "pizza.owl", PORT_PIZZA
@@ -272,7 +229,7 @@ def pizza_stack(central_es, central_virtuoso) -> Generator[str, None, None]:
 
 
 @pytest.fixture(scope="session")
-def go_stack(central_es, central_virtuoso) -> Generator[str, None, None]:
+def go_stack(central_es) -> Generator[str, None, None]:
     """
     Start the GO ontology stack.  GO is 122 MB; ELK classification takes
     several minutes.  Timeout is set to 10 minutes.

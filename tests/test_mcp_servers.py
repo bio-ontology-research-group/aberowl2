@@ -20,9 +20,14 @@ sys.path.insert(0, str(REPO / "central_server"))
 # ---------------------------------------------------------------------------
 
 def _text(result):
-    """Extract the text payload from a FastMCP call_tool result."""
+    """Extract the text payload from a FastMCP call_tool result.
+
+    Newer FastMCP returns ``(content_list, structured_dict)``; older
+    versions returned ``content_list`` directly.
+    """
     assert result, "call_tool returned no content"
-    first = result[0]
+    content = result[0] if isinstance(result, tuple) else result
+    first = content[0]
     return first.text if hasattr(first, "text") else first["text"]
 
 
@@ -44,6 +49,7 @@ class TestMCPOntologyServerSchemas:
             "get_class_info",
             "get_ontology_info",
             "browse_hierarchy",
+            "rewrite_sparql",
         }
         assert tool_names == expected, f"Missing tools: {expected - tool_names}"
 
@@ -194,105 +200,75 @@ class TestMCPOntologyServerCalls:
 
 
 # ---------------------------------------------------------------------------
-# MCP SPARQL Server — schemas
+# MCP Ontology Server — rewrite_sparql tool
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
-class TestMCPSparqlServerSchemas:
+class TestRewriteSparqlTool:
 
-    async def test_tool_definitions(self):
-        from mcp_sparql_server import mcp
+    async def test_rewrite_sparql_schema(self):
+        from mcp_ontology_server import mcp
         tools = await mcp.list_tools()
-        tool_names = {t.name for t in tools}
-        expected = {"expand_sparql", "list_sparql_examples", "explain_expansion"}
-        assert tool_names == expected, f"Missing tools: {expected - tool_names}"
+        rewrite = next(t for t in tools if t.name == "rewrite_sparql")
+        assert "query" in rewrite.inputSchema["required"]
 
-    async def test_expand_sparql_schema(self):
-        from mcp_sparql_server import mcp
+    async def test_rewrite_sparql_description_has_patterns(self):
+        from mcp_ontology_server import mcp
         tools = await mcp.list_tools()
-        expand = next(t for t in tools if t.name == "expand_sparql")
-        assert "query" in expand.inputSchema["required"]
-        assert "endpoint" in expand.inputSchema["properties"]
-
-    async def test_expand_sparql_description_has_patterns(self):
-        from mcp_sparql_server import mcp
-        tools = await mcp.list_tools()
-        expand = next(t for t in tools if t.name == "expand_sparql")
-        desc = expand.description
+        rewrite = next(t for t in tools if t.name == "rewrite_sparql")
+        desc = rewrite.description
         assert "VALUES" in desc
         assert "FILTER" in desc
         assert "OWL" in desc
 
-
-# ---------------------------------------------------------------------------
-# MCP SPARQL Server — tool execution
-# ---------------------------------------------------------------------------
-
-@pytest.mark.unit
-class TestMCPSparqlServerCalls:
-
-    async def test_expand_sparql_formats_bindings(self):
-        import mcp_sparql_server as srv
+    async def test_rewrite_sparql_formats_success(self):
+        import mcp_ontology_server as srv
         payload = {
+            "rewritten_query": "SELECT ?c WHERE { VALUES ?c { <http://x/1> <http://x/2> } }",
             "expansions": [{
                 "pattern": "VALUES", "variable": "?c", "type": "subeq",
-                "ontology": "go", "result_count": 3,
+                "ontology": "go-plus", "dl_query": "'cell death'", "result_count": 2,
             }],
-            "results": {
-                "head": {"vars": ["c", "label"]},
-                "results": {"bindings": [
-                    {"c": {"value": "http://example.org/A"}, "label": {"value": "thing A"}},
-                    {"c": {"value": "http://example.org/B"}, "label": {"value": "thing B"}},
-                ]},
-            },
+            "errors": [],
         }
         with patch.object(srv, "_api_post", new=AsyncMock(return_value=payload)):
-            result = await srv.mcp.call_tool("expand_sparql", {"query": "SELECT * WHERE {}"})
+            result = await srv.mcp.call_tool(
+                "rewrite_sparql",
+                {"query": "SELECT ?c WHERE { VALUES ?c { OWL subeq go-plus { 'cell death' } } }"},
+            )
         text = _text(result)
-        assert "OWL Expansions Applied" in text
-        assert "subeq query on go -> 3 classes" in text
-        assert "Results (2 rows)" in text
-        assert "thing A" in text
+        assert "Resolved 1 OWL frame" in text
+        assert "go-plus" in text
+        assert "Rewritten query:" in text
+        assert "<http://x/1>" in text
 
-    async def test_expand_sparql_reports_error(self):
-        import mcp_sparql_server as srv
-        with patch.object(srv, "_api_post", new=AsyncMock(return_value={"error": "HTTP 500: boom"})):
-            result = await srv.mcp.call_tool("expand_sparql", {"query": "broken"})
-        assert "Error: HTTP 500" in _text(result)
-
-    async def test_list_sparql_examples_uses_ontology(self):
-        from mcp_sparql_server import mcp
-        result = await mcp.call_tool("list_sparql_examples", {"ontology": "CHEBI"})
+    async def test_rewrite_sparql_reports_per_frame_error(self):
+        import mcp_ontology_server as srv
+        payload = {
+            "rewritten_query": "SELECT ?c WHERE { VALUES ?c {  } }",
+            "expansions": [],
+            "errors": [{
+                "pattern": "VALUES", "variable": "?c", "type": "subeq",
+                "ontology": "nonexistent", "dl_query": "'x'",
+                "error": "ontology 'nonexistent' is not registered or its worker is offline",
+            }],
+        }
+        with patch.object(srv, "_api_post", new=AsyncMock(return_value=payload)):
+            result = await srv.mcp.call_tool(
+                "rewrite_sparql",
+                {"query": "VALUES ?c { OWL subeq nonexistent { 'x' } }"},
+            )
         text = _text(result)
-        assert "CHEBI" in text
-        assert "VALUES" in text
-        assert "FILTER" in text
+        assert "Could not resolve 1 frame" in text
+        assert "nonexistent" in text
+        assert "not registered" in text
 
-    async def test_explain_expansion_values(self):
-        from mcp_sparql_server import mcp
-        result = await mcp.call_tool(
-            "explain_expansion", {"query": "VALUES ?c { OWL subeq GO { 'cell' } }"}
-        )
+    async def test_rewrite_sparql_passes_through_plain_query(self):
+        import mcp_ontology_server as srv
+        plain = "SELECT ?s WHERE { ?s ?p ?o }"
+        payload = {"rewritten_query": plain, "expansions": [], "errors": []}
+        with patch.object(srv, "_api_post", new=AsyncMock(return_value=payload)):
+            result = await srv.mcp.call_tool("rewrite_sparql", {"query": plain})
         text = _text(result)
-        assert "VALUES Expansion" in text
-        assert "GO" in text
-        assert "subeq" in text
-
-    async def test_explain_expansion_filter(self):
-        from mcp_sparql_server import mcp
-        result = await mcp.call_tool(
-            "explain_expansion",
-            {"query": "FILTER OWL(?x, subclass, HP, \"'abnormal' and 'cell'\")"},
-        )
-        text = _text(result)
-        assert "FILTER Expansion" in text
-        assert "HP" in text
-        assert "subclass" in text
-
-    async def test_explain_expansion_plain_sparql(self):
-        from mcp_sparql_server import mcp
-        result = await mcp.call_tool(
-            "explain_expansion",
-            {"query": "SELECT ?s WHERE { ?s a <http://www.w3.org/2002/07/owl#Class> }"},
-        )
-        assert "No OWL expansion patterns found" in _text(result)
+        assert "No OWL DL frames found" in text
+        assert plain in text
