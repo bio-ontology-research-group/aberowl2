@@ -244,6 +244,13 @@ class CentralESManager:
         Field boost values (from original AberOWL):
           oboid: 10000, ontology: 1000, label: 100, synonym: 75,
           subclass/equivalent: 25, definition: 3, catch-all: 0.01
+
+        Typo tolerance:
+          The label / synonym / definition matches use Elasticsearch's
+          built-in fuzziness ("AUTO": 1-edit for 3-5 chars, 2 for ≥6).
+          Exact matches still outscore fuzzy ones because we keep an
+          un-fuzzy variant alongside each fuzzy one in the dis_max set,
+          and per-token oboid stays exact.
         """
         if ontology:
             index_pattern = self._alias_name(ontology.lower())
@@ -267,12 +274,18 @@ class CentralESManager:
                 "size": size,
             }
         else:
-            # Full search with boosted dis_max
+            # Full search with boosted dis_max.
+            # For each text field we keep an exact match (higher boost) and
+            # a fuzzy match (lower boost) so typo-free queries still rank
+            # exact hits first, but typo'd queries still find something.
             queries = [
                 {"term": {"oboid": {"value": term.upper(), "boost": 10000}}},
                 {"match": {"label": {"query": term, "boost": 100}}},
+                {"match": {"label": {"query": term, "fuzziness": "AUTO", "prefix_length": 1, "boost": 30}}},
                 {"match": {"synonyms": {"query": term, "boost": 75}}},
+                {"match": {"synonyms": {"query": term, "fuzziness": "AUTO", "prefix_length": 1, "boost": 20}}},
                 {"match": {"definition": {"query": term, "boost": 3}}},
+                {"match": {"definition": {"query": term, "fuzziness": "AUTO", "prefix_length": 1, "boost": 1}}},
             ]
 
             # Also try wildcard on label for partial matches
