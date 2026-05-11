@@ -1,0 +1,58 @@
+{
+  "base_url": "http://localhost:8000",
+  "ontology": "go",
+  "registry_size": 102,
+  "n_iterations": 30,
+  "results": [
+    {
+      "label": "getOntology (O(n) Redis scan)",
+      "n": 30,
+      "mean_ms": 2.3,
+      "median_ms": 2.4,
+      "p95_ms": 3.1,
+      "p99_ms": 3.4,
+      "min_ms": 1.7,
+      "max_ms": 3.4
+    },
+    {
+      "label": "dlquery_all owl:Thing direct subclasses (root hierarchy load)",
+      "n": 30,
+      "mean_ms": 2119.0,
+      "median_ms": 2059.8,
+      "p95_ms": 2489.7,
+      "p99_ms": 2528.4,
+      "min_ms": 1800.0,
+      "max_ms": 2528.4
+    },
+    {
+      "label": "dlquery_all named class subclasses (GO_0008150)",
+      "n": 30,
+      "mean_ms": 32.1,
+      "median_ms": 30.3,
+      "p95_ms": 38.3,
+      "p99_ms": 47.8,
+      "min_ms": 28.1,
+      "max_ms": 47.8
+    },
+    {
+      "label": "getClass ES lookup",
+      "n": 30,
+      "mean_ms": 5.4,
+      "median_ms": 4.9,
+      "p95_ms": 8.1,
+      "p99_ms": 8.1,
+      "min_ms": 3.7,
+      "max_ms": 8.1
+    },
+    {
+      "label": "listOntologies (O(n) Redis scan)",
+      "n": 30,
+      "mean_ms": 2.3,
+      "median_ms": 2.3,
+      "p95_ms": 2.8,
+      "p99_ms": 2.8,
+      "min_ms": 2.1,
+      "max_ms": 2.8
+    }
+  ]
+}

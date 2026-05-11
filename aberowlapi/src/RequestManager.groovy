@@ -61,6 +61,15 @@ public class RequestManager {
     final ConcurrentHashMap<String, String> exampleSubclassExpressions = new ConcurrentHashMap<>()
     final ConcurrentHashMap<String, String> exampleSubclassExpressionTexts = new ConcurrentHashMap<>()
 
+    // Pre-computed root classes (direct subclasses of owl:Thing) per ontology.
+    // Populated during createReasoner to avoid the slow ELK traversal at query time.
+    final ConcurrentHashMap<String, List> rootClassCache = new ConcurrentHashMap<>()
+
+    // Query result cache: "ontologyId|query|type|direct" -> [timestamp, result]
+    // Entries expire after QUERY_CACHE_TTL_MS milliseconds.
+    private static final long QUERY_CACHE_TTL_MS = 5 * 60 * 1000L
+    final ConcurrentHashMap<String, Object[]> queryCache = new ConcurrentHashMap<>()
+
     // Shared annotation property lists
     def aProperties = [
         df.getRDFSLabel(),
@@ -232,6 +241,7 @@ public class RequestManager {
         iriShortFormProviders.put(ontId, iriSfp)
 
         findExampleClassesAndExpressions(ontId)
+        precomputeRootClasses(ontId)
         println "Classification complete for ${ontId}"
     }
 
@@ -307,6 +317,8 @@ public class RequestManager {
         exampleSuperclassLabels.remove(ontId)
         exampleSubclassExpressions.remove(ontId)
         exampleSubclassExpressionTexts.remove(ontId)
+        rootClassCache.remove(ontId)
+        queryCache.keySet().removeIf { it.startsWith("${ontId}|") }
         println "Disposed all resources for ${ontId}"
     }
 
@@ -415,11 +427,30 @@ public class RequestManager {
 
         def currentSfp = (shortform == 'iri') ? iriShortFormProviders.get(ontId) : shortFormProviders.get(ontId)
 
+        // Fast path: root class query served from pre-computed cache
+        if (direct && type == "subclass" && !axioms
+                && (mOwlQuery == '<http://www.w3.org/2002/07/owl#Thing>'
+                    || mOwlQuery == 'http://www.w3.org/2002/07/owl#Thing')) {
+            def cached = rootClassCache.get(ontId)
+            if (cached != null) return cached
+        }
+
+        // General query cache (keyed by ontId + query + type + direct + axioms)
+        def cacheKey = "${ontId}|${mOwlQuery}|${type}|${direct}|${axioms}"
+        def cached = queryCache.get(cacheKey)
+        if (cached != null) {
+            long age = System.currentTimeMillis() - (cached[0] as long)
+            if (age < QUERY_CACHE_TTL_MS) return cached[1] as Set
+        }
+
         Set resultSet = Sets.newHashSet(Iterables.limit(qEngine.getClasses(mOwlQuery, requestType, direct, labels), MAX_REASONER_RESULTS))
         resultSet.remove(df.getOWLNothing())
         resultSet.remove(df.getOWLThing())
         def classes = classes2info(ontId, resultSet, axioms, currentSfp)
-        return classes.sort { x, y -> x["label"].compareTo(y["label"]) }
+        def result = classes.sort { x, y -> x["label"].compareTo(y["label"]) }
+
+        queryCache.put(cacheKey, [System.currentTimeMillis(), result] as Object[])
+        return result
     }
 
     Set runQuery(String ontId, String mOwlQuery, String type, boolean direct, boolean labels, boolean axioms) {
@@ -690,6 +721,29 @@ public class RequestManager {
             throw new IllegalStateException("No ontologies loaded")
         }
         return ontologies.keySet().iterator().next()
+    }
+
+    void precomputeRootClasses(String ontId) {
+        def qEngine = queryEngines.get(ontId)
+        def sfp = shortFormProviders.get(ontId)
+        if (qEngine == null || sfp == null) return
+        println "Pre-computing root classes for ${ontId}..."
+        try {
+            Set resultSet = Sets.newHashSet(
+                Iterables.limit(
+                    qEngine.getClasses(df.getOWLThing(), RequestType.SUBCLASS, true, true),
+                    MAX_REASONER_RESULTS
+                )
+            )
+            resultSet.remove(df.getOWLNothing())
+            resultSet.remove(df.getOWLThing())
+            def classes = classes2info(ontId, resultSet, false, sfp)
+            def sorted = classes.sort { x, y -> x["label"].compareTo(y["label"]) }
+            rootClassCache.put(ontId, sorted)
+            println "Pre-computed ${sorted.size()} root classes for ${ontId}"
+        } catch (Exception e) {
+            println "WARNING: could not pre-compute root classes for ${ontId}: ${e.getMessage()}"
+        }
     }
 
     void findExampleClassesAndExpressions(String ontId) {
