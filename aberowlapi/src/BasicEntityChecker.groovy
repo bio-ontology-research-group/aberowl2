@@ -183,18 +183,42 @@ public class BasicEntityChecker implements OWLEntityChecker {
     public OWLObjectProperty getOWLObjectProperty(String name) {
         // Remove angle brackets if present
         name = name.replaceAll("<","").replaceAll(">","")
-        
+
         // Remove quotes if present
         if ((name.startsWith("'") && name.endsWith("'")) ||
             (name.startsWith("\"") && name.endsWith("\""))) {
             name = name.substring(1, name.length() - 1)
         }
-        
+
         def iri = new IRI(name)
         def result = null
         if(ontology.containsObjectPropertyInSignature(iri, true) || iri == dFactory.getOWLTopObjectProperty().getIRI() || iri == dFactory.getOWLBottomDataProperty().getIRI()) {
           result = dFactory.getOWLObjectProperty(iri)
         }
+
+        // Fallback: resolve by fragment / rdfs:label (mirrors getOWLClass).
+        if (result == null) {
+            for (OWLObjectProperty prop : ontology.getObjectPropertiesInSignature(true)) {
+                String fragment = prop.getIRI().getFragment()
+                if (fragment != null) {
+                    if (fragment.equalsIgnoreCase(name)) return prop
+                    if (fragment.replace("_", " ").equalsIgnoreCase(name)) return prop
+                    if (fragment.equalsIgnoreCase(name.replace(" ", "_"))) return prop
+                    String fragNoSep = fragment.replace("_", "").replace(" ", "")
+                    String nameNoSep = name.replace("_", "").replace(" ", "")
+                    if (fragNoSep.equalsIgnoreCase(nameNoSep)) return prop
+                }
+                for (OWLAnnotation annotation : EntitySearcher.getAnnotations(prop, ontology)) {
+                    if (annotation.getProperty().isLabel() && annotation.getValue() instanceof OWLLiteral) {
+                        String label = ((OWLLiteral) annotation.getValue()).getLiteral()
+                        if (name.equalsIgnoreCase(label)) return prop
+                        if (name.replace("_", " ").equalsIgnoreCase(label)) return prop
+                        if (name.equalsIgnoreCase(label.replace(" ", "_"))) return prop
+                    }
+                }
+            }
+        }
+
         return result
     }
 
