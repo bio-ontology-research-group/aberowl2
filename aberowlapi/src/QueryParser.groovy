@@ -56,11 +56,7 @@ public class QueryParser {
     public OWLClassExpression parse(String mOwl, boolean labels) {
  def result = null
 
- if (mOwl.startsWith("<") && mOwl.endsWith(">")) {
-  mOwl = mOwl.substring(1, mOwl.length() - 1).trim();
-         def iri = IRI.create(mOwl);
-         result = this.ontology.getOWLOntologyManager().getOWLDataFactory().getOWLClass(iri);
-        }else{
+ // Single-IRI `<...>` queries are handled by BasicEntityChecker below; no fast path.
      try {
                 // Strip the surrounding quotes (if any) once for direct-lookup attempts.
                 // Quoted form like 'cell' or 'cell death' is the standard Manchester
@@ -104,12 +100,11 @@ public class QueryParser {
                     }
                 }
 
-                // If not found directly, try with quotes for Manchester syntax.
-                if (mOwl.contains(" ") && !mOwl.startsWith("'") && !mOwl.endsWith("'")) {
-                    // Add quotes around the entity name
-                    mOwl = "'" + mOwl + "'";
-                } else if (!mOwl.contains(" ") && !mOwl.startsWith("'") && !mOwl.endsWith("'")) {
-                    // For single words, also try with quotes
+                // Auto-quote bare labels (e.g. `cell death` → `'cell death'`).
+                // Skip if the input already looks like Manchester syntax (IRIs in
+                // `<>`, parens, braces, or pre-quoted).
+                boolean looksLikeManchester = mOwl.contains("<") || mOwl.contains("(") || mOwl.contains("{")
+                if (!looksLikeManchester && !mOwl.startsWith("'") && !mOwl.endsWith("'")) {
                     mOwl = "'" + mOwl + "'";
                 }
 
@@ -142,7 +137,6 @@ public class QueryParser {
   throw new RuntimeException("QueryParser.groovy: Error parsing Manchester OWL Syntax query: " + mOwl+ " || " + e.getMessage())
          result = null
      }
-	}
 
       return result
     }
