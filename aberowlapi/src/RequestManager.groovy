@@ -461,6 +461,37 @@ public class RequestManager {
         return runQuery(ontId, mOwlQuery, type, false, false, false, null)
     }
 
+    /**
+     * Run a DL query against multiple ontologies in parallel, aggregating
+     * results. Each result entry is tagged with its source `ontology` id so
+     * the central server doesn't need to do it. Unknown ontology ids and
+     * per-ontology errors are silently skipped (fail-soft, matching the old
+     * aberowl `/api/runQuery.groovy` fan-out semantics).
+     */
+    List runQueryMulti(List<String> ontIds, String mOwlQuery, String type, boolean direct, boolean labels, boolean axioms, String shortform) {
+        if (ontIds == null || ontIds.isEmpty()) {
+            return []
+        }
+        def aggregated = Collections.synchronizedList(new ArrayList())
+        GParsPool.withPool(PARALLEL_THREADS) {
+            ontIds.eachParallel { ontId ->
+                if (!hasOntology(ontId)) return
+                try {
+                    def slice = runQuery(ontId, mOwlQuery, type, direct, labels, axioms, shortform)
+                    slice.each { entry ->
+                        if (entry instanceof Map) {
+                            entry["ontology"] = ontId
+                        }
+                        aggregated.add(entry)
+                    }
+                } catch (Exception e) {
+                    println "ERROR runQueryMulti(${ontId}): ${e.getMessage()}"
+                }
+            }
+        }
+        return new ArrayList(aggregated)
+    }
+
     // Backward-compatible: single-ontology runQuery (uses first loaded ontology)
     Set runQuery(String mOwlQuery, String type, boolean direct, boolean labels, boolean axioms, String shortform) {
         def ontId = getDefaultOntologyId()
