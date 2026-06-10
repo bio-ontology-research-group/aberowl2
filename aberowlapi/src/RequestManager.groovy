@@ -160,7 +160,18 @@ public class RequestManager {
 
         OWLOntologyManager lManager = OWLManager.createOWLOntologyManager()
 
-        def originalOntology = lManager.loadOntologyFromOntologyDocument(new File(ontIRI))
+        // Stop remote import fetches. owl:imports of dead URLs hang for minutes
+        // on network timeouts, and reachable ones can pull huge ontologies into
+        // heap — both observed to stall and OOM workers. The mapper resolves an
+        // import to a local corpus file when we have one (/data/<id>/<id>.owl),
+        // and otherwise to a tiny empty stub, so OWLAPI never touches the
+        // network. SILENT is kept as a backstop for anything not intercepted:
+        // a partial hierarchy online beats a complete ontology offline.
+        lManager.getIRIMappers().add(new LocalImportIRIMapper())
+        OWLOntologyLoaderConfiguration loaderConfig = new OWLOntologyLoaderConfiguration()
+            .setMissingImportHandlingStrategy(MissingImportHandlingStrategy.SILENT)
+        def originalOntology = lManager.loadOntologyFromOntologyDocument(
+            new FileDocumentSource(new File(ontIRI)), loaderConfig)
         IRI originalOntologyIRI = originalOntology.getOntologyID().getOntologyIRI().orNull()
         Set<OWLAnnotation> originalAnnotations = originalOntology.getAnnotations().collect()
 
@@ -866,5 +877,25 @@ public class RequestManager {
             result.append(current)
         }
         return result.toString()
+    }
+}
+
+
+/**
+ * Suppresses owl:imports without ever touching the network.
+ *
+ * Every import IRI is mapped to a unique, non-existent local file under
+ * /data/.noimport/. OWLAPI then fails to load it via the filesystem (no remote
+ * fetch, so no multi-minute timeouts on dead URLs and no huge reachable imports
+ * blowing the heap), and the SILENT missing-import strategy drops it cleanly.
+ *
+ * The path is unique per import IRI: a single shared stub would trigger
+ * OWLOntologyDocumentAlreadyExistsException once an ontology declares two
+ * imports (or a self-import resolving back to the main document).
+ */
+class LocalImportIRIMapper implements OWLOntologyIRIMapper {
+    IRI getDocumentIRI(IRI ontologyIRI) {
+        String safe = ontologyIRI.toString().replaceAll('[^A-Za-z0-9]', '_')
+        return IRI.create(new File("/data/.noimport/${safe}.owl"))
     }
 }
