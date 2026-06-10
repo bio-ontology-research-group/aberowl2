@@ -256,13 +256,32 @@ def fetch_current_memory_limits(ssh_host: str) -> dict[int, int]:
     return out
 
 
+# Ontologies whose true memory footprint is far larger than their class count
+# implies: ABox/individual-heavy datasets that are huge FILES with very few
+# classes (ISO-15926 reference data, authority/registry lists). Class-count
+# bucketing places them in small (xs/s) workers where they OOM — rdl alone needs
+# ~10 GB. They are pinned to a dedicated fixed-size worker instead.
+# Measured 2026-06-08: these 6 = 30 GB live combined -> a 48 GB / -Xmx40g worker
+# (deployed as physical aberowl-worker-37). See worker_measurements ledger.
+PINNED_GIANTS = {
+    "rdl", "lcgft", "ror", "fast-title", "xref-funder-reg", "nlmvs",
+}
+PINNED_GIANTS_MEMORY_GB = 48
+
+
 def plan(records: list[dict], preserve_memory: bool, current_mem: dict[int, int]) -> list[WorkerSlot]:
     """Greedy bin-pack ontologies into workers respecting bucket rules.
 
     Iterates over buckets xl → xs, assigning ontologies (largest first within
     each bucket) to workers. xl gets a dedicated worker. Others fill workers
-    up to the bucket's max_per_worker and class_budget.
+    up to the bucket's max_per_worker and class_budget. PINNED_GIANTS are pulled
+    out first onto a dedicated, fixed-size worker.
     """
+    # Pin ABox-heavy giants onto a dedicated worker; class-count bucketing would
+    # mis-size them into small workers where they OOM.
+    pinned = [r for r in records if (r.get("id") or "").lower() in PINNED_GIANTS]
+    records = [r for r in records if (r.get("id") or "").lower() not in PINNED_GIANTS]
+
     # Group records by bucket, drop entries with no classes data
     by_bucket: dict[str, list[dict]] = defaultdict(list)
     skipped = []
@@ -315,6 +334,12 @@ def plan(records: list[dict], preserve_memory: bool, current_mem: dict[int, int]
                 s.ontologies.append(cand)
                 i += 1
             finalize_mem(s)
+
+    # Dedicated worker for the pinned giants: fixed measured size, not the
+    # class-count model (which under-sizes ABox-heavy data).
+    if pinned:
+        g = new_slot("giants", PINNED_GIANTS_MEMORY_GB)
+        g.ontologies.extend(pinned)
 
     return slots
 

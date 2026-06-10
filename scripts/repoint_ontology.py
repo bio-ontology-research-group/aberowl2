@@ -52,6 +52,7 @@ import argparse
 import json
 import subprocess
 import sys
+import time
 
 REGISTRY_KEY = "registered_servers"
 
@@ -112,7 +113,7 @@ def repoint(args) -> int:
     print(f"Target worker URL: {target}")
     print(f"Mode: {'APPLY (writing)' if args.apply else 'DRY-RUN (no writes)'}\n")
 
-    changed = skipped = missing = 0
+    changed = skipped = missing = failed = 0
     for ont in args.ontology:
         raw = redis_get(args, ont)
         if raw is None:
@@ -144,19 +145,37 @@ def repoint(args) -> int:
         print(f"REPOINT  {ont:30s} {old_url} -> {target}{status_note}")
 
         if args.apply:
-            redis_set(args, ont, json.dumps(entry))
-            # Read back to confirm the write landed.
-            verify_raw = redis_get(args, ont)
-            verify = json.loads(verify_raw) if verify_raw else {}
-            if verify.get("url") != target:
-                sys.exit(f"  VERIFY FAILED for {ont}: url is {verify.get('url')!r}, expected {target!r}")
-            if verify.get("secret_key") != entry.get("secret_key"):
-                sys.exit(f"  VERIFY FAILED for {ont}: secret_key changed!")
+            # The central server runs a periodic metadata-refresh that reads
+            # every entry and writes it back; if it reads the old URL just
+            # before our write and writes just after, it clobbers us. Re-read,
+            # re-apply, and retry until the write sticks (verified by read-back).
+            ok_write = False
+            for attempt in range(5):
+                redis_set(args, ont, json.dumps(entry))
+                verify = json.loads(redis_get(args, ont) or "{}")
+                if (verify.get("url") == target
+                        and verify.get("secret_key") == entry.get("secret_key")):
+                    ok_write = True
+                    break
+                time.sleep(2)
+                cur = redis_get(args, ont)
+                if cur:
+                    try:
+                        entry = json.loads(cur)
+                        entry["url"] = target
+                        if args.set_online:
+                            entry["status"] = "online"
+                    except json.JSONDecodeError:
+                        pass
+            if not ok_write:
+                print(f"  VERIFY FAILED for {ont} after retries: url={verify.get('url')!r} (central refresh race)")
+                failed += 1
+                continue
         changed += 1
 
     print()
     verb = "Repointed" if args.apply else "Would repoint"
-    print(f"{verb}: {changed}  Skipped/noop: {skipped}  Missing: {missing}")
+    print(f"{verb}: {changed}  Skipped/noop: {skipped}  Missing: {missing}  Failed: {failed}")
     if not args.apply and changed:
         print("\nRe-run with --apply to write these changes.")
     return 0
