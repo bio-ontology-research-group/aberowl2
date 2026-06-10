@@ -342,7 +342,6 @@ async def fetch_and_update_server_metadata(server: Dict[str, Any]):
 
     # Update the server data in Redis
     await redis_client.hset("registered_servers", ontology, json.dumps(server))
-    await _write_servers_to_file()
 
 
 async def start_mcp_servers():
@@ -434,6 +433,10 @@ async def _fetch_and_update_all_servers():
     
     if tasks:
         await asyncio.gather(*tasks)
+    # Persist the registry to the backup file ONCE per cycle, not once per
+    # server: the per-server write was O(n^2) and blocked the event loop
+    # (synchronous full-list json.dump), causing intermittent query stalls.
+    await _write_servers_to_file()
     logger.info("Finished metadata fetch for all registered servers.")
 
 

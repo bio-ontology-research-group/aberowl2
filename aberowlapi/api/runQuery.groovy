@@ -15,6 +15,7 @@ def direct = params.direct
 def labels = params.labels
 def axioms = params.axioms
 def ontologyId = params.ontologyId ?: params.ontology
+def ontologyIds = params.ontologyIds  // comma-separated list, optional
 def shortform = params.shortform
 def manager = application.getAttribute("manager")
 
@@ -31,6 +32,29 @@ response.contentType = 'application/json'
 if (manager == null) {
     response.setStatus(503)
     print new JsonBuilder([ 'error': true, 'message': 'Manager not available.' ]).toString()
+    return
+}
+
+// Multi-ontology branch: ontologyIds=a,b,c — run query against each in
+// parallel inside this worker, aggregate. Lets the central server send
+// one HTTP call per worker URL instead of one per ontology.
+if (ontologyIds) {
+    def ids = ontologyIds.split(',').collect { it.trim() }.findAll { it }
+    try {
+        def results = new HashMap()
+        def start = System.currentTimeMillis()
+        def out = manager.runQueryMulti(ids, query, type, direct, labels, axioms, shortform)
+        def end = System.currentTimeMillis()
+        results.put('time', (end - start))
+        results.put('result', out)
+        print new JsonBuilder(results).toString()
+    } catch(org.semanticweb.owlapi.manchestersyntax.parser.ManchesterOWLSyntaxParserException e) {
+        response.setStatus(400)
+        print new JsonBuilder([ 'error': true, 'message': 'Query parsing error: ' + e.getMessage() ]).toString()
+    } catch(Exception e) {
+        response.setStatus(400)
+        print new JsonBuilder([ 'error': true, 'message': 'Generic query error: ' + e.getMessage() ]).toString()
+    }
     return
 }
 

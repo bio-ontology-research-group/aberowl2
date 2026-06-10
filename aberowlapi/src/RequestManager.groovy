@@ -61,6 +61,15 @@ public class RequestManager {
     final ConcurrentHashMap<String, String> exampleSubclassExpressions = new ConcurrentHashMap<>()
     final ConcurrentHashMap<String, String> exampleSubclassExpressionTexts = new ConcurrentHashMap<>()
 
+    // Pre-computed root classes (direct subclasses of owl:Thing) per ontology.
+    // Populated during createReasoner to avoid the slow ELK traversal at query time.
+    final ConcurrentHashMap<String, List> rootClassCache = new ConcurrentHashMap<>()
+
+    // Query result cache: "ontologyId|query|type|direct" -> [timestamp, result]
+    // Entries expire after QUERY_CACHE_TTL_MS milliseconds.
+    private static final long QUERY_CACHE_TTL_MS = 5 * 60 * 1000L
+    final ConcurrentHashMap<String, Object[]> queryCache = new ConcurrentHashMap<>()
+
     // Shared annotation property lists
     def aProperties = [
         df.getRDFSLabel(),
@@ -151,7 +160,18 @@ public class RequestManager {
 
         OWLOntologyManager lManager = OWLManager.createOWLOntologyManager()
 
-        def originalOntology = lManager.loadOntologyFromOntologyDocument(new File(ontIRI))
+        // Stop remote import fetches. owl:imports of dead URLs hang for minutes
+        // on network timeouts, and reachable ones can pull huge ontologies into
+        // heap — both observed to stall and OOM workers. The mapper resolves an
+        // import to a local corpus file when we have one (/data/<id>/<id>.owl),
+        // and otherwise to a tiny empty stub, so OWLAPI never touches the
+        // network. SILENT is kept as a backstop for anything not intercepted:
+        // a partial hierarchy online beats a complete ontology offline.
+        lManager.getIRIMappers().add(new LocalImportIRIMapper())
+        OWLOntologyLoaderConfiguration loaderConfig = new OWLOntologyLoaderConfiguration()
+            .setMissingImportHandlingStrategy(MissingImportHandlingStrategy.SILENT)
+        def originalOntology = lManager.loadOntologyFromOntologyDocument(
+            new FileDocumentSource(new File(ontIRI)), loaderConfig)
         IRI originalOntologyIRI = originalOntology.getOntologyID().getOntologyIRI().orNull()
         Set<OWLAnnotation> originalAnnotations = originalOntology.getAnnotations().collect()
 
@@ -232,6 +252,7 @@ public class RequestManager {
         iriShortFormProviders.put(ontId, iriSfp)
 
         findExampleClassesAndExpressions(ontId)
+        precomputeRootClasses(ontId)
         println "Classification complete for ${ontId}"
     }
 
@@ -307,6 +328,8 @@ public class RequestManager {
         exampleSuperclassLabels.remove(ontId)
         exampleSubclassExpressions.remove(ontId)
         exampleSubclassExpressionTexts.remove(ontId)
+        rootClassCache.remove(ontId)
+        queryCache.keySet().removeIf { it.startsWith("${ontId}|") }
         println "Disposed all resources for ${ontId}"
     }
 
@@ -415,11 +438,30 @@ public class RequestManager {
 
         def currentSfp = (shortform == 'iri') ? iriShortFormProviders.get(ontId) : shortFormProviders.get(ontId)
 
+        // Fast path: root class query served from pre-computed cache
+        if (direct && type == "subclass" && !axioms
+                && (mOwlQuery == '<http://www.w3.org/2002/07/owl#Thing>'
+                    || mOwlQuery == 'http://www.w3.org/2002/07/owl#Thing')) {
+            def cached = rootClassCache.get(ontId)
+            if (cached != null) return cached
+        }
+
+        // General query cache (keyed by ontId + query + type + direct + axioms)
+        def cacheKey = "${ontId}|${mOwlQuery}|${type}|${direct}|${axioms}"
+        def cached = queryCache.get(cacheKey)
+        if (cached != null) {
+            long age = System.currentTimeMillis() - (cached[0] as long)
+            if (age < QUERY_CACHE_TTL_MS) return cached[1] as Set
+        }
+
         Set resultSet = Sets.newHashSet(Iterables.limit(qEngine.getClasses(mOwlQuery, requestType, direct, labels), MAX_REASONER_RESULTS))
         resultSet.remove(df.getOWLNothing())
         resultSet.remove(df.getOWLThing())
         def classes = classes2info(ontId, resultSet, axioms, currentSfp)
-        return classes.sort { x, y -> x["label"].compareTo(y["label"]) }
+        def result = classes.sort { x, y -> x["label"].compareTo(y["label"]) }
+
+        queryCache.put(cacheKey, [System.currentTimeMillis(), result] as Object[])
+        return result
     }
 
     Set runQuery(String ontId, String mOwlQuery, String type, boolean direct, boolean labels, boolean axioms) {
@@ -428,6 +470,37 @@ public class RequestManager {
 
     Set runQuery(String ontId, String mOwlQuery, String type) {
         return runQuery(ontId, mOwlQuery, type, false, false, false, null)
+    }
+
+    /**
+     * Run a DL query against multiple ontologies in parallel, aggregating
+     * results. Each result entry is tagged with its source `ontology` id so
+     * the central server doesn't need to do it. Unknown ontology ids and
+     * per-ontology errors are silently skipped (fail-soft, matching the old
+     * aberowl `/api/runQuery.groovy` fan-out semantics).
+     */
+    List runQueryMulti(List<String> ontIds, String mOwlQuery, String type, boolean direct, boolean labels, boolean axioms, String shortform) {
+        if (ontIds == null || ontIds.isEmpty()) {
+            return []
+        }
+        def aggregated = Collections.synchronizedList(new ArrayList())
+        GParsPool.withPool(PARALLEL_THREADS) {
+            ontIds.eachParallel { ontId ->
+                if (!hasOntology(ontId)) return
+                try {
+                    def slice = runQuery(ontId, mOwlQuery, type, direct, labels, axioms, shortform)
+                    slice.each { entry ->
+                        if (entry instanceof Map) {
+                            entry["ontology"] = ontId
+                        }
+                        aggregated.add(entry)
+                    }
+                } catch (Exception e) {
+                    println "ERROR runQueryMulti(${ontId}): ${e.getMessage()}"
+                }
+            }
+        }
+        return new ArrayList(aggregated)
     }
 
     // Backward-compatible: single-ontology runQuery (uses first loaded ontology)
@@ -692,6 +765,29 @@ public class RequestManager {
         return ontologies.keySet().iterator().next()
     }
 
+    void precomputeRootClasses(String ontId) {
+        def qEngine = queryEngines.get(ontId)
+        def sfp = shortFormProviders.get(ontId)
+        if (qEngine == null || sfp == null) return
+        println "Pre-computing root classes for ${ontId}..."
+        try {
+            Set resultSet = Sets.newHashSet(
+                Iterables.limit(
+                    qEngine.getClasses(df.getOWLThing(), RequestType.SUBCLASS, true, true),
+                    MAX_REASONER_RESULTS
+                )
+            )
+            resultSet.remove(df.getOWLNothing())
+            resultSet.remove(df.getOWLThing())
+            def classes = classes2info(ontId, resultSet, false, sfp)
+            def sorted = classes.sort { x, y -> x["label"].compareTo(y["label"]) }
+            rootClassCache.put(ontId, sorted)
+            println "Pre-computed ${sorted.size()} root classes for ${ontId}"
+        } catch (Exception e) {
+            println "WARNING: could not pre-compute root classes for ${ontId}: ${e.getMessage()}"
+        }
+    }
+
     void findExampleClassesAndExpressions(String ontId) {
         def ontology = ontologies.get(ontId)
         def sfp = shortFormProviders.get(ontId)
@@ -781,5 +877,25 @@ public class RequestManager {
             result.append(current)
         }
         return result.toString()
+    }
+}
+
+
+/**
+ * Suppresses owl:imports without ever touching the network.
+ *
+ * Every import IRI is mapped to a unique, non-existent local file under
+ * /data/.noimport/. OWLAPI then fails to load it via the filesystem (no remote
+ * fetch, so no multi-minute timeouts on dead URLs and no huge reachable imports
+ * blowing the heap), and the SILENT missing-import strategy drops it cleanly.
+ *
+ * The path is unique per import IRI: a single shared stub would trigger
+ * OWLOntologyDocumentAlreadyExistsException once an ontology declares two
+ * imports (or a self-import resolving back to the main document).
+ */
+class LocalImportIRIMapper implements OWLOntologyIRIMapper {
+    IRI getDocumentIRI(IRI ontologyIRI) {
+        String safe = ontologyIRI.toString().replaceAll('[^A-Za-z0-9]', '_')
+        return IRI.create(new File("/data/.noimport/${safe}.owl"))
     }
 }

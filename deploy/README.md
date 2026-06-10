@@ -333,6 +333,27 @@ uv run deploy/register_workers.py --plan /data/aberowl/ontologies/worker_plan.js
 uv run deploy/fetch_metadata.py   /data/aberowl/ontologies
 ```
 
+### Known missing ontologies
+
+After a full retry of `download_ontologies.py` and `download_bioportal.py` (with
+the 30-min curl timeout), a residual set of registered ontologies never lands
+on disk. As of the 2026-05-20 retry, ~243 of 864 registered ontologies have no
+usable OWL file. They are excluded from `scripts/plan_distribution.py`'s plan
+by default (override with `--include-missing`).
+
+Categories:
+- **License-gated (~11)** — `MEDDRA`, `SNOMEDCT`, `ICD10`, `ICNP`, `ICPC2P`,
+  `HERO`, `MDDB`, `NDDF`, `NDFRT`, `RCD`, `WHO-ART`. Require per-account
+  approval at bioontology.org before download.
+- **Abandoned BP submissions (~65)** — BioPortal returns 404
+  `no_latest_submission`; nothing to download.
+- **Broken OBO purls / parse failures** — e.g. `ero`, `fix` still fail even
+  with the long timeout. Need an alternative source URL or local repair.
+
+Each plan run writes `results/missing_ontologies_<date>.md` with the exact
+list of skipped ontologies, grouped by likely cause. Revisit periodically as
+BP catalog churn or license approvals change.
+
 ## Nginx Configuration
 
 ### borg-server (/etc/nginx/sites-available/beta.aber-owl.net)
@@ -420,6 +441,36 @@ ssh onto "docker exec deploy-redis-1 redis-cli info keyspace"
 # Elasticsearch
 ssh onto "docker exec deploy-elasticsearch-1 curl -sf http://localhost:9200/_cluster/health?pretty"
 ```
+
+## Pre-deployment Regression Test
+
+Run this from your **laptop** before and after any nginx or central-server
+change. Save the before output as a baseline and diff against after — any
+status code that changed is a regression to investigate.
+
+```bash
+# Capture a baseline before making changes:
+for u in http://phenomebrowser.net/ http://vsim.phenomebrowser.net/ http://hgupload.phenomebrowser.net/ http://patho.phenomebrowser.net/ http://ddiem.phenomebrowser.net/ http://owas.phenomebrowser.net/ http://ukb.phenomebrowser.net/ http://pavs.phenomebrowser.net/ http://ve.phenomebrowser.net/ http://phenomebrowser.net/rub-al-khali/ https://beta.aber-owl.net/aberowl-beta/; do printf '%-55s %s\n' "$u" "$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 15 "$u")"; done | tee ~/aberowl_smoke_before.txt
+
+# Run the same command after changes, then diff:
+for u in http://phenomebrowser.net/ http://vsim.phenomebrowser.net/ http://hgupload.phenomebrowser.net/ http://patho.phenomebrowser.net/ http://ddiem.phenomebrowser.net/ http://owas.phenomebrowser.net/ http://ukb.phenomebrowser.net/ http://pavs.phenomebrowser.net/ http://ve.phenomebrowser.net/ http://phenomebrowser.net/rub-al-khali/ https://beta.aber-owl.net/aberowl-beta/; do printf '%-55s %s\n' "$u" "$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 15 "$u")"; done | tee ~/aberowl_smoke_after.txt
+
+diff ~/aberowl_smoke_before.txt ~/aberowl_smoke_after.txt
+```
+
+An empty diff means no regressions. Some routes return 502 or 404 by
+design (pre-existing backend issues unrelated to AberOWL) — those are
+expected and should remain stable across deployments.
+
+### MCP smoke test (from laptop)
+
+After any central-server or nginx change, verify the MCP endpoint:
+
+```bash
+curl -sf https://beta.aber-owl.net/mcp/ontology/mcp -H 'Accept: text/event-stream' -H 'Content-Type: application/json' -X POST -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"smoke-test","version":"0"}}}' | head -5
+```
+
+Expected: HTTP 200 with `event: message` and `"serverInfo":{"name":"aberowl-ontology",...}` in the body.
 
 ## Updating Code
 

@@ -50,6 +50,11 @@ interface FrameError {
   error: string
 }
 
+interface SparqlResults {
+  vars: string[]
+  bindings: Array<Record<string, { value: string; type: string }>>
+}
+
 export default function SparqlPage() {
   const [query, setQuery] = useState(EXAMPLE_VALUES)
   const [rewritten, setRewritten] = useState<string>('')
@@ -58,27 +63,42 @@ export default function SparqlPage() {
   const [loading, setLoading] = useState(false)
   const [requestError, setRequestError] = useState('')
   const [copied, setCopied] = useState(false)
+  const [selectedEndpoint, setSelectedEndpoint] = useState(KNOWN_ENDPOINTS[0].value)
+  const [executing, setExecuting] = useState(false)
+  const [results, setResults] = useState<SparqlResults | null>(null)
+  const [executeError, setExecuteError] = useState('')
 
-  async function rewrite() {
+  async function rewrite(): Promise<string | null> {
     setLoading(true)
     setRequestError('')
     setRewritten('')
     setExpansions([])
     setErrors([])
     setCopied(false)
+    setResults(null)
+    setExecuteError('')
     try {
       const data = await rewriteSparql(query) as {
         rewritten_query?: string
         expansions?: Expansion[]
         errors?: FrameError[]
       }
-      setRewritten(data.rewritten_query || '')
+      const text = data.rewritten_query || ''
+      setRewritten(text)
       setExpansions(data.expansions || [])
       setErrors(data.errors || [])
+      return text
     } catch (e) {
       setRequestError(e instanceof Error ? e.message : 'Rewrite failed')
+      return null
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
+  }
+
+  async function rewriteAndExecute() {
+    const text = await rewrite()
+    if (text) await executeRewritten(text)
   }
 
   async function copyRewritten() {
@@ -92,13 +112,49 @@ export default function SparqlPage() {
     return `${endpoint}?query=${encodeURIComponent(rewritten)}`
   }
 
+  async function executeRewritten(text?: string) {
+    const queryText = text ?? rewritten
+    if (!queryText) return
+    setExecuting(true)
+    setResults(null)
+    setExecuteError('')
+    try {
+      const url = new URL(selectedEndpoint)
+      url.searchParams.set('query', queryText)
+      url.searchParams.set('format', 'json')
+      const resp = await fetch(url.toString(), {
+        headers: { Accept: 'application/sparql-results+json' },
+      })
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => '')
+        throw new Error(`HTTP ${resp.status} ${resp.statusText}${body ? `: ${body.slice(0, 200)}` : ''}`)
+      }
+      const json = await resp.json()
+      setResults({
+        vars: json.head?.vars ?? [],
+        bindings: json.results?.bindings ?? [],
+      })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Execute failed'
+      const isCors = msg === 'Failed to fetch' || msg.includes('NetworkError')
+      setExecuteError(
+        isCors
+          ? 'Could not reach the endpoint from your browser (likely CORS). Use "Open in" to run it in the endpoint’s own UI.'
+          : msg,
+      )
+    } finally {
+      setExecuting(false)
+    }
+  }
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-6">
       <h1 className="text-2xl font-bold text-gray-900 mb-1">SPARQL Rewriter</h1>
       <p className="text-sm text-gray-500 mb-4">
         Write SPARQL with embedded OWL DL frames. AberOWL resolves the frames against its
-        reasoners and gives you back plain SPARQL with concrete IRIs spliced in. You then
-        run the rewritten query against any endpoint you choose — AberOWL never executes it.
+        reasoners and gives you back plain SPARQL with concrete IRIs spliced in. You can then
+        execute the rewritten query against any endpoint you choose — AberOWL never executes it
+        (your browser does, directly to the selected endpoint).
       </p>
 
       {/* Examples */}
@@ -120,10 +176,33 @@ export default function SparqlPage() {
         />
       </div>
 
-      <button onClick={rewrite} disabled={loading}
-        className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 mb-4 transition-colors">
-        {loading ? 'Rewriting...' : 'Rewrite'}
-      </button>
+      {/* Action bar */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <button
+          onClick={rewriteAndExecute}
+          disabled={loading || executing}
+          className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+        >
+          {loading ? 'Rewriting…' : executing ? 'Executing…' : 'Rewrite & Execute'}
+        </button>
+        <button
+          onClick={rewrite}
+          disabled={loading || executing}
+          className="px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:border-indigo-400 hover:text-indigo-700 disabled:opacity-50 transition-colors"
+        >
+          Rewrite only
+        </button>
+        <span className="text-xs text-gray-500 ml-2">Endpoint:</span>
+        <select
+          value={selectedEndpoint}
+          onChange={e => setSelectedEndpoint(e.target.value)}
+          className="border border-gray-300 rounded-lg px-2 py-1 text-sm bg-white text-gray-800 hover:border-indigo-400 focus:border-indigo-500 focus:outline-none"
+        >
+          {KNOWN_ENDPOINTS.map(ep => (
+            <option key={ep.value} value={ep.value}>{ep.label}</option>
+          ))}
+        </select>
+      </div>
 
       {requestError && (
         <div className="text-red-600 text-sm mb-4 bg-red-50 p-3 rounded-lg border border-red-200">
@@ -174,15 +253,75 @@ export default function SparqlPage() {
           </div>
           <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap">{rewritten}</pre>
 
-          <div className="mt-3 flex gap-2 flex-wrap text-xs">
-            <span className="text-gray-500 self-center">Open in:</span>
+          <div className="mt-3 flex gap-2 items-center flex-wrap text-xs">
+            <button
+              onClick={() => executeRewritten()}
+              disabled={executing}
+              className="px-3 py-1 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            >
+              {executing ? 'Executing…' : `Execute on ${KNOWN_ENDPOINTS.find(e => e.value === selectedEndpoint)?.label ?? 'endpoint'}`}
+            </button>
+            <span className="self-center text-gray-500 ml-2">or open in:</span>
             {KNOWN_ENDPOINTS.map(ep => (
               <a key={ep.value} href={endpointLink(ep.value)} target="_blank" rel="noreferrer"
-                className="px-3 py-1 rounded-lg border border-gray-300 hover:border-indigo-400 hover:text-indigo-600">
+                className="px-3 py-1 rounded-lg border border-gray-300 bg-white text-gray-700 hover:border-indigo-400 hover:text-indigo-600">
                 {ep.label}
               </a>
             ))}
           </div>
+
+          {executeError && (
+            <div className="mt-3 text-red-700 text-sm bg-red-50 p-3 rounded-lg border border-red-200">
+              {executeError}
+            </div>
+          )}
+
+          {results && (
+            <div className="mt-3">
+              <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                Results — {results.bindings.length} {results.bindings.length === 1 ? 'row' : 'rows'}
+              </h3>
+              {results.bindings.length === 0 ? (
+                <div className="text-sm text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                  No bindings returned.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-gray-200">
+                  <table className="min-w-full text-xs">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        {results.vars.map(v => (
+                          <th key={v} className="text-left px-3 py-2 font-medium text-gray-700 border-b border-gray-200">{v}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {results.bindings.map((b, i) => (
+                        <tr key={i} className={i % 2 ? 'bg-white' : 'bg-gray-50/40'}>
+                          {results.vars.map(v => {
+                            const cell = b[v]
+                            if (!cell) return <td key={v} className="px-3 py-2 text-gray-400 align-top">—</td>
+                            const isUri = cell.type === 'uri'
+                            return (
+                              <td key={v} className="px-3 py-2 align-top text-gray-800 break-all">
+                                {isUri ? (
+                                  <a href={cell.value} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">
+                                    {cell.value}
+                                  </a>
+                                ) : (
+                                  cell.value
+                                )}
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
