@@ -95,9 +95,9 @@ function tokenize(expr: string): Token[] {
     }
 
     // Word or number
-    if (/[a-zA-Z0-9_:.\-]/.test(expr[i])) {
+    if (/[a-zA-Z0-9_:.-]/.test(expr[i])) {
       let word = ''
-      while (i < expr.length && /[a-zA-Z0-9_:.\-#\/]/.test(expr[i])) { word += expr[i]; i++ }
+      while (i < expr.length && /[a-zA-Z0-9_:.#/-]/.test(expr[i])) { word += expr[i]; i++ }
       if (OWL_KEYWORDS.has(word)) {
         tokens.push({ type: 'keyword', text: word })
       } else if (OWL_BUILTINS.has(word)) {

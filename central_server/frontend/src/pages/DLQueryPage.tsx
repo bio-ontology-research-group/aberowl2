@@ -1,33 +1,69 @@
-import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { dlQuery, listOntologies } from '../api/client'
 import type { ClassResult, OntologySummary } from '../api/types'
 import OWLExpression from '../components/OWLExpression'
+import Combobox from '../components/Combobox'
+import StateMessage from '../components/StateMessage'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
+
+const PAGE = 100
 
 export default function DLQueryPage() {
-  const [query, setQuery] = useState('')
-  const [type, setType] = useState('subeq')
-  const [ontology, setOntology] = useState('')
+  const [params, setParams] = useSearchParams()
+  const [query, setQuery] = useState(params.get('q') || '')
+  const [type, setType] = useState(params.get('type') || 'subeq')
+  const [ontology, setOntology] = useState(params.get('ontology') || '')
+  const [direct, setDirect] = useState(params.get('direct') === '1')
   const [results, setResults] = useState<ClassResult[]>([])
   const [time, setTime] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [ontologies, setOntologies] = useState<OntologySummary[]>([])
+  const [limit, setLimit] = useState(PAGE)
+  const didInitial = useRef(false)
+
+  useDocumentTitle('DL Query')
 
   useEffect(() => {
     listOntologies().then(o => setOntologies(o.filter(x => x.status === 'online'))).catch(() => {})
   }, [])
 
+  const options = useMemo(
+    () => ontologies.map(o => ({ value: o.id, label: o.id.toUpperCase(), hint: o.title })),
+    [ontologies],
+  )
+
+  function execute(q: string, t: string, ont: string, dir: boolean) {
+    if (!q.trim()) return
+    setLoading(true)
+    setError('')
+    setLimit(PAGE)
+    dlQuery(q, t, ont || undefined, dir)
+      .then(d => { setResults(d.result || []); setTime(d.time) })
+      .catch(err => { setError(err instanceof Error ? err.message : 'Query failed'); setResults([]); setTime(null) })
+      .finally(() => setLoading(false))
+  }
+
+  // Run automatically when arriving with a query in the URL (shared link)
+  useEffect(() => {
+    if (didInitial.current) return
+    didInitial.current = true
+    if (params.get('q')) execute(params.get('q')!, type, ontology, direct)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   function run(e: React.FormEvent) {
     e.preventDefault()
     if (!query.trim()) return
-    setLoading(true)
-    setError('')
-    dlQuery(query, type, ontology || undefined)
-      .then(d => { setResults(d.result || []); setTime(d.time) })
-      .catch(err => { setError(err.message); setResults([]) })
-      .finally(() => setLoading(false))
+    const next: Record<string, string> = { q: query, type }
+    if (ontology) next.ontology = ontology
+    if (direct) next.direct = '1'
+    setParams(next)
+    execute(query, type, ontology, direct)
   }
+
+  const shown = results.slice(0, limit)
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6">
@@ -46,7 +82,6 @@ export default function DLQueryPage() {
             rows={3}
             className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 focus:outline-none resize-none"
           />
-          {/* Live preview */}
           {query.trim() && (
             <div className="mt-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-100">
               <span className="text-[10px] text-gray-400 uppercase tracking-wider">Preview: </span>
@@ -66,16 +101,22 @@ export default function DLQueryPage() {
               <option value="equivalent">Equivalent</option>
             </select>
           </div>
-          <div className="min-w-[200px]">
+          <div className="min-w-[240px]">
             <label className="block text-xs text-gray-500 mb-1">Ontology (optional)</label>
-            <select value={ontology} onChange={e => setOntology(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white w-full">
-              <option value="">All ontologies</option>
-              {ontologies.map(o => (
-                <option key={o.id} value={o.id}>{o.id.toUpperCase()}{o.title ? ` — ${o.title}` : ''}</option>
-              ))}
-            </select>
+            <Combobox
+              options={options}
+              value={ontology}
+              onChange={setOntology}
+              allLabel="All ontologies"
+              placeholder="Search ontologies…"
+            />
           </div>
+          <label className="flex items-center gap-2 text-sm text-gray-600 pb-2 cursor-pointer select-none"
+            title="Return only direct sub/superclasses instead of the full inferred set">
+            <input type="checkbox" checked={direct} onChange={e => setDirect(e.target.checked)}
+              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-400" />
+            Direct only
+          </label>
           <button type="submit" disabled={loading}
             className="px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors">
             {loading ? 'Running...' : 'Run Query'}
@@ -93,18 +134,19 @@ export default function DLQueryPage() {
         </div>
       </form>
 
-      {error && <div className="text-red-600 text-sm mb-4 bg-red-50 p-3 rounded-lg border border-red-200">{error}</div>}
+      {error && <StateMessage kind="error" title="Query failed" detail={error} />}
 
-      {time !== null && (
+      {!error && time !== null && (
         <p className="text-sm text-gray-500 mb-3">
           <span className="font-semibold text-gray-700">{results.length}</span> results in{' '}
           <span className="font-semibold text-gray-700">{time}</span> ms
+          {direct && <span className="ml-2 text-xs text-gray-400">(direct only)</span>}
         </p>
       )}
 
       {results.length > 0 && (
         <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden divide-y divide-gray-100">
-          {results.map((c, i) => {
+          {shown.map((c, i) => {
             const lbl = Array.isArray(c.label) ? c.label[0] : c.label
             const ont = c.ontology || '?'
             return (
@@ -123,6 +165,14 @@ export default function DLQueryPage() {
               </div>
             )
           })}
+          {shown.length < results.length && (
+            <div className="px-4 py-3 text-center">
+              <button onClick={() => setLimit(l => l + PAGE)}
+                className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">
+                Show more ({results.length - shown.length} remaining)
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

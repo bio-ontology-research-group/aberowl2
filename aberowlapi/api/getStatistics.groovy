@@ -197,8 +197,13 @@ def rboxAxiomsCount = ontology.getRBoxAxioms(Imports.INCLUDED).size()
 
 def declarationAxiomsCount = ontology.getAxioms(AxiomType.DECLARATION, true).size()
 
-def checker = new DLExpressivity(ontology)
-def dlExpressivity = checker.getValue()
+// Report a canonical DL name (e.g. "ALC", "ALCHIQ") instead of a raw
+// concatenation of construct letters, which produced garbled strings like
+// "CCINTERI". expressibleInLanguages() maps the constructs onto the standard
+// DL family names; fall back to the construct list when no named language fits.
+def checker = new DLExpressivityChecker(Collections.singleton(ontology))
+def expressibleLangs = checker.expressibleInLanguages()
+def dlExpressivity = expressibleLangs ? expressibleLangs.collect { it.toString() }.join(", ") : checker.getDescriptionLogicName()
 
 def exampleSuperclassLabel = manager.exampleSuperclassLabels.get(ontologyId) ?: ""
 def exampleSubclassExpression = manager.exampleSubclassExpressions.get(ontologyId) ?: ""

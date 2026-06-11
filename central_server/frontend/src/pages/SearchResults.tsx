@@ -1,23 +1,34 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { searchClasses } from '../api/client'
 import type { ClassResult } from '../api/types'
 import ClassCard from '../components/ClassCard'
+import StateMessage from '../components/StateMessage'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
 export default function SearchResults() {
   const [params] = useSearchParams()
   const q = params.get('q') || ''
   const [results, setResults] = useState<ClassResult[]>([])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
-  useEffect(() => {
+  useDocumentTitle(q ? `Search: ${q}` : 'Search')
+
+  const load = useCallback(() => {
     if (!q) return
     setLoading(true)
+    setError('')
+    setExpanded(new Set())
     searchClasses(q, undefined, 200)
       .then(setResults)
-      .catch(() => setResults([]))
+      .catch(e => { setError(e instanceof Error ? e.message : 'Search failed'); setResults([]) })
       .finally(() => setLoading(false))
   }, [q])
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- load() toggles loading before fetching; intentional
+  useEffect(() => { load() }, [load])
 
   // Group by ontology
   const byOnt = new Map<string, ClassResult[]>()
@@ -36,23 +47,36 @@ export default function SearchResults() {
         {loading ? 'Searching...' : `${results.length} results across ${byOnt.size} ontologies`}
       </p>
 
-      {!loading && results.length === 0 && q && (
-        <p className="text-gray-500">No results found.</p>
+      {error && <StateMessage kind="error" title="Search failed" detail={error} onRetry={load} />}
+
+      {!loading && !error && results.length === 0 && q && (
+        <StateMessage title="No results found" detail={`Nothing matched "${q}".`} />
       )}
 
-      {[...byOnt.entries()].map(([ont, items]) => (
-        <div key={ont} className="mb-6">
-          <h2 className="text-sm font-semibold text-gray-700 mb-2 uppercase">{ont} ({items.length})</h2>
-          <div className="grid gap-2 md:grid-cols-2">
-            {items.slice(0, 20).map((c, i) => (
-              <ClassCard key={c.class || i} c={c} />
-            ))}
+      {[...byOnt.entries()].map(([ont, items]) => {
+        const isOpen = expanded.has(ont)
+        const visible = isOpen ? items : items.slice(0, 20)
+        return (
+          <div key={ont} className="mb-6">
+            <h2 className="text-sm font-semibold text-gray-700 mb-2 uppercase">{ont} ({items.length})</h2>
+            <div className="grid gap-2 md:grid-cols-2">
+              {visible.map((c, i) => <ClassCard key={c.class || i} c={c} />)}
+            </div>
+            {items.length > 20 && (
+              <button
+                onClick={() => setExpanded(prev => {
+                  const next = new Set(prev)
+                  if (next.has(ont)) next.delete(ont); else next.add(ont)
+                  return next
+                })}
+                className="text-xs text-indigo-600 hover:underline mt-1"
+              >
+                {isOpen ? 'Show fewer' : `Show all ${items.length} in ${ont}`}
+              </button>
+            )}
           </div>
-          {items.length > 20 && (
-            <p className="text-xs text-gray-400 mt-1">...and {items.length - 20} more in {ont}</p>
-          )}
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

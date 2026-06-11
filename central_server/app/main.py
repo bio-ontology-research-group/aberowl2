@@ -29,7 +29,7 @@ from app.auth import (
     PUBLIC_RATE_LIMIT, API_KEY_RATE_LIMIT,
 )
 from app.intake.obofoundry import fetch_obofoundry_ontologies
-from app.intake.bioportal import fetch_bioportal_ontologies
+from app.intake.bioportal import fetch_bioportal_ontologies, fetch_bioportal_metadata
 from app.intake import updater as update_pipeline
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -321,11 +321,9 @@ async def fetch_and_update_server_metadata(server: Dict[str, Any]):
                     stats = await response.json()
                     server.update(stats)
                     server["status"] = "online"
-                    # If the worker didn't provide a title, use OBO Foundry fallback
-                    if not server.get("title"):
-                        fallback = _obo_titles.get(ontology.lower(), "")
-                        if fallback:
-                            server["title"] = fallback
+                    # Backfill any fields the OWL file didn't carry (title,
+                    # description, homepage, license, contact) from OBO Foundry.
+                    _apply_registry_fallbacks(server)
                     logger.info(f"Successfully updated metadata for {ontology} (title: {server.get('title', '')})")
                 else:
                     logger.warning(f"Failed to fetch metadata for {ontology}. Status: {response.status}")
@@ -334,11 +332,9 @@ async def fetch_and_update_server_metadata(server: Dict[str, Any]):
         logger.error(f"Error fetching metadata for {ontology}: {e}")
         server["status"] = "offline"
 
-    # Always apply OBO Foundry title fallback if title is missing
-    if not server.get("title"):
-        fallback = _obo_titles.get(ontology.lower(), "")
-        if fallback:
-            server["title"] = fallback
+    # Always apply registry fallbacks for any still-empty fields (e.g. when the
+    # worker was unreachable above, title can still come from the cache).
+    _apply_registry_fallbacks(server)
 
     # Update the server data in Redis
     await redis_client.hset("registered_servers", ontology, json.dumps(server))
@@ -379,6 +375,10 @@ async def start_mcp_servers():
 
 # Cache of ontology titles from OBO Foundry + BioPortal known names
 _obo_titles: Dict[str, str] = {}
+# Cache of richer OBO Foundry registry metadata, keyed by lowercase ontology id.
+# Used to backfill fields the OWL file itself does not carry (homepage, license,
+# description, contact).
+_obo_metadata: Dict[str, Dict[str, Any]] = {}
 
 OBO_REGISTRY_URL = "https://raw.githubusercontent.com/OBOFoundry/OBOFoundry.github.io/master/registry/ontologies.jsonld"
 
@@ -396,10 +396,23 @@ _KNOWN_TITLES: Dict[str, str] = {
 }
 
 
+def _normalize_contact(contact: Any) -> Any:
+    """Reduce an OBO Foundry contact object to a display-friendly value."""
+    if isinstance(contact, dict):
+        label = contact.get("label") or contact.get("github")
+        email = contact.get("email")
+        if label and email:
+            return f"{label} <{email}>"
+        return label or email or ""
+    return contact or ""
+
+
 async def _load_obo_foundry_titles():
-    """Fetch ontology titles from OBO Foundry registry as fallback for ontologies
-    that don't have dc:title/rdfs:label in their OWL file."""
-    global _obo_titles
+    """Fetch ontology metadata from the OBO Foundry registry as a fallback for
+    ontologies that don't carry it in their OWL file. Populates both the title
+    cache and the richer `_obo_metadata` cache (description, homepage, license,
+    contact)."""
+    global _obo_titles, _obo_metadata
     _obo_titles.update(_KNOWN_TITLES)
     try:
         async with aiohttp.ClientSession() as session:
@@ -408,12 +421,101 @@ async def _load_obo_foundry_titles():
                     data = await resp.json(content_type=None)
                     for o in data.get("ontologies", []):
                         oid = o.get("id", "")
+                        if not oid:
+                            continue
+                        key = oid.lower()
                         title = o.get("title", "")
-                        if oid and title:
-                            _obo_titles[oid.lower()] = title
-                    logger.info(f"Loaded {len(_obo_titles)} ontology titles from OBO Foundry registry")
+                        if title:
+                            _obo_titles[key] = title
+                        license_info = o.get("license", {})
+                        license_url = ""
+                        if isinstance(license_info, dict):
+                            license_url = license_info.get("url", "") or license_info.get("label", "")
+                        elif isinstance(license_info, str):
+                            license_url = license_info
+                        _obo_metadata[key] = {
+                            "title": title,
+                            "description": o.get("description", ""),
+                            "home_page": o.get("homepage", ""),
+                            "license": license_url,
+                            "contact": _normalize_contact(o.get("contact")),
+                        }
+                    logger.info(
+                        f"Loaded {len(_obo_titles)} titles / {len(_obo_metadata)} metadata "
+                        f"records from OBO Foundry registry"
+                    )
     except Exception as e:
         logger.warning(f"Could not fetch OBO Foundry titles: {e}")
+
+
+async def _load_bioportal_metadata():
+    """Backfill the metadata cache with BioPortal titles/descriptions for ids
+    that OBO Foundry does not already cover (OBO Foundry takes precedence).
+    Then re-apply fallbacks to already-registered servers so the new metadata
+    is reflected without waiting for the next worker poll. No-op if BioPortal is
+    unreachable or its API key is invalid."""
+    global _obo_titles, _obo_metadata
+    try:
+        records = await fetch_bioportal_metadata()
+    except Exception as e:
+        logger.warning(f"Could not fetch BioPortal metadata: {e}")
+        return
+
+    added = 0
+    for rec in records:
+        key = rec.get("ontology_id", "")
+        if not key or key in _obo_metadata:
+            continue  # OBO Foundry entry wins
+        title = rec.get("name", "")
+        if title:
+            _obo_titles.setdefault(key, title)
+        _obo_metadata[key] = {
+            "title": title,
+            "description": rec.get("description", ""),
+            "home_page": rec.get("homepage", ""),
+            "license": rec.get("license", ""),
+            "contact": "",
+        }
+        added += 1
+
+    logger.info(
+        f"Loaded {added} BioPortal metadata records (cache now {len(_obo_metadata)})"
+    )
+    if added:
+        await _reapply_registry_fallbacks_to_all()
+
+
+async def _reapply_registry_fallbacks_to_all():
+    """Re-apply metadata fallbacks to every registered server, persisting any
+    entry whose fields changed. Cheap: touches only Redis, no worker polling."""
+    server_keys = await redis_client.hkeys("registered_servers")
+    updated = 0
+    for key in server_keys or []:
+        raw = await redis_client.hget("registered_servers", key)
+        if not raw:
+            continue
+        server = json.loads(raw)
+        snapshot = {f: server.get(f) for f in ("title", "description", "home_page", "license", "contact")}
+        _apply_registry_fallbacks(server)
+        if any(server.get(f) != snapshot[f] for f in snapshot):
+            await redis_client.hset("registered_servers", key, json.dumps(server))
+            updated += 1
+    if updated:
+        await _write_servers_to_file()
+        logger.info(f"Re-applied registry fallbacks; updated {updated} server entries")
+
+
+def _apply_registry_fallbacks(server: Dict[str, Any]):
+    """Backfill empty metadata fields on a registry entry from the OBO Foundry /
+    BioPortal registry cache. OWL-file-derived values always win; this only
+    fills blanks."""
+    ontology = (server.get("ontology") or "").lower()
+    meta = _obo_metadata.get(ontology)
+    if not meta:
+        return
+    for field in ("title", "description", "home_page", "license", "contact"):
+        if not server.get(field) and meta.get(field):
+            server[field] = meta[field]
 
 
 async def _fetch_and_update_all_servers():
@@ -464,8 +566,10 @@ async def lifespan(app: FastAPI):
     # Load servers from file before fetching metadata
     await _load_servers_from_file()
 
-    # Load OBO Foundry titles for fallback
+    # Load OBO Foundry titles/metadata for fallback (fast, blocking).
     await _load_obo_foundry_titles()
+    # Backfill remaining ids from BioPortal in the background (slower, optional).
+    asyncio.create_task(_load_bioportal_metadata())
 
     # Perform initial metadata fetch on startup
     asyncio.create_task(_fetch_and_update_all_servers())

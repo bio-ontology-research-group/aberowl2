@@ -29,9 +29,10 @@ export async function getOntology(id: string): Promise<OntologyDetail> {
   return get<OntologyDetail>('/api/getOntology', { ontology: id })
 }
 
-export async function searchClasses(query: string, ontology?: string, size = 100): Promise<ClassResult[]> {
+export async function searchClasses(query: string, ontology?: string, size = 100, prefix = false): Promise<ClassResult[]> {
   const params: Record<string, string> = { query, size: String(size) }
   if (ontology) params.ontologies = ontology
+  if (prefix) params.prefix = 'true'
   const data = await get<{ result: ClassResult[] }>('/api/search_all', params)
   return data.result
 }
