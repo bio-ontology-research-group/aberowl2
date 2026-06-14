@@ -316,7 +316,7 @@ async def fetch_and_update_server_metadata(server: Dict[str, Any]):
     logger.info(f"Fetching metadata for {ontology} from {stats_url} (originally {url})")
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(stats_url, timeout=10) as response:
+            async with session.get(stats_url, timeout=30) as response:
                 if response.status == 200:
                     stats = await response.json()
                     server.update(stats)
