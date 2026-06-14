@@ -3,16 +3,39 @@ import { useParams, Link } from 'react-router-dom'
 import { getClass, dlQuery } from '../api/client'
 import type { ClassResult } from '../api/types'
 import OWLExpression from '../components/OWLExpression'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
 function asList(v: unknown): string[] {
   if (!v) return []
-  if (Array.isArray(v)) return v
+  if (Array.isArray(v)) return v.map(String)
   return [String(v)]
+}
+
+function labelOf(c: ClassResult): string {
+  return (Array.isArray(c.label) ? c.label[0] : c.label) || c.class
 }
 
 /** Strip HTML tags (the Groovy backend sometimes wraps axioms in <a> tags) */
 function stripHtml(s: string): string {
   return s.replace(/<[^>]*>/g, '')
+}
+
+/** Walk direct superclasses to build an ordered root→parent ancestor path. */
+async function ancestorChain(iri: string, ontologyId: string): Promise<ClassResult[]> {
+  const chain: ClassResult[] = []
+  const seen = new Set<string>([iri])
+  let current = iri
+  for (let i = 0; i < 50; i++) {
+    const q = current.startsWith('http') ? `<${current}>` : current
+    const supers = await dlQuery(q, 'superclass', ontologyId, true)
+      .then(d => d.result || []).catch(() => [])
+    const next = supers.find(s => s.class && !seen.has(s.class) && !/owl#Thing$/.test(s.class))
+    if (!next?.class) break
+    seen.add(next.class)
+    chain.unshift(next)
+    current = next.class
+  }
+  return chain
 }
 
 export default function ClassPage() {
@@ -21,15 +44,31 @@ export default function ClassPage() {
   const [cls, setCls] = useState<Record<string, unknown> | null>(null)
   const [subs, setSubs] = useState<ClassResult[]>([])
   const [supers, setSupers] = useState<ClassResult[]>([])
+  const [ancestors, setAncestors] = useState<ClassResult[]>([])
   const [err, setErr] = useState('')
+  const [copied, setCopied] = useState('')
+
+  const label = cls ? (asList(cls.label)[0] || decodedIri.split(/[#/]/).pop() || decodedIri) : ''
+  useDocumentTitle(label || undefined, id?.toUpperCase())
 
   useEffect(() => {
     if (!id || !decodedIri) return
-    getClass(decodedIri, id).then(d => setCls(d as unknown as Record<string, unknown>)).catch(() => setErr('Class not found'))
+    getClass(decodedIri, id)
+      .then(d => { setCls(d as unknown as Record<string, unknown>); setErr('') })
+      .catch(() => setErr('Class not found'))
     const q = `<${decodedIri}>`
     dlQuery(q, 'subclass', id, true).then(d => setSubs(d.result?.slice(0, 100) || [])).catch(() => {})
     dlQuery(q, 'superclass', id, true).then(d => setSupers(d.result?.slice(0, 100) || [])).catch(() => {})
+    ancestorChain(decodedIri, id).then(setAncestors).catch(() => setAncestors([]))
   }, [id, decodedIri])
+
+  async function copy(text: string, which: string) {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(which)
+      setTimeout(() => setCopied(''), 1500)
+    } catch { /* clipboard unavailable */ }
+  }
 
   if (err) return <div className="max-w-4xl mx-auto px-4 py-8 text-red-500">{err}</div>
   if (!cls) return (
@@ -44,7 +83,6 @@ export default function ClassPage() {
     </div>
   )
 
-  const label = asList(cls.label)[0] || decodedIri.split(/[#/]/).pop() || decodedIri
   const definitions = asList(cls.definition)
   const synonyms = asList(cls.synonyms)
   const subClassOf = asList(cls.SubClassOf).map(stripHtml)
@@ -56,11 +94,18 @@ export default function ClassPage() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6">
-      {/* Breadcrumb */}
-      <nav className="text-xs text-gray-400 mb-4 flex items-center gap-1">
+      {/* Breadcrumb with path-to-root */}
+      <nav className="text-xs text-gray-400 mb-4 flex items-center gap-1 flex-wrap">
         <Link to="/" className="hover:text-indigo-600">Home</Link>
         <span>/</span>
         <Link to={`/ontology/${id}`} className="hover:text-indigo-600">{id?.toUpperCase()}</Link>
+        {ancestors.map(a => (
+          <span key={a.class} className="flex items-center gap-1">
+            <span>/</span>
+            <Link to={`/ontology/${id}/class/${encodeURIComponent(a.class)}`}
+              className="hover:text-indigo-600 max-w-[160px] truncate">{labelOf(a)}</Link>
+          </span>
+        ))}
         <span>/</span>
         <span className="text-gray-600">{label}</span>
       </nav>
@@ -74,7 +119,17 @@ export default function ClassPage() {
             {id?.toUpperCase()}
           </Link>
         </div>
-        <p className="text-xs text-gray-400 font-mono break-all mb-3">{decodedIri}</p>
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <p className="text-xs text-gray-400 font-mono break-all flex-1 min-w-0">{decodedIri}</p>
+          <button onClick={() => copy(decodedIri, 'iri')}
+            className="text-xs px-2 py-1 border border-gray-200 rounded hover:border-indigo-400 hover:text-indigo-600 shrink-0">
+            {copied === 'iri' ? 'Copied!' : 'Copy IRI'}
+          </button>
+          <button onClick={() => copy(window.location.href, 'link')}
+            className="text-xs px-2 py-1 border border-gray-200 rounded hover:border-indigo-400 hover:text-indigo-600 shrink-0">
+            {copied === 'link' ? 'Copied!' : 'Copy link'}
+          </button>
+        </div>
 
         {/* OBO ID */}
         {cls.oboid ? (

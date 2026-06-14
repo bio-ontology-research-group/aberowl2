@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
-import { sql } from '@codemirror/lang-sql'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { rewriteSparql } from '../api/client'
+import { sparql } from '../codemirror/sparqlMode'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
 const KNOWN_ENDPOINTS = [
   { label: 'Ontobee', value: 'https://sparql.hegroup.org/sparql' },
@@ -67,6 +68,8 @@ export default function SparqlPage() {
   const [executing, setExecuting] = useState(false)
   const [results, setResults] = useState<SparqlResults | null>(null)
   const [executeError, setExecuteError] = useState('')
+
+  useDocumentTitle('SPARQL')
 
   async function rewrite(): Promise<string | null> {
     setLoading(true)
@@ -171,7 +174,7 @@ export default function SparqlPage() {
           value={query}
           onChange={setQuery}
           height="260px"
-          extensions={[sql()]}
+          extensions={[sparql]}
           theme={oneDark}
         />
       </div>

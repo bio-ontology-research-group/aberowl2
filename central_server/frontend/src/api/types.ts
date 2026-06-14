@@ -14,10 +14,26 @@ export interface OntologyDetail {
   property_count: number
   object_property_count: number
   data_property_count: number
+  annotation_property_count?: number
   individual_count: number
   version_info: string
+  version_iri?: string
   license: string
   home_page: string
+  documentation?: string
+  publication?: string
+  creators?: string[]
+  contact?: string | string[] | Record<string, unknown> | null
+  default_namespace?: string
+  obo_format_version?: string
+  reasoner_type?: string
+  dl_expressivity?: string
+  axiom_count?: number
+  logical_axiom_count?: number
+  tbox_axiom_count?: number
+  abox_axiom_count?: number
+  rbox_axiom_count?: number
+  declaration_axiom_count?: number
 }
 
 export interface ClassResult {

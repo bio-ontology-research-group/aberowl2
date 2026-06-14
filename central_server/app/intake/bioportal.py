@@ -7,6 +7,7 @@ download URLs. Ontologies already registered from OBOFoundry are skipped.
 
 import asyncio
 import logging
+import os
 from typing import Any, Dict, List, Optional, Set
 
 import aiohttp
@@ -14,7 +15,10 @@ import aiohttp
 logger = logging.getLogger(__name__)
 
 BIOPORTAL_API_URL = "https://data.bioontology.org"
-BIOPORTAL_API_KEY = "7LWB1EK24e8Pj7XorQdG9FnsxQA3H41VDKIxN1BeEv5n"
+# Configurable via env (BioPortal keys expire); falls back to the bundled key.
+BIOPORTAL_API_KEY = os.getenv(
+    "BIOPORTAL_API_KEY", "7LWB1EK24e8Pj7XorQdG9FnsxQA3H41VDKIxN1BeEv5n"
+)
 
 # Max concurrent requests to BioPortal to avoid rate limiting
 _CONCURRENCY_LIMIT = 5
@@ -87,6 +91,35 @@ async def _fetch_download_url(
         if isinstance(download, str) and download.startswith("http"):
             return download
         return None
+
+
+async def fetch_bioportal_metadata() -> List[Dict[str, Any]]:
+    """Fetch lightweight metadata (name, description, homepage) for every
+    BioPortal ontology, WITHOUT resolving per-ontology download URLs.
+
+    Used to backfill registry metadata (title/description/homepage) for
+    ontologies that are not in OBO Foundry. Returns an empty list if BioPortal
+    is unreachable or the API key is invalid.
+    """
+    async with aiohttp.ClientSession() as session:
+        raw_list = await _fetch_all_ontologies(session)
+
+    records: List[Dict[str, Any]] = []
+    for o in raw_list:
+        acronym = o.get("acronym", "")
+        if not acronym:
+            continue
+        records.append(
+            {
+                "ontology_id": acronym.lower(),
+                "name": o.get("name", acronym),
+                "description": o.get("description", ""),
+                "homepage": f"https://bioportal.bioontology.org/ontologies/{acronym}",
+                "license": "",
+            }
+        )
+    logger.info("BioPortal: fetched metadata for %d ontologies", len(records))
+    return records
 
 
 async def fetch_bioportal_ontologies(exclude_ids: Set[str]) -> List[Dict[str, Any]]:
