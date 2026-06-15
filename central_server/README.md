@@ -272,6 +272,57 @@ python agents/mcp_test_client.py \
     --ontology http://localhost:8766
 ```
 
+**Troubleshooting (read this first if the local stack "doesn't work")**
+
+The single most common failure is **broken docker networking on the host**, not a
+bug in the app. Symptoms — any of:
+
+- the central is "Up" but `curl http://localhost:8000/api/servers` hangs / returns nothing;
+- the worker image build fails with `No matching distribution found for fastapi`;
+- `docker run --rm alpine wget -qO- https://pypi.org` fails even though the *host* has internet;
+- `redis ... No route to host` on central startup.
+
+These all mean docker's iptables/NAT rules are corrupted (host↔container and
+container→internet are broken). **Fix: restart the docker daemon** — containers
+come back on their own (`restart: unless-stopped`):
+
+```bash
+sudo systemctl restart docker
+# verify networking is restored:
+docker run --rm alpine wget -qO- -T8 https://pypi.org >/dev/null && echo "container internet OK"
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8000/api/servers   # expect 200
+```
+
+To prove it's networking and not the app, hit the API from *inside* the container
+(bypasses host port-forwarding). If this is instant while the host call hangs, it's
+docker, not the code:
+
+```bash
+docker exec aberowl-central-server python -c \
+  "import urllib.request;print(urllib.request.urlopen('http://localhost:8000/api/servers',timeout=8).read()[:40])"
+```
+
+Other gotchas:
+
+- **Central hangs and logs `fetch metadata for dummy_bench_… / *.invalid`** — stale
+  registry entries (e.g. from a benchmark run) are in Redis, and the periodic refresh
+  ties up the event loop trying to reach those dead hosts. Clear them and restart:
+  ```bash
+  docker exec aberowl-central-redis redis-cli DEL registered_servers
+  docker exec aberowl-central-server sh -c 'echo "[]" > /code/app/servers.json'
+  docker restart aberowl-central-server
+  ```
+- **The worker build takes a long time** — the first `start_local_test_worker.sh`
+  build resolves the OWLAPI/ELK/Jetty/RDF4J jars via Grapes (hundreds of MB); this
+  can take 10–30 min on a cold cache, then it's reused. `go.owl` also takes a few
+  minutes to classify. For a fast smoke test, use **pizza only** (it classifies in
+  seconds): set `data/ontologies.json` to just pizza and register it directly with
+  `curl -X POST http://localhost:8000/register -H 'Content-Type: application/json'
+  -d '{"ontology":"pizza","url":"http://aberowl_local_multi-ontology-api-1:8080/"}'`.
+- **The Vite dev server** (`cd central_server/frontend && npm run dev`) proxies
+  `/api` and `/admin` to `http://localhost:8000` (see `vite.config.ts`), so the
+  central stack must be running for the dev UI to load data.
+
 ### Connecting over HTTP from Python
 
 ```python
