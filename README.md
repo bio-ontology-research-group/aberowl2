@@ -1,86 +1,81 @@
 # Aber-OWL 2: Distributed Ontology Query System
 
-Aber-OWL 2 is a refactored version of Aber-OWL. This version provided a distributed architecture, where each ontology is encapsulated in a separate docker container. The system enables different types of queries:
-- DL Queries,
-- SPARQL queries,
-- Natural language queries
+Aber-OWL 2 is a distributed system for querying and reasoning over biological and
+biomedical ontologies. It re-architects the original Aber-OWL into a **central
+server** plus a fleet of **worker containers**, so that hundreds of ontologies can
+be hosted, classified, and queried in parallel — each worker holds one (or many)
+ontologies in memory and answers Description Logic queries against a live reasoner.
+
+## What it does
+
+- **DL (Description Logic) queries** — query class hierarchies in Manchester OWL
+  Syntax (`subclass`, `superclass`, `equivalent`, `subeq`, `supeq`), backed by the
+  ELK reasoner. Accepts an IRI or a label, including class expressions such as
+  `'part of' some 'cell'`.
+- **Full-text search** — find classes and ontologies by label, synonym, or OBO ID
+  across the whole corpus, via Elasticsearch (boosted `dis_max`).
+- **Ontology browsing (web UI)** — a React single-page app to browse the class
+  hierarchy and class metadata, with deep-linkable URLs per ontology / class / query.
+- **SPARQL rewriting** — `/api/sparql` rewrites SPARQL that embeds OWL DL frames
+  (e.g. `VALUES ?x { OWL subeq go-plus { 'cell death' } }`) into plain SPARQL with the
+  concrete IRIs spliced in; you then run the result against any SPARQL endpoint
+  (Ontobee, UniProt, Wikidata, …). Aber-OWL rewrites only — it does not host a triple
+  store.
+- **MCP server** — exposes search / reasoning / SPARQL-rewrite to LLM agents (Claude
+  Desktop, Claude Code, etc.) over the Model Context Protocol.
+- **Automatic intake** — daily sync of ontology metadata from OBO Foundry and
+  BioPortal.
+
+## Architecture
+
+**Central server** (`central_server/`, one Docker Compose stack):
+- **FastAPI app** — ontology registry, query aggregator/dispatcher, Elasticsearch-backed
+  search, SPARQL rewriter, the web frontend (SPA), and source-sync.
+- **Elasticsearch** — shared class/ontology full-text index.
+- **Redis** — registry and rate-limit state.
+- **MCP server** — auto-spawned alongside the app when `ENABLE_MCP=true`.
+
+**Workers** (`docker-compose.yml`, one JVM per container):
+- A Groovy/OWLAPI server (Jetty) that loads one or many ontologies, classifies them
+  with a reasoner (**ELK** by default; **Structural** and **HermiT** also available),
+  and answers DL queries. Each worker registers its ontologies with the central
+  server, which then dispatches each query to the correct worker by `ontologyId`.
+
+For more detail see `central_server/README.md` (central stack + MCP + local testing),
+`deploy/README.md` (production deployment), and `CLAUDE.md` (full architecture map).
 
 ## Dependencies
 
-  - Linux
-  - Groovy
-  - Anaconda/Miniconda
-  - Docker and Docker Compose
+- Linux
+- Docker and Docker Compose
+- Groovy and Anaconda/Miniconda (for local development)
 
-## Installation
+## Quick start
 
-#### Requirements
+### 1. Central stack
+```bash
+cd central_server
+docker compose up -d
+# central API:  http://localhost:8000
+# MCP server:   http://localhost:8766/mcp
+```
 
-To use Aber-OWL 2, take the following steps:
-- Clone the repository
-- Set up OpenRouter API key variable (optional to use natural language queries)
-- Start the docker
+### 2. A single-ontology worker
+Place your ontology in `./data`, then choose a port and start a worker:
+```bash
+cp /path/to/your_ontology.owl ./data/
+./start_docker.sh data/your_ontology.owl 89   # nginx reverse proxy on port 89
+```
+Shut it down with:
+```bash
+./shutdown_docker.sh 89
+```
 
----
-1. Cloning the repository
-   
-   ```
-   git clone https://github.com/bio-ontology-research-group/aberowl2.git
-   cd aberowl2
-   conda env create -f environment.yml
-   ```
+For multi-ontology workers and an end-to-end local test (central + worker + a couple
+of ontologies), see `central_server/README.md` → "Local end-to-end testing".
 
-2. To use the LLM service, you need to set  the `OPENROUTER_API_KEY` environment variable with your OpenRouter API key
-   
-   ```bash
-   export OPENROUTER_API_KEY=your_api_key_here
-   ```
-
-3. Start the docker
-   
-   To use your own ontology file you first need to place it in the data directory. Copy your ontology to the data directory first:
-
-	```bash
-	cp /path/to/your_ontology.owl ./data/
-	```
-
-	Then choose a port (i.e., 89) and run the command:
-	```
-	./start_docker.sh data/your_ontology.owl 89
-	```
-
-	You can shutdown the docker as follows:
-	```
-	./shutdown_docker.sh 89
-	```
-	
 ## Developing mode
 
-Dockers are available at DockerHub.  If you wish to rebuild the
-docker: change the following lines in `start_docker.sh`
-
-```
-# docker compose -p "$PROJECT_NAME" up --build -d
-docker compose -f dockerhub-compose.yml -p "$PROJECT_NAME" up -d
-```
-
-to
-```
-docker compose -p "$PROJECT_NAME" up --build -d
-# docker compose -f dockerhub-compose.yml -p "$PROJECT_NAME" up -d
-```
-
-
-
-## Notes:
-
-### LLM Query Parser Service
-
-The project includes an LLM-powered query parser service that can interpret natural language queries about ontologies. This service:
-
-- Uses the CAMEL framework with the free version of DeepSeek (via
-  OpenRouter) to parse natural language queries
-- Extracts the entity and query type (superclass, subclass, equivalent) from natural language
-- Provides a REST API endpoint for integration with other services
-
-
+Prebuilt images are published on DockerHub. To rebuild a worker image from local
+source instead, toggle the build/`dockerhub-compose.yml` lines in `start_docker.sh`
+(see the comments there).
