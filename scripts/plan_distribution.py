@@ -282,10 +282,11 @@ def plan(records: list[dict], preserve_memory: bool, current_mem: dict[int, int]
     pinned = [r for r in records if (r.get("id") or "").lower() in PINNED_GIANTS]
     records = [r for r in records if (r.get("id") or "").lower() not in PINNED_GIANTS]
 
-    # Group records by bucket. Ontologies with 0 / no class data are NOT allocated:
-    # a 0-owl:Class entry is a SKOS/DCAT non-ontology, not something to reason over
-    # (see #31; find/purge them with scripts/purge_zero_class.py). Surface the set
-    # instead of dropping it silently.
+    # Group records by bucket. Ontologies with 0 / no class data can't be sized by
+    # class count, so they're NOT allocated here. 0 owl:Class doesn't mean empty —
+    # SKOS/DCAT entries have an ABox — so these are surfaced for REVIEW (not dropped
+    # silently); scripts/purge_zero_class.py distinguishes truly-empty from ABox-only
+    # (see #31).
     by_bucket: dict[str, list[dict]] = defaultdict(list)
     skipped = []
     for r in records:
@@ -295,7 +296,7 @@ def plan(records: list[dict], preserve_memory: bool, current_mem: dict[int, int]
         by_bucket[class_bucket(r["classes"])].append(r)
     if skipped:
         print(f"  plan: {len(skipped)} ontologies have 0/no classes — not allocated "
-              f"(0-class candidates for purge, see #31): {sorted(skipped)[:20]}"
+              f"(review with purge_zero_class.py, see #31): {sorted(skipped)[:20]}"
               f"{' ...' if len(skipped) > 20 else ''}", flush=True)
 
     # Sort each bucket largest first so big ones get placed earliest
