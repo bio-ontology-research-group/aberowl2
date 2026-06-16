@@ -22,7 +22,9 @@ OBO_URL_TEMPLATE = "http://purl.obolibrary.org/obo/{id}.owl"
 # BioPortal ontologies with known direct download URLs
 BIOPORTAL_URLS = {
     "SNOMEDCT": None,  # Too large / restricted, skip
-    "MESH": "https://data.bioontology.org/ontologies/MESH/download?apikey=8b5b7825-538d-40e0-9e9e-5ab9274a9aeb&download_format=csv",
+    # download_format must be rdf, not csv — BioPortal's CSV export is not OWL and
+    # fails to load on the worker ("Content is not allowed in prolog"). See #32.
+    "MESH": "https://data.bioontology.org/ontologies/MESH/download?apikey=8b5b7825-538d-40e0-9e9e-5ab9274a9aeb&download_format=rdf",
     "NCIT": "https://purl.obolibrary.org/obo/ncit.owl",
     "LOINC": None,  # Restricted
     "ICD10CM": None,  # Restricted
