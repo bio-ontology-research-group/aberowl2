@@ -177,3 +177,9 @@ cython_debug/
 .aider*
 
 central_server/app/servers.json
+
+# Nested Overleaf paper repo (separate git history)
+paper/
+
+# Local paper-writing reference (not part of the manuscript repo)
+PAPER_GUIDELINES.md
