@@ -505,10 +505,42 @@ async def _reapply_registry_fallbacks_to_all():
         logger.info(f"Re-applied registry fallbacks; updated {updated} server entries")
 
 
+def _looks_like_description(text: str) -> bool:
+    """Heuristic: is this 'title' actually a description/abstract?
+
+    Some ontologies put a whole paragraph in dc:title (e.g. birthonto's 1480-char
+    blurb), so the frontend shows prose where a name belongs. We treat a value as
+    description-like when it spans multiple lines, or is long *and* reads as a
+    sentence (leading article, an internal sentence break, or a long "X: …"
+    expansion). Tuned against the live registry so legitimate long acronym
+    expansions ("Promoting Health Aging through …", BRIDG, ICD-10-CM) are kept.
+    """
+    t = (text or "").strip()
+    if not t:
+        return False
+    if "\n" in t:
+        return True
+    if len(t) > 180:
+        return True
+    if len(t) > 85:
+        low = t.lower()
+        if low.startswith(("a ", "an ", "the ")) or ". " in t or (": " in t and len(t) > 110):
+            return True
+    return False
+
+
 def _apply_registry_fallbacks(server: Dict[str, Any]):
     """Backfill empty metadata fields on a registry entry from the OBO Foundry /
     BioPortal registry cache. OWL-file-derived values always win; this only
     fills blanks."""
+    # Demote a description-like title (paragraph stuffed into dc:title) into the
+    # description field so the registry/BioPortal name below can take its place.
+    title = (server.get("title") or "").strip()
+    if title and _looks_like_description(title):
+        if not (server.get("description") or "").strip():
+            server["description"] = title
+        server["title"] = ""
+
     ontology = (server.get("ontology") or "").lower()
     meta = _obo_metadata.get(ontology)
     if not meta:
