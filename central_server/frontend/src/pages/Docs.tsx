@@ -52,6 +52,7 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
 const TOOLS: Array<{ name: string; sig: string; desc: string }> = [
   { name: 'list_ontologies', sig: '()', desc: 'List every ontology in the repository with status, class count, and metadata. Start here to discover what is available.' },
   { name: 'search_classes', sig: '(query, ontology?, size?)', desc: 'Full-text search for classes by label, synonym, or OBO ID across all ontologies or a single one. Returns IRIs, labels, and definitions.' },
+  { name: 'lookup_iri', sig: '(term, ontology?, limit?)', desc: 'Resolve a label, CURIE/OBO id (GO:0006915), or candidate IRI to its canonical ontology IRI — and verify it exists. Use this before passing any IRI to the query tools: a wrong IRI silently returns zero results with no error.' },
   { name: 'run_dl_query', sig: '(query, type?, ontology?)', desc: 'Run a Description Logic query in Manchester OWL Syntax using real OWL reasoning. Find classes by logical relationships, not just text.' },
   { name: 'get_class_info', sig: '(class_iri, ontology)', desc: 'Full detail for one class: labels, definitions, synonyms, axioms, and relationships.' },
   { name: 'get_ontology_info', sig: '(ontology)', desc: 'Metadata for one ontology: title, description, version, counts, license, and classification status.' },
@@ -160,7 +161,9 @@ export default function Docs() {
           Once connected, your agent can call these tools. A typical flow is{' '}
           <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">list_ontologies</span> →{' '}
           <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">search_classes</span> →{' '}
-          <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">run_dl_query</span>.
+          <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">run_dl_query</span>. Always run{' '}
+          <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">lookup_iri</span> to confirm an IRI
+          before you query it — a wrong IRI returns nothing, with no error.
         </p>
         <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100">
           {TOOLS.map(t => (
