@@ -801,8 +801,13 @@ async def dl_query_all(request: Request):
     online_servers = [s for s in all_servers if s.get("status") == "online"]
 
     if ontologies_to_query_str:
-        ontologies_to_query = [o.strip() for o in ontologies_to_query_str.split(',')]
-        online_servers = [s for s in online_servers if s.get("ontology") in ontologies_to_query]
+        # Match ontology ids case-insensitively. Registered ids are lowercase,
+        # but inbound ids are often upper/mixed case — notably the OBO Foundry
+        # browser links (http://aber-owl.net/ontology/DOID) and any legacy
+        # AberOWL 1 link. A case-sensitive match here selected zero workers, so
+        # the class hierarchy on those pages came back empty.
+        ontologies_to_query = {o.strip().lower() for o in ontologies_to_query_str.split(',')}
+        online_servers = [s for s in online_servers if s.get("ontology", "").lower() in ontologies_to_query]
 
     async def query_one_server(server, session):
         ontology_name = server.get("ontology")
