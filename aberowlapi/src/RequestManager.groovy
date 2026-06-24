@@ -779,6 +779,33 @@ public class RequestManager {
             )
             resultSet.remove(df.getOWLNothing())
             resultSet.remove(df.getOWLThing())
+
+            // Fallback: some reasoner/ontology combinations do not enumerate the
+            // top-level classes via getSubClasses(owl:Thing, direct). In
+            // particular the StructuralReasoner (which we fall back to for
+            // incoherent or non-EL ontologies, e.g. ACGT, ALCROIQD) reports each
+            // root's superclass as owl:Thing yet returns nothing for
+            // getSubClasses(owl:Thing, direct) — leaving the hierarchy with "No
+            // root classes". Reconstruct the roots directly: a named, satisfiable
+            // class is a display root when its only direct superclass is owl:Thing.
+            if (resultSet.isEmpty()) {
+                def reasoner = qEngine.getoReasoner()
+                def topNode = reasoner.getTopClassNode()
+                def bottomNode = reasoner.getBottomClassNode()
+                def roots = new HashSet<OWLClass>()
+                for (OWLClass c : ontologies.get(ontId).getClassesInSignature(true)) {
+                    if (c.isOWLThing() || c.isOWLNothing()) continue
+                    if (topNode.contains(c) || bottomNode.contains(c)) continue  // skip Thing-equiv / unsatisfiable
+                    def directSupers = reasoner.getSuperClasses(c, true).getFlattened()
+                    if (directSupers.every { it.isOWLThing() || topNode.contains(it) }) {
+                        roots.add(c)
+                    }
+                    if (roots.size() >= MAX_REASONER_RESULTS) break
+                }
+                resultSet = roots
+                println "Root pre-compute for ${ontId}: getSubClasses(owl:Thing) was empty; reconstructed ${roots.size()} roots from the superclass graph"
+            }
+
             def classes = classes2info(ontId, resultSet, false, sfp)
             def sorted = classes.sort { x, y -> x["label"].compareTo(y["label"]) }
             rootClassCache.put(ontId, sorted)
