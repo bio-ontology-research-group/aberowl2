@@ -74,6 +74,15 @@ export default function Home() {
           <span className="text-gray-300">|</span>
           <Link to="/sparql" className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">SPARQL + OWL</Link>
         </div>
+        <div className="mt-6">
+          <Link
+            to="/docs"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm"
+          >
+            <span className="text-xs font-semibold uppercase tracking-wider bg-white/20 px-1.5 py-0.5 rounded">MCP</span>
+            Connect an AI agent to AberOWL →
+          </Link>
+        </div>
       </div>
 
       {/* Stats */}
