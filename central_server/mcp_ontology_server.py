@@ -9,6 +9,7 @@ and remote access.
 Tools:
   - list_ontologies: List all registered ontologies with status
   - search_classes: Search for classes by label/synonym across ontologies
+  - lookup_iri: Resolve a label / CURIE / candidate IRI to its canonical ontology IRI
   - run_dl_query: Execute a Description Logic query in Manchester OWL Syntax
   - get_class_info: Get detailed annotations for a specific class
   - get_ontology_info: Get metadata about a specific ontology
@@ -24,6 +25,7 @@ Usage:
 
 import json
 import os
+import re
 import sys
 from typing import Any
 
@@ -119,6 +121,283 @@ async def search_classes(query: str, ontology: str | None = None, size: int = 50
         if defn:
             lines.append(f"    Def: {defn[:150]}")
     return "\n".join(lines)
+
+
+# --- IRI resolution helpers (used by lookup_iri) -------------------------------
+#
+# Using the wrong IRI is a dominant agent failure mode: a guessed-but-wrong IRI
+# silently returns zero results from the reasoner/SPARQL tools with no error.
+# These helpers resolve a label, CURIE/OBO id, or candidate IRI to the canonical
+# IRI. They prefer the fast central ES index (exact oboid/label) and fall back to
+# the reasoner (which works even when the class index is unpopulated), so the
+# tool is robust to ES outages.
+
+_IRI_RE = re.compile(r"^https?://", re.I)
+# CURIE / OBO short form, e.g. GO:0006915 or GO_0006915 (no spaces).
+_CURIE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*[:_][A-Za-z0-9][A-Za-z0-9_]*$")
+# Local fragment that looks like an OBO id, e.g. GO_0006915 -> ("GO", "0006915").
+_FRAG_RE = re.compile(r"^([A-Za-z][A-Za-z0-9]*)_([A-Za-z0-9]+)$")
+
+
+def _strip_iri(s: str) -> str:
+    s = (s or "").strip()
+    if s.startswith("<") and s.endswith(">"):
+        s = s[1:-1].strip()
+    return s
+
+
+def _first(v: Any) -> str:
+    if isinstance(v, list):
+        return str(v[0]) if v else ""
+    return str(v) if v is not None else ""
+
+
+def _norm(s: str) -> str:
+    return (s or "").strip().lower()
+
+
+def _classify(term: str) -> str:
+    """Classify the input as 'iri', 'curie', or 'text' (label)."""
+    t = _strip_iri(term)
+    if _IRI_RE.match(t):
+        return "iri"
+    if " " not in t and _CURIE_RE.match(t):
+        return "curie"
+    return "text"
+
+
+def _iri_to_curie(iri: str) -> str | None:
+    frag = re.split(r"[#/]", iri.rstrip("#/"))[-1]
+    m = _FRAG_RE.match(frag)
+    return f"{m.group(1)}:{m.group(2)}" if m else None
+
+
+def _curie_parts(curie: str) -> tuple[str, str]:
+    m = re.match(r"^([A-Za-z][A-Za-z0-9]*)[:_](.+)$", curie)
+    return (m.group(1), m.group(2)) if m else (curie, "")
+
+
+def _quote_label(label: str) -> str:
+    """Single-quote a label for Manchester OWL Syntax."""
+    return "'" + label.replace("'", "\\'") + "'"
+
+
+def _record(iri: str, label: str = "", ontology: str = "", curie: str = "",
+            definition: str = "", match: str = "exact") -> dict:
+    iri = _strip_iri(iri)
+    return {
+        "iri": iri,
+        "label": label or curie or _iri_to_curie(iri) or iri.rsplit("/", 1)[-1].rsplit("#", 1)[-1],
+        "ontology": ontology or "",
+        "curie": curie or _iri_to_curie(iri) or "",
+        "definition": definition or "",
+        "match": match,
+    }
+
+
+async def _es_records(term: str, ontology: str | None, size: int) -> list[dict]:
+    """Class hits from the central ES index (empty if the index is unpopulated)."""
+    params: dict[str, Any] = {"query": term, "size": str(size)}
+    if ontology:
+        params["ontologies"] = ontology
+    try:
+        data = await _api_get("/api/search_all", params)
+    except Exception:
+        return []
+    out = []
+    for r in (data.get("result", []) if isinstance(data, dict) else []):
+        iri = _strip_iri(r.get("class") or r.get("owlClass") or "")
+        if not iri:
+            continue
+        out.append(_record(iri, _first(r.get("label")), r.get("ontology", ""),
+                           _first(r.get("oboid")), _first(r.get("definition"))))
+    return out
+
+
+async def _dl_equivalent(query: str, ontology: str) -> list[dict]:
+    """Resolve via the reasoner: equivalent classes of a label/IRI query.
+
+    Always scoped to one ontology — an unscoped dlquery_all fans out to every
+    worker, which is both slow (tens of seconds) and noisy, so the reasoner
+    fallback is only used when an ontology is known.
+    """
+    params: dict[str, Any] = {
+        "query": query, "type": "equivalent", "labels": "true", "ontologies": ontology,
+    }
+    try:
+        data = await _api_get("/api/dlquery_all", params)
+    except Exception:
+        return []
+    out = []
+    for r in (data.get("result", []) if isinstance(data, dict) else []):
+        iri = _strip_iri(r.get("class") or r.get("owlClass") or "")
+        if iri:
+            out.append(_record(iri, _first(r.get("label")), r.get("ontology", ""),
+                               "", _first(r.get("definition")), match="reasoner"))
+    return out
+
+
+async def _validate_iri(iri: str, ontology: str) -> dict | None:
+    """Confirm an IRI exists in an ontology and fetch its label/definition."""
+    try:
+        data = await _api_get("/api/getClass", {"query": iri, "ontology": ontology})
+    except Exception:
+        return None
+    if not isinstance(data, dict) or data.get("error"):
+        return None
+    riri = _strip_iri(data.get("class") or iri)
+    return _record(riri, _first(data.get("label")), data.get("ontology") or ontology,
+                   _first(data.get("oboid")), _first(data.get("definition")))
+
+
+def _dedup(records: list[dict], limit: int) -> list[dict]:
+    seen, out = set(), []
+    for r in records:
+        if r["iri"] and r["iri"] not in seen:
+            seen.add(r["iri"])
+            out.append(r)
+        if len(out) >= limit:
+            break
+    return out
+
+
+async def _resolve(term: str, ontology: str | None, limit: int) -> tuple[str, list[dict]]:
+    kind = _classify(term)
+    t = _strip_iri(term)
+
+    if kind == "iri":
+        # Validate against the most likely ontology: the caller's hint, then the
+        # one implied by an OBO-style IRI (purl.obolibrary.org/obo/GO_… -> go).
+        guesses, seen_g = [], set()
+        if ontology:
+            guesses.append(ontology)
+        curie = _iri_to_curie(t)
+        if curie:
+            guesses.append(curie.split(":")[0].lower())
+        for g in guesses:
+            if not g or g in seen_g:
+                continue
+            seen_g.add(g)
+            rec = await _validate_iri(t, g)
+            if rec:
+                return kind, [rec]
+        # Scoped reasoner backstop only when an ontology was given explicitly.
+        if ontology:
+            hits = [r for r in await _dl_equivalent(f"<{t}>", ontology) if r["iri"] == t]
+            return kind, _dedup(hits, limit)
+        return kind, []
+
+    if kind == "curie":
+        prefix, local = _curie_parts(t)
+        colon = f"{prefix}:{local}"
+        # 1) ES exact oboid match.
+        es = [r for r in await _es_records(colon, ontology, limit)
+              if _norm(r["curie"]) == _norm(colon)]
+        if es:
+            for r in es:
+                r["match"] = "curie"
+            return kind, _dedup(es, limit)
+        # 2) Construct the OBO PURL IRI and validate it against the ontology the
+        #    prefix implies (GO:… -> go) unless the caller scoped one explicitly.
+        cand = f"http://purl.obolibrary.org/obo/{prefix}_{local}"
+        rec = await _validate_iri(cand, ontology or prefix.lower())
+        if rec:
+            rec["match"] = "curie"
+            return kind, [rec]
+        return kind, []
+
+    # text / label: ES first (fast, cross-ontology); reasoner only when scoped,
+    # since an unscoped label query would fan out to every worker.
+    records = await _es_records(t, ontology, limit)
+    if not records and ontology:
+        records = await _dl_equivalent(_quote_label(t), ontology)
+    return kind, _dedup(records, limit)
+
+
+async def _suggest(term: str, ontology: str | None, limit: int = 5) -> list[dict]:
+    """Best-effort 'did you mean' suggestions for a failed lookup (needs ES)."""
+    t = _strip_iri(term)
+    frag = re.split(r"[#/]", t.rstrip("#/"))[-1] if _IRI_RE.match(t) else t
+    frag = re.sub(r"[_:]", " ", frag).strip()
+    return _dedup(await _es_records(frag, ontology, limit), limit) if frag else []
+
+
+def _fmt_record(rec: dict, idx: int | None = None) -> str:
+    head = f"{idx}. " if idx else "✓ "
+    lines = [f"{head}{rec['iri']}"]
+    pad = "   "
+    if rec.get("label"):
+        lines.append(f"{pad}label:    {rec['label']}")
+    if rec.get("curie"):
+        lines.append(f"{pad}CURIE:    {rec['curie']}")
+    if rec.get("ontology"):
+        lines.append(f"{pad}ontology: {rec['ontology']}")
+    if rec.get("definition"):
+        lines.append(f"{pad}def:      {rec['definition'][:160]}")
+    return "\n".join(lines)
+
+
+@mcp.tool(
+    description=(
+        "Resolve a class name, CURIE/OBO id (e.g. GO:0006915), or a candidate "
+        "IRI to its canonical AberOWL ontology IRI. USE THIS to obtain or verify "
+        "an IRI before passing one to get_class_info, browse_hierarchy, "
+        "run_dl_query, or SPARQL — a guessed-but-wrong IRI silently returns zero "
+        "results with no error, which is a common failure.\n\n"
+        "Accepts:\n"
+        "  - a label, e.g. 'apoptosis' or 'apoptotic process'\n"
+        "  - a CURIE / OBO id, e.g. 'GO:0006915' or 'GO_0006915'\n"
+        "  - a full IRI to validate, e.g. 'http://purl.obolibrary.org/obo/GO_0006915'\n\n"
+        "Pass `ontology` (e.g. 'go', 'hp') to scope and disambiguate — recommended "
+        "and faster. Returns the canonical IRI, label, CURIE, and source ontology. "
+        "If the IRI/CURIE does not exist it says so and suggests close matches, so "
+        "you can correct course instead of querying a non-existent class."
+    ),
+)
+async def lookup_iri(term: str, ontology: str | None = None, limit: int = 10) -> str:
+    """
+    Args:
+        term: A class label, CURIE/OBO id, or candidate IRI to resolve/validate.
+        ontology: Optional ontology ID to scope/disambiguate (e.g. 'go', 'hp').
+        limit: Maximum number of matches to return (default 10).
+    """
+    term = (term or "").strip()
+    if not term:
+        return "Provide a class name, CURIE (e.g. GO:0006915), or IRI to look up."
+
+    kind, records = await _resolve(term, ontology, limit)
+
+    if records:
+        if len(records) == 1:
+            r = records[0]
+            return (
+                f'Resolved "{term}" ({kind}) -> 1 match:\n\n{_fmt_record(r)}\n\n'
+                f"Use this IRI verbatim: in run_dl_query wrap it as <{r['iri']}>; "
+                f"in get_class_info / browse_hierarchy pass class_iri=\"{r['iri']}\""
+                + (f" with ontology=\"{r['ontology']}\"" if r['ontology'] else "")
+                + f"; in SPARQL use <{r['iri']}>."
+            )
+        lines = [f'Resolved "{term}" ({kind}) -> {len(records)} matches'
+                 + ("" if ontology else " (pass `ontology` to narrow):") + "\n"]
+        for i, r in enumerate(records, 1):
+            lines.append(_fmt_record(r, idx=i))
+        return "\n".join(lines)
+
+    # Not found — offer suggestions.
+    kind_word = "an IRI" if kind == "iri" else f"a {kind}"
+    out = [f'✗ Could not resolve "{term}" as {kind_word}.']
+    if kind in ("iri", "curie"):
+        out.append("  It may not exist in AberOWL, or the ontology uses a different namespace.")
+    sugg = await _suggest(term, ontology, 5)
+    if sugg:
+        out.append("  Closest matches:")
+        for r in sugg:
+            tail = f"  ({r['label']} [{r['ontology']}])" if r.get("label") else ""
+            out.append(f"  - {r['iri']}{tail}")
+    else:
+        hint = "omit `ontology`" if ontology else "specify the `ontology`"
+        out.append(f'  No close matches. Try search_classes("{term}") or {hint}.')
+    return "\n".join(out)
 
 
 @mcp.tool(
