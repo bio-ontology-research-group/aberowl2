@@ -135,7 +135,9 @@ export default function Home() {
                       {o.id.toUpperCase()}
                     </Link>
                   </td>
-                  <td className="px-4 py-2.5 text-gray-700">{o.title || <span className="text-gray-400 italic">—</span>}</td>
+                  <td className="px-4 py-2.5 text-gray-700">
+                    {o.title || <span className="text-gray-400" title="No descriptive name available — showing the ontology acronym">{o.id.toUpperCase()}</span>}
+                  </td>
                   <td className="px-4 py-2.5 text-center">
                     <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${
                       o.status === 'online'
