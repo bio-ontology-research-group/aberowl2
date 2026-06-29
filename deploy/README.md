@@ -504,6 +504,40 @@ What would destroy data:
 - `rm -rf /data/aberowl/ontologies` or `/var/lib/docker/volumes/deploy_*`.
 - Renaming the compose project (`-p` flag) — would create new volumes with the new prefix.
 
+### ALWAYS back up the current state before deploying (rollback safety)
+
+A normal `up --build -d` preserves volumes, but **always capture a rollback
+point first** so a bad deploy can be reverted. Run on `onto`, before syncing
+new code:
+
+```bash
+ssh onto
+cd /data/aberowl
+
+# 1. Record the currently-deployed code commit (to roll the code back).
+git rev-parse HEAD | tee backups/DEPLOYED_COMMIT_$(date +%Y%m%d_%H%M%S).txt
+
+# 2. Snapshot the data volumes (ES indices, Redis registry, config) to tarballs.
+ts=$(date +%Y%m%d_%H%M%S); mkdir -p backups/$ts
+for v in deploy_es_data deploy_redis_data deploy_central_config; do
+  docker run --rm -v "$v":/vol -v "$(pwd)/backups/$ts":/backup alpine \
+    tar czf "/backup/$v.tar.gz" -C /vol .
+done
+echo "Backup at /data/aberowl/backups/$ts"
+```
+
+(Volume names carry the `deploy_` compose-project prefix. `backups/` lives
+outside the rsync path, so deploys don't clobber it; prune old ones manually.)
+
+**Rollback:**
+- *Code:* `git checkout <recorded-commit>` (or re-sync the old tree) then
+  `docker compose -f deploy/docker-compose.central.yml --env-file deploy/.env up --build -d`.
+- *Data:* stop the stack, restore the tarball into the volume, restart, e.g.
+  `docker run --rm -v deploy_es_data:/vol -v "$(pwd)/backups/<ts>":/backup alpine sh -c 'rm -rf /vol/* && tar xzf /backup/deploy_es_data.tar.gz -C /vol'`.
+- *Schema/reindex changes:* reindex into a **new** versioned index and swap the
+  alias, keeping the old index — then rollback is just swapping the alias back,
+  with no data loss.
+
 For the MCP rollout specifically, the upgrade sequence is:
 
 ```bash
