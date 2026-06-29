@@ -10,6 +10,7 @@ export default function Layout() {
     { to: '/', label: 'Ontologies' },
     { to: '/dlquery', label: 'DL Query' },
     { to: '/sparql', label: 'SPARQL' },
+    { to: '/docs', label: 'Docs' },
   ]
 
   return (
