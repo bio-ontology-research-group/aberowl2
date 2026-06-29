@@ -52,8 +52,20 @@ class TestMCPOntologyServerSchemas:
             "rewrite_sparql",
             "list_sparql_examples",
             "query_sparql",
+            "lookup_iri",
         }
         assert tool_names == expected, f"Missing tools: {expected - tool_names}"
+
+    async def test_lookup_iri_schema(self):
+        from mcp_ontology_server import mcp
+        tools = await mcp.list_tools()
+        tool = next(t for t in tools if t.name == "lookup_iri")
+        schema = tool.inputSchema
+        assert "term" in schema["properties"]
+        assert "term" in schema["required"]
+        assert "ontology" in schema["properties"]
+        # ontology is optional — it must not be required
+        assert "ontology" not in schema.get("required", [])
 
     async def test_search_classes_schema(self):
         from mcp_ontology_server import mcp
@@ -172,6 +184,110 @@ class TestMCPOntologyServerCalls:
                 "get_class_info", {"class_iri": "bad", "ontology": "go"}
             )
         assert "Error: HTTP 404" in _text(result)
+
+
+# ---------------------------------------------------------------------------
+# lookup_iri — input classification helpers + resolution behaviour
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+class TestLookupIRIHelpers:
+
+    def test_classify(self):
+        import mcp_ontology_server as srv
+        assert srv._classify("apoptosis") == "text"
+        assert srv._classify("apoptotic process") == "text"
+        assert srv._classify("GO:0006915") == "curie"
+        assert srv._classify("GO_0006915") == "curie"
+        assert srv._classify("http://purl.obolibrary.org/obo/GO_0006915") == "iri"
+        assert srv._classify("<http://purl.obolibrary.org/obo/HP_0001250>") == "iri"
+        assert srv._classify("Alzheimer's disease") == "text"
+
+    def test_iri_curie_conversions(self):
+        import mcp_ontology_server as srv
+        assert srv._iri_to_curie("http://purl.obolibrary.org/obo/GO_0006915") == "GO:0006915"
+        assert srv._iri_to_curie("http://example.org/onto#Plainname") is None
+        assert srv._curie_parts("GO:0006915") == ("GO", "0006915")
+        assert srv._curie_parts("GO_0006915") == ("GO", "0006915")
+
+
+@pytest.mark.unit
+class TestLookupIRICalls:
+
+    async def test_curie_constructs_and_validates_iri(self):
+        """A CURIE with no ES hit is resolved by constructing the OBO PURL and
+        validating it via getClass."""
+        import mcp_ontology_server as srv
+
+        async def fake_get(path, params=None):
+            params = params or {}
+            if path == "/api/search_all":
+                return {"result": []}  # ES unpopulated
+            if path == "/api/getClass":
+                assert params["query"] == "http://purl.obolibrary.org/obo/GO_0006915"
+                assert params["ontology"] == "go"  # inferred from the GO prefix
+                return {"class": params["query"], "label": "apoptotic process", "ontology": "go"}
+            return {"result": []}
+
+        with patch.object(srv, "_api_get", new=AsyncMock(side_effect=fake_get)):
+            result = await srv.mcp.call_tool("lookup_iri", {"term": "GO:0006915"})
+        text = _text(result)
+        assert "http://purl.obolibrary.org/obo/GO_0006915" in text
+        assert "apoptotic process" in text
+        assert "GO:0006915" in text
+
+    async def test_label_resolves_via_reasoner_when_scoped(self):
+        """When ES is empty, a scoped label resolves through the reasoner."""
+        import mcp_ontology_server as srv
+
+        async def fake_get(path, params=None):
+            params = params or {}
+            if path == "/api/search_all":
+                return {"result": []}
+            if path == "/api/dlquery_all":
+                assert params["ontologies"] == "go"
+                assert params["type"] == "equivalent"
+                return {"result": [{"class": "http://purl.obolibrary.org/obo/GO_0006915",
+                                    "label": "apoptotic process", "ontology": "go"}]}
+            return {"result": []}
+
+        with patch.object(srv, "_api_get", new=AsyncMock(side_effect=fake_get)):
+            result = await srv.mcp.call_tool("lookup_iri", {"term": "apoptosis", "ontology": "go"})
+        text = _text(result)
+        assert "http://purl.obolibrary.org/obo/GO_0006915" in text
+        assert "apoptotic process" in text
+
+    async def test_unscoped_label_does_not_scatter(self):
+        """An unscoped label with no ES hit must NOT call the reasoner (which
+        would fan out to every worker); it returns guidance instead."""
+        import mcp_ontology_server as srv
+        calls = []
+
+        async def fake_get(path, params=None):
+            calls.append(path)
+            return {"result": []}
+
+        with patch.object(srv, "_api_get", new=AsyncMock(side_effect=fake_get)):
+            result = await srv.mcp.call_tool("lookup_iri", {"term": "apoptosis"})
+        text = _text(result)
+        assert "Could not resolve" in text
+        assert "ontology" in text  # guidance to scope
+        assert "/api/dlquery_all" not in calls  # never scattered
+
+    async def test_missing_iri_reports_not_found(self):
+        import mcp_ontology_server as srv
+
+        async def fake_get(path, params=None):
+            if path == "/api/getClass":
+                return {"error": "HTTP 404: Class not found"}
+            return {"result": []}
+
+        with patch.object(srv, "_api_get", new=AsyncMock(side_effect=fake_get)):
+            result = await srv.mcp.call_tool(
+                "lookup_iri",
+                {"term": "http://purl.obolibrary.org/obo/GO_9999999", "ontology": "go"},
+            )
+        assert "Could not resolve" in _text(result)
 
     async def test_get_ontology_info_returns_json(self):
         import mcp_ontology_server as srv
