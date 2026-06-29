@@ -5,7 +5,7 @@
 # at /data/aberowl/
 #
 # Prerequisites:
-#   - SSH access to "onto" as hohndor
+#   - SSH access to "onto" as zhapacfp
 #   - Docker and docker-compose installed on onto
 #   - /data/ directory exists with sufficient space
 #
@@ -18,7 +18,7 @@
 set -euo pipefail
 
 REMOTE_HOST="onto"
-REMOTE_USER="hohndor"
+REMOTE_USER="zhapacfp"
 REMOTE_DIR="/data/aberowl"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"

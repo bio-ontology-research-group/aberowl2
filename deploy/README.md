@@ -67,7 +67,7 @@ nothing else can. Public access is exclusively via the nginx route
 
 | Server | SSH | User | Notes |
 |--------|-----|------|-------|
-| onto (cbontsr01) | `ssh onto` | hohndor | Main deployment server. SSH key auth. |
+| onto (cbontsr01) | `ssh onto` | zhapacfp | Main deployment server. SSH key auth. |
 | frontend | See borg-infrastructure AGENTS.md | a-hohndor | Needs `sudo rootsh` for nginx changes. |
 | frontend1 | See borg-infrastructure AGENTS.md | a-hohndor | Same as frontend. |
 | borg-server | `ssh borg-server` | leechuck | Needs `sudo` for nginx. User `root` for direct access via `ssh root@borg-server`. |
