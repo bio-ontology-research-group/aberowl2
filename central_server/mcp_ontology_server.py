@@ -9,7 +9,7 @@ and remote access.
 Tools:
   - list_ontologies: List all registered ontologies with status
   - search_classes: Search for classes by label/synonym across ontologies
-  - lookup_iri: Resolve a label / CURIE / candidate IRI to its canonical ontology IRI
+  - find_iri: Resolve a label / exact synonym / CURIE / candidate IRI to its canonical ontology IRI
   - run_dl_query: Execute a Description Logic query in Manchester OWL Syntax
   - get_class_info: Get detailed annotations for a specific class
   - get_ontology_info: Get metadata about a specific ontology
@@ -123,14 +123,15 @@ async def search_classes(query: str, ontology: str | None = None, size: int = 50
     return "\n".join(lines)
 
 
-# --- IRI resolution helpers (used by lookup_iri) -------------------------------
+# --- IRI resolution helpers (used by find_iri) ------------------------------
 #
 # Using the wrong IRI is a dominant agent failure mode: a guessed-but-wrong IRI
 # silently returns zero results from the reasoner/SPARQL tools with no error.
-# These helpers resolve a label, CURIE/OBO id, or candidate IRI to the canonical
-# IRI. They prefer the fast central ES index (exact oboid/label) and fall back to
-# the reasoner (which works even when the class index is unpopulated), so the
-# tool is robust to ES outages.
+# These helpers resolve a label, exact synonym, CURIE/OBO id, or candidate IRI to
+# the canonical IRI. The label path matches EXACTLY first (oboid/label/synonym
+# equality via /api/resolve) so the term itself wins over fuzzy siblings, then
+# falls back to the fuzzy index and finally the reasoner (which works even when
+# the class index is unpopulated), so the tool is robust to ES outages.
 
 _IRI_RE = re.compile(r"^https?://", re.I)
 # CURIE / OBO short form, e.g. GO:0006915 or GO_0006915 (no spaces).
@@ -212,6 +213,46 @@ async def _es_records(term: str, ontology: str | None, size: int) -> list[dict]:
         out.append(_record(iri, _first(r.get("label")), r.get("ontology", ""),
                            _first(r.get("oboid")), _first(r.get("definition"))))
     return out
+
+
+async def _exact_records(term: str, ontology: str | None, size: int) -> list[dict]:
+    """Exact resolution via /api/resolve: classes whose oboid/label/synonym
+    EQUALS `term` (case-insensitive). Returns records tagged with which field
+    matched, ordered id/label before synonym, so the term itself wins over the
+    fuzzy siblings a normal search would surface. Empty when nothing matches
+    exactly (the caller then falls back to fuzzy search / the reasoner)."""
+    params: dict[str, Any] = {"query": term, "size": str(size)}
+    if ontology:
+        params["ontologies"] = ontology
+    try:
+        data = await _api_get("/api/resolve", params)
+    except Exception:
+        return []
+    nt = _norm(term)
+    nt_id = nt.replace("_", ":")
+    out = []
+    for r in (data.get("result", []) if isinstance(data, dict) else []):
+        iri = _strip_iri(r.get("class") or r.get("owlClass") or "")
+        if not iri:
+            continue
+        label = _first(r.get("label"))
+        oboid = _first(r.get("oboid"))
+        syns = r.get("synonyms") or []
+        if not isinstance(syns, list):
+            syns = [syns]
+        if _norm(oboid) in (nt, nt_id):
+            match = "oboid"
+        elif _norm(label) == nt:
+            match = "label"
+        elif any(_norm(s) == nt for s in syns):
+            match = "synonym"
+        else:
+            match = "exact"
+        out.append(_record(iri, label, r.get("ontology", ""), oboid,
+                           _first(r.get("definition")), match=match))
+    order = {"oboid": 0, "label": 0, "exact": 1, "synonym": 2}
+    out.sort(key=lambda r: order.get(r["match"], 3))
+    return _dedup(out, size)
 
 
 async def _dl_equivalent(query: str, ontology: str) -> list[dict]:
@@ -306,9 +347,16 @@ async def _resolve(term: str, ontology: str | None, limit: int) -> tuple[str, li
             return kind, [rec]
         return kind, []
 
-    # text / label: ES first (fast, cross-ontology); reasoner only when scoped,
-    # since an unscoped label query would fan out to every worker.
+    # text / label: EXACT match first (oboid/label/synonym equality) so the term
+    # itself resolves instead of a fuzzy sibling; only if nothing matches exactly
+    # do we fall back to the fuzzy index, then the reasoner. Fuzzy hits are tagged
+    # so the tool presents them as candidates, not a confident resolution.
+    records = await _exact_records(t, ontology, limit)
+    if records:
+        return kind, records
     records = await _es_records(t, ontology, limit)
+    for r in records:
+        r["match"] = "fuzzy"
     if not records and ontology:
         records = await _dl_equivalent(_quote_label(t), ontology)
     return kind, _dedup(records, limit)
@@ -339,37 +387,48 @@ def _fmt_record(rec: dict, idx: int | None = None) -> str:
 
 @mcp.tool(
     description=(
-        "Resolve a class name, CURIE/OBO id (e.g. GO:0006915), or a candidate "
-        "IRI to its canonical AberOWL ontology IRI. USE THIS to obtain or verify "
-        "an IRI before passing one to get_class_info, browse_hierarchy, "
-        "run_dl_query, or SPARQL — a guessed-but-wrong IRI silently returns zero "
-        "results with no error, which is a common failure.\n\n"
+        "Answer \"what is the IRI of <term>?\". GIVEN a term — a class label, "
+        "exact synonym, CURIE/OBO id (e.g. GO:0006915), or a candidate IRI — "
+        "RETURN its single canonical AberOWL ontology IRI. The INPUT is the "
+        "term/name you have; the OUTPUT is its IRI. (To go the other way — an IRI "
+        "to its details — use get_class_info instead.)\n\n"
+        "This is the GROUNDING tool. Use it whenever you have a term and need its "
+        "IRI, and ALWAYS to obtain or verify an IRI before passing one to "
+        "get_class_info, browse_hierarchy, run_dl_query, or SPARQL — a "
+        "guessed-but-wrong IRI silently returns zero results with no error. Reach "
+        "for this, NOT search_classes, to look up the IRI of a term you can name; "
+        "use search_classes only to discover/browse when you don't know the term.\n\n"
+        "It matches the term EXACTLY against class ids, labels, and synonyms (not "
+        "a fuzzy search), so it returns the class the term names rather than "
+        "related/sibling classes.\n\n"
         "Accepts:\n"
-        "  - a label, e.g. 'apoptosis' or 'apoptotic process'\n"
+        "  - a label or exact synonym, e.g. 'apoptosis' or 'apoptotic process'\n"
         "  - a CURIE / OBO id, e.g. 'GO:0006915' or 'GO_0006915'\n"
         "  - a full IRI to validate, e.g. 'http://purl.obolibrary.org/obo/GO_0006915'\n\n"
         "Pass `ontology` (e.g. 'go', 'hp') to scope and disambiguate — recommended "
         "and faster. Returns the canonical IRI, label, CURIE, and source ontology. "
-        "If the IRI/CURIE does not exist it says so and suggests close matches, so "
-        "you can correct course instead of querying a non-existent class."
+        "If there is no exact match it returns the closest candidates (clearly "
+        "marked as such) so you can correct course instead of querying a "
+        "non-existent class."
     ),
 )
-async def lookup_iri(term: str, ontology: str | None = None, limit: int = 10) -> str:
+async def find_iri(term: str, ontology: str | None = None, limit: int = 10) -> str:
     """
     Args:
-        term: A class label, CURIE/OBO id, or candidate IRI to resolve/validate.
+        term: A class label, exact synonym, CURIE/OBO id, or candidate IRI to resolve/validate.
         ontology: Optional ontology ID to scope/disambiguate (e.g. 'go', 'hp').
         limit: Maximum number of matches to return (default 10).
     """
     term = (term or "").strip()
     if not term:
-        return "Provide a class name, CURIE (e.g. GO:0006915), or IRI to look up."
+        return "Provide a class name, CURIE (e.g. GO:0006915), or IRI to resolve."
 
     kind, records = await _resolve(term, ontology, limit)
+    exact = [r for r in records if r.get("match") != "fuzzy"]
 
-    if records:
-        if len(records) == 1:
-            r = records[0]
+    if exact:
+        if len(exact) == 1:
+            r = exact[0]
             return (
                 f'Resolved "{term}" ({kind}) -> 1 match:\n\n{_fmt_record(r)}\n\n'
                 f"Use this IRI verbatim: in run_dl_query wrap it as <{r['iri']}>; "
@@ -377,10 +436,20 @@ async def lookup_iri(term: str, ontology: str | None = None, limit: int = 10) ->
                 + (f" with ontology=\"{r['ontology']}\"" if r['ontology'] else "")
                 + f"; in SPARQL use <{r['iri']}>."
             )
-        lines = [f'Resolved "{term}" ({kind}) -> {len(records)} matches'
+        lines = [f'Resolved "{term}" ({kind}) -> {len(exact)} exact matches'
                  + ("" if ontology else " (pass `ontology` to narrow):") + "\n"]
+        for i, r in enumerate(exact, 1):
+            lines.append(_fmt_record(r, idx=i))
+        return "\n".join(lines)
+
+    if records:
+        # Only fuzzy hits — do NOT present these as a confident resolution.
+        lines = [f'No exact match for "{term}" — closest candidates '
+                 "(verify with get_class_info before using):\n"]
         for i, r in enumerate(records, 1):
             lines.append(_fmt_record(r, idx=i))
+        lines.append("\nIf none is right, refine the term"
+                     + ("" if ontology else " or pass `ontology` to scope") + ".")
         return "\n".join(lines)
 
     # Not found — offer suggestions.

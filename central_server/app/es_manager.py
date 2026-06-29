@@ -42,7 +42,14 @@ CLASS_INDEX_SETTINGS = {
             "ontology": {"type": "keyword", "normalizer": "aberowl_normalizer"},
             "oboid": {"type": "keyword", "normalizer": "aberowl_normalizer"},
             "owlClass": {"type": "keyword"},
-            "synonyms": {"type": "text"},
+            # `synonyms` stays analyzed for fuzzy search; the `.raw` keyword
+            # sub-field (lowercased) lets us match a synonym *exactly* — needed
+            # by /api/resolve so a term that IS a synonym (e.g. "apoptosis")
+            # resolves to its class instead of being lost in the fuzzy ranking.
+            "synonyms": {
+                "type": "text",
+                "fields": {"raw": {"type": "keyword", "normalizer": "aberowl_normalizer"}},
+            },
         }
     },
 }
@@ -334,6 +341,73 @@ class CentralESManager:
                         return []
         except Exception as e:
             logger.error("ES search error: %s", e)
+            return []
+
+    async def resolve(
+        self,
+        term: str,
+        ontology: Optional[str] = None,
+        size: int = 25,
+    ) -> list:
+        """Exact-match resolution of a term to its canonical class(es).
+
+        Unlike `search_classes` (a fuzzy `dis_max` ranking), this returns ONLY
+        classes whose `oboid`, `label`, or an exact `synonym` EQUALS `term`
+        (case-insensitive, via the `aberowl_normalizer`). It is the grounding
+        primitive behind the `find_iri` MCP tool: a fuzzy search for a term
+        like "apoptosis" surfaces sibling/regulation classes ahead of the term
+        itself, whereas exact matching returns the class the term names.
+
+        The synonym match uses `synonyms.raw`; on indices built before that
+        sub-field existed the clause simply matches nothing, so the method
+        degrades to oboid/label matching rather than erroring.
+        """
+        t = (term or "").strip()
+        if not t:
+            return []
+
+        index_pattern = self._alias_name(ontology.lower()) if ontology else "aberowl_*_classes"
+
+        inner = {
+            "bool": {
+                "should": [
+                    {"term": {"oboid": t.upper()}},
+                    {"term": {"label": t}},
+                    {"term": {"synonyms.raw": t}},
+                ],
+                "minimum_should_match": 1,
+            }
+        }
+        if ontology:
+            query = {"bool": {"must": inner, "filter": {"term": {"ontology": ontology.lower()}}}}
+        else:
+            query = inner
+
+        query_body = {
+            "query": query,
+            "_source": {"excludes": ["embedding_vector"]},
+            "size": size,
+        }
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.es_url}/{index_pattern}/_search",
+                    json=query_body,
+                    timeout=aiohttp.ClientTimeout(total=15),
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json(content_type=None)
+                        hits = data.get("hits", {}).get("hits", [])
+                        return [hit.get("_source") for hit in hits if hit.get("_source")]
+                    elif resp.status == 404:
+                        return []
+                    else:
+                        body_text = await resp.text()
+                        logger.error("ES resolve failed (%s): %s", resp.status, body_text[:300])
+                        return []
+        except Exception as e:
+            logger.error("ES resolve error: %s", e)
             return []
 
     async def search_ontologies(self, term: str, size: int = 50) -> list:
