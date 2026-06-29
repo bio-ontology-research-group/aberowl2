@@ -52,14 +52,14 @@ class TestMCPOntologyServerSchemas:
             "rewrite_sparql",
             "list_sparql_examples",
             "query_sparql",
-            "lookup_iri",
+            "find_iri",
         }
         assert tool_names == expected, f"Missing tools: {expected - tool_names}"
 
-    async def test_lookup_iri_schema(self):
+    async def test_find_iri_schema(self):
         from mcp_ontology_server import mcp
         tools = await mcp.list_tools()
-        tool = next(t for t in tools if t.name == "lookup_iri")
+        tool = next(t for t in tools if t.name == "find_iri")
         schema = tool.inputSchema
         assert "term" in schema["properties"]
         assert "term" in schema["required"]
@@ -230,7 +230,7 @@ class TestLookupIRICalls:
             return {"result": []}
 
         with patch.object(srv, "_api_get", new=AsyncMock(side_effect=fake_get)):
-            result = await srv.mcp.call_tool("lookup_iri", {"term": "GO:0006915"})
+            result = await srv.mcp.call_tool("find_iri", {"term": "GO:0006915"})
         text = _text(result)
         assert "http://purl.obolibrary.org/obo/GO_0006915" in text
         assert "apoptotic process" in text
@@ -252,7 +252,7 @@ class TestLookupIRICalls:
             return {"result": []}
 
         with patch.object(srv, "_api_get", new=AsyncMock(side_effect=fake_get)):
-            result = await srv.mcp.call_tool("lookup_iri", {"term": "apoptosis", "ontology": "go"})
+            result = await srv.mcp.call_tool("find_iri", {"term": "apoptosis", "ontology": "go"})
         text = _text(result)
         assert "http://purl.obolibrary.org/obo/GO_0006915" in text
         assert "apoptotic process" in text
@@ -268,7 +268,7 @@ class TestLookupIRICalls:
             return {"result": []}
 
         with patch.object(srv, "_api_get", new=AsyncMock(side_effect=fake_get)):
-            result = await srv.mcp.call_tool("lookup_iri", {"term": "apoptosis"})
+            result = await srv.mcp.call_tool("find_iri", {"term": "apoptosis"})
         text = _text(result)
         assert "Could not resolve" in text
         assert "ontology" in text  # guidance to scope
@@ -284,10 +284,58 @@ class TestLookupIRICalls:
 
         with patch.object(srv, "_api_get", new=AsyncMock(side_effect=fake_get)):
             result = await srv.mcp.call_tool(
-                "lookup_iri",
+                "find_iri",
                 {"term": "http://purl.obolibrary.org/obo/GO_9999999", "ontology": "go"},
             )
         assert "Could not resolve" in _text(result)
+
+    async def test_label_resolves_exactly_and_shortcircuits_fuzzy(self):
+        """A label/synonym that exactly matches resolves via /api/resolve and
+        must NOT fall through to the fuzzy /api/search_all path."""
+        import mcp_ontology_server as srv
+        calls = []
+
+        async def fake_get(path, params=None):
+            calls.append(path)
+            if path == "/api/resolve":
+                assert (params or {}).get("ontologies") == "go"
+                return {"result": [{
+                    "class": "http://purl.obolibrary.org/obo/GO_0006915",
+                    "label": "apoptotic process", "ontology": "go",
+                    "oboid": "GO:0006915",
+                    "synonyms": ["apoptosis", "cell suicide"],
+                }]}
+            return {"result": []}
+
+        with patch.object(srv, "_api_get", new=AsyncMock(side_effect=fake_get)):
+            result = await srv.mcp.call_tool("find_iri", {"term": "apoptosis", "ontology": "go"})
+        text = _text(result)
+        assert "Resolved" in text and "1 match" in text
+        assert "http://purl.obolibrary.org/obo/GO_0006915" in text
+        # exact-first short-circuit: the fuzzy search path is never consulted
+        assert "/api/search_all" not in calls
+
+    async def test_fuzzy_hits_presented_as_candidates_not_resolution(self):
+        """With no exact match, fuzzy hits are returned as clearly-marked
+        candidates, never as a confident resolution."""
+        import mcp_ontology_server as srv
+
+        async def fake_get(path, params=None):
+            if path == "/api/resolve":
+                return {"result": []}  # nothing matches exactly
+            if path == "/api/search_all":
+                return {"result": [{
+                    "class": "http://purl.obolibrary.org/obo/GO_0043066",
+                    "label": "negative regulation of apoptotic process", "ontology": "go",
+                }]}
+            return {"result": []}
+
+        with patch.object(srv, "_api_get", new=AsyncMock(side_effect=fake_get)):
+            result = await srv.mcp.call_tool("find_iri", {"term": "apoptosis", "ontology": "go"})
+        text = _text(result)
+        assert "No exact match" in text
+        assert "Resolved" not in text
+        assert "http://purl.obolibrary.org/obo/GO_0043066" in text
 
     async def test_get_ontology_info_returns_json(self):
         import mcp_ontology_server as srv

@@ -775,6 +775,40 @@ async def search_all_api(request: Request):
     return {"result": all_results}
 
 
+@app.get("/api/resolve")
+async def resolve_api(request: Request):
+    """Exact-match resolution of a term to its canonical class(es).
+
+    Unlike /api/search_all (fuzzy dis_max ranking), this returns ONLY classes
+    whose oboid, label, or an exact synonym equals `query` (case-insensitive).
+    It backs the find_iri MCP tool's grounding step.
+
+    Query params:
+        query      - term to resolve (required)
+        ontologies - comma-separated ontology IDs to restrict to (optional)
+        size       - max results (default 25, max 1000)
+    """
+    query = request.query_params.get("query")
+    if not query:
+        return JSONResponse({"error": "Missing 'query' parameter"}, status_code=400)
+
+    ontologies_str = request.query_params.get("ontologies")
+    try:
+        size = min(int(request.query_params.get("size", "25")), 1000)
+    except ValueError:
+        size = 25
+
+    if ontologies_str and ',' in ontologies_str:
+        all_results = []
+        for ont_id in (o.strip() for o in ontologies_str.split(',')):
+            all_results.extend(await es_mgr.resolve(query, ontology=ont_id, size=size))
+    else:
+        ontology = ontologies_str.split(',')[0] if ontologies_str else None
+        all_results = await es_mgr.resolve(query, ontology=ontology, size=size)
+
+    return {"result": all_results}
+
+
 @app.get("/api/queryNames")
 async def query_names_api(request: Request):
     """Search for ontology classes by label, synonym, or ID.
