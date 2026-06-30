@@ -2,6 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Compute (where experiments run)
+
+Fernando codes on his laptop but runs experiments on a remote: **workstation** = `10.74.250.168`,
+**ibex** = `glogin.ibex.kaust.edu.sa` (KAUST Slurm cluster login node), **unimatrix** = `10.72.186.139`.
+When he names one, target that host; don't run heavy jobs on the laptop. See the root `CLAUDE.md` for
+details.
+
 ## Project Overview
 
 AberOWL 2 is a distributed ontology query system for biological/biomedical ontologies. A **central server** (Elasticsearch + Redis + FastAPI) owns shared infrastructure and the registry. **Worker containers** (one Groovy/OWLAPI process per container) each host **one or many ontologies** in-memory and serve DL reasoning queries. Workers register themselves with the central server; the central server dispatches queries to the correct worker by `ontologyId`.
@@ -102,6 +109,20 @@ End-to-end MCP testing:
 ```bash
 python agents/mcp_test_client.py --ontology http://localhost:8766
 ```
+
+## Deploying (beta)
+
+Beta runs on server `onto` (cbontsr01) under docker-compose project `deploy`;
+deploy with `deploy/deploy.sh` (full procedure + rollback in `deploy/README.md`).
+
+- **ALWAYS take a backup before deploying.** A deploy must never be the only
+  copy of the running state. Before any rebuild/restart: (1) record the deployed
+  commit, and (2) snapshot the data volumes (`deploy_es_data`, `deploy_redis_data`,
+  `deploy_central_config`) to `/data/aberowl/backups/<ts>/` — see the
+  "back up the current state before deploying" section in `deploy/README.md`.
+- **Verify changes are non-breaking before deploying.** Beta is a live service:
+  prefer additive/fallback changes, run the tests, and reason through whether the
+  change can alter existing behavior — not just the new path.
 
 ## Key Technical Details
 

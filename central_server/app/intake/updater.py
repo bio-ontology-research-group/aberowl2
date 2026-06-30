@@ -351,7 +351,10 @@ async def execute_update_pipeline(
     Returns {"success": bool, "error": str|None, "new_md5": str|None}
     """
     source_url = registry_entry.get("source_url")
-    server_url = registry_entry.get("server_url")
+    # Registry entries store the worker URL under "url"; older code/paths used
+    # "server_url". Fall back so the indexing/hot-swap/alias steps (all guarded
+    # by `if server_url`) actually run instead of silently no-op'ing.
+    server_url = registry_entry.get("server_url") or registry_entry.get("url")
     secret_key = registry_entry.get("secret_key", "")
     stored_etag = registry_entry.get("source_etag")
     stored_lm = registry_entry.get("source_last_modified")
