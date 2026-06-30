@@ -365,8 +365,9 @@ async def execute_update_pipeline(
     ont_dir = Path(ontologies_base_path) / ontology_id
     ont_dir.mkdir(parents=True, exist_ok=True)
     staging_path_host = str(ont_dir / f"{ontology_id}_staging.owl")
-    # Path as seen inside each container (mounted at /data/ontologies/{id}/ → /data/)
-    staging_path_container = f"/data/{ontology_id}_staging.owl"
+    # Path as seen inside the worker: the host ontologies dir is mounted at /data
+    # (`/data/aberowl/ontologies → /data`), so the file lives under /data/{id}/.
+    staging_path_container = f"/data/{ontology_id}/{ontology_id}_staging.owl"
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
 
@@ -405,12 +406,17 @@ async def execute_update_pipeline(
 
         new_md5 = dl_result["md5"]
 
-        # MD5 fallback: if no version headers were present, check MD5 now
+        # MD5 fallback: if no version headers were present, check MD5 now.
+        # Only treat "unchanged" as nothing-to-do when an ES index already
+        # exists — otherwise (e.g. a never-indexed ontology) we must still index
+        # the existing OWL even though the file hasn't changed.
         if version_info.get("need_md5") and new_md5 == stored_md5:
-            logger.info("%s: MD5 unchanged (%s), no update needed", ontology_id, new_md5)
-            await _touch_last_checked(redis_client, ontology_id)
-            _cleanup_staging(staging_path_host)
-            return {"success": True, "error": None, "new_md5": new_md5, "changed": False}
+            if await es_mgr.get_current_index(ontology_id):
+                logger.info("%s: MD5 unchanged (%s) and ES index present, no update needed", ontology_id, new_md5)
+                await _touch_last_checked(redis_client, ontology_id)
+                _cleanup_staging(staging_path_host)
+                return {"success": True, "error": None, "new_md5": new_md5, "changed": False}
+            logger.info("%s: MD5 unchanged but no ES index — indexing existing OWL", ontology_id)
 
     # Step 3: Validate via OntologyServer (if server is online)
     if server_url:
