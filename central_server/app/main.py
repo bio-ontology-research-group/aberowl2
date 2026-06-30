@@ -57,6 +57,12 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "changeme")
 # Scheduling intervals
 SOURCE_SYNC_INTERVAL = int(os.getenv("SOURCE_SYNC_INTERVAL_SECONDS", "86400"))
 UPDATE_CHECK_INTERVAL = int(os.getenv("UPDATE_CHECK_INTERVAL_SECONDS", "86400"))
+# Automatic source-sync + update-check (which DOWNLOAD every ontology to check
+# for upstream changes) are OFF by default so a central restart never triggers a
+# corpus-wide download. Set ENABLE_AUTO_SYNC=true to run them on the daily
+# schedule; otherwise trigger them on demand via /admin/sync_sources and
+# /admin/check_updates.
+ENABLE_AUTO_SYNC = os.getenv("ENABLE_AUTO_SYNC", "false").lower() in ("1", "true", "yes")
 ONTOLOGIES_BASE_PATH = os.getenv("ONTOLOGIES_HOST_PATH", "/data/ontologies")
 ABEROWL_REPO_PATH = os.getenv("ABEROWL_REPO_PATH", "/opt/aberowl")
 
@@ -608,9 +614,18 @@ async def lifespan(app: FastAPI):
     # Start the periodic background task
     asyncio.create_task(periodic_metadata_fetch_task())
 
-    # Start intake scheduler tasks
-    asyncio.create_task(daily_source_sync_task())
-    asyncio.create_task(daily_update_check_task())
+    # Start intake scheduler tasks — ONLY when explicitly enabled, so a restart
+    # never kicks off a corpus-wide download. Otherwise these run on demand via
+    # the /admin/sync_sources and /admin/check_updates endpoints.
+    if ENABLE_AUTO_SYNC:
+        logger.info("ENABLE_AUTO_SYNC=true: starting daily source-sync + update-check tasks")
+        asyncio.create_task(daily_source_sync_task())
+        asyncio.create_task(daily_update_check_task())
+    else:
+        logger.info(
+            "ENABLE_AUTO_SYNC is off: automatic source-sync/update-check disabled. "
+            "Use POST /admin/sync_sources and /admin/check_updates to run them on demand."
+        )
 
     # Start MCP servers if enabled
     await start_mcp_servers()
@@ -2338,6 +2353,31 @@ async def admin_trigger_update(
 
     asyncio.create_task(_run())
     return {"status": "update_triggered", "ontology_id": ontology_id}
+
+
+@app.post("/admin/sync_sources")
+async def admin_sync_sources(
+    credentials: HTTPBasicCredentials = Depends(_require_admin),
+):
+    """On-demand source sync (refresh the ontology source list/metadata).
+
+    This is what `daily_source_sync_task` runs automatically only when
+    ENABLE_AUTO_SYNC=true; expose it here so it can be triggered deliberately.
+    """
+    asyncio.create_task(_sync_sources_once())
+    return {"status": "source_sync_triggered"}
+
+
+@app.post("/admin/check_updates")
+async def admin_check_updates(
+    credentials: HTTPBasicCredentials = Depends(_require_admin),
+):
+    """On-demand corpus update check (downloads each ontology to detect upstream
+    changes and re-index changed ones). Heavy — this is the whole-corpus
+    download pass, run it intentionally. Auto-runs only when ENABLE_AUTO_SYNC=true.
+    """
+    asyncio.create_task(_check_and_update_all())
+    return {"status": "update_check_triggered"}
 
 
 @app.post("/api/webhook/update/{ontology_id}")
