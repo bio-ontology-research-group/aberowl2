@@ -426,6 +426,14 @@ async def execute_update_pipeline(
     new_es_index = await es_mgr.get_next_index_name(ontology_id)
     old_es_index = await es_mgr.get_current_index(ontology_id)
 
+    # Create the index centrally so it carries the single authoritative mapping
+    # (es_manager.CLASS_INDEX_SETTINGS, incl. the synonyms.raw sub-field that
+    # /api/resolve + find_iri need). The worker's IndexElastic.groovy only
+    # creates an index when one does not already exist, so pre-creating here
+    # makes the central mapping the global source of truth and the worker just
+    # writes documents into it.
+    await es_mgr.create_class_index(new_es_index)
+
     es_ok = True
     if server_url:
         index_task_id = await trigger_indexing(
