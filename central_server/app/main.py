@@ -38,7 +38,14 @@ logger = logging.getLogger(__name__)
 SERVERS_FILE_PATH = "app/servers.json"
 CATALOGUE_CONFIG_PATH = "app/catalogue_config.json"
 MANUAL_ONTOLOGIES_PATH = "config/manual_ontologies.json"
-REGISTRY_KEY = "ontology_registry"
+# Unified registry: one Redis hash holds BOTH the worker/serving fields (url,
+# secret_key, status, class counts — written by /register) AND the source/intake
+# fields (source_url, source_md5, update_status — written by source-sync + the
+# update pipeline). Previously these lived in two hashes ("registered_servers"
+# and "ontology_registry"), so the update pipeline saw source_url but not the
+# worker url/secret_key and could never index. Now unified; _migrate_unify_registries()
+# folds the legacy ontology_registry source fields in once on startup.
+REGISTRY_KEY = "registered_servers"
 
 # Redis client instance will be managed in the lifespan context
 redis_client: redis.Redis = None
@@ -587,6 +594,44 @@ async def periodic_metadata_fetch_task():
         await _fetch_and_update_all_servers()
 
 
+async def _migrate_unify_registries() -> None:
+    """One-time fold of the legacy `ontology_registry` hash into the unified
+    `registered_servers` hash. Copies source/intake fields into the unified
+    entry only where the unified entry is missing them, so worker fields
+    (url, secret_key, status, class counts) are never clobbered. Idempotent —
+    safe to run on every startup."""
+    try:
+        legacy = await redis_client.hgetall("ontology_registry")
+    except Exception as e:
+        logger.warning("Registry unification: could not read legacy hash: %s", e)
+        return
+    if not legacy:
+        return
+    source_fields = (
+        "source", "source_url", "source_resolved_url", "source_etag",
+        "source_last_modified", "source_md5", "active_es_index",
+        "active_owl_path", "update_status", "update_error", "update_history",
+        "last_checked", "last_updated", "homepage",
+    )
+    migrated = 0
+    for oid, raw in legacy.items():
+        try:
+            src = json.loads(raw)
+        except Exception:
+            continue
+        existing_raw = await redis_client.hget(REGISTRY_KEY, oid)
+        entry = json.loads(existing_raw) if existing_raw else {"ontology": oid, "ontology_id": oid}
+        changed = False
+        for k in source_fields:
+            if k in src and not entry.get(k):
+                entry[k] = src[k]
+                changed = True
+        if changed:
+            await redis_client.hset(REGISTRY_KEY, oid, json.dumps(entry))
+            migrated += 1
+    logger.info("Registry unification: folded source fields for %d ontologies into %s", migrated, REGISTRY_KEY)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -603,6 +648,9 @@ async def lifespan(app: FastAPI):
 
     # Load servers from file before fetching metadata
     await _load_servers_from_file()
+
+    # One-time: fold the legacy ontology_registry hash into registered_servers.
+    await _migrate_unify_registries()
 
     # Load OBO Foundry titles/metadata for fallback (fast, blocking).
     await _load_obo_foundry_titles()
@@ -712,15 +760,17 @@ async def register_server(payload: RegistrationRequest):
                 logger.warning(f"Registration hijacking attempt blocked for ontology: {ontology_name}. Invalid secret key.")
                 raise HTTPException(status_code=403, detail="Invalid secret key for this ontology.")
         else:
-            # No key stored, allow registration and issue a new key
+            # No key stored, allow registration and issue a new key.
+            # Merge into the existing entry (unified registry) so we don't drop
+            # source/intake fields that may already be present.
             new_secret_key = str(uuid.uuid4())
             new_key_issued = True
-            server_data = {
+            server_data.update({
                 "ontology": ontology_name,
                 "url": server_url,
                 "status": "online",
-                "secret_key": new_secret_key
-            }
+                "secret_key": new_secret_key,
+            })
             message = f"Server for {ontology_name} registered (new key issued)."
             logger.info(f"Registered server for ontology: {ontology_name} (no previous key). New key issued.")
     else:

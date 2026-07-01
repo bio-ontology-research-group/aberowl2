@@ -534,7 +534,7 @@ async def execute_update_pipeline(
     registry_entry["update_history"] = history[-10:]
 
     await redis_client.hset(
-        "ontology_registry", ontology_id, json.dumps(registry_entry)
+        "registered_servers", ontology_id, json.dumps(registry_entry)
     )
     logger.info("Update pipeline complete for %s", ontology_id)
     return {"success": True, "error": None, "new_md5": new_md5, "changed": True}
@@ -555,7 +555,7 @@ def _cleanup_staging(staging_path: str) -> None:
 async def _update_registry_status(
     redis_client, ontology_id: str, update_status: str, error_msg: str
 ) -> None:
-    raw = await redis_client.hget("ontology_registry", ontology_id)
+    raw = await redis_client.hget("registered_servers", ontology_id)
     if raw:
         entry = json.loads(raw)
     else:
@@ -573,12 +573,12 @@ async def _update_registry_status(
         }
     )
     entry["update_history"] = history[-10:]
-    await redis_client.hset("ontology_registry", ontology_id, json.dumps(entry))
+    await redis_client.hset("registered_servers", ontology_id, json.dumps(entry))
 
 
 async def _touch_last_checked(redis_client, ontology_id: str) -> None:
-    raw = await redis_client.hget("ontology_registry", ontology_id)
+    raw = await redis_client.hget("registered_servers", ontology_id)
     if raw:
         entry = json.loads(raw)
         entry["last_checked"] = datetime.now(timezone.utc).isoformat()
-        await redis_client.hset("ontology_registry", ontology_id, json.dumps(entry))
+        await redis_client.hset("registered_servers", ontology_id, json.dumps(entry))
