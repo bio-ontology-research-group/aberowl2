@@ -30,7 +30,11 @@ services:
     volumes:
       - es_data:/usr/share/elasticsearch/data
     networks:
+      # Also on aberowl-net so the WORKERS (which run IndexElastic and write
+      # class documents directly to ES) can reach it — without this the
+      # workers cannot resolve/connect to ES and every indexing job fails.
       - aberowl-internal
+      - aberowl-net
     deploy:
       resources:
         limits:
