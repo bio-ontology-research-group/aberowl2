@@ -351,7 +351,10 @@ async def execute_reindex(
     is swapped. This is the controllable, download-free way to (re)populate an
     ES class index."""
     server_url = registry_entry.get("server_url") or registry_entry.get("url")
-    secret_key = registry_entry.get("secret_key", "")
+    # Worker mutating servlets (triggerIndexing / updateOntology) authenticate
+    # against the shared ABEROWL_SECRET_KEY env, NOT the per-ontology registry
+    # secret_key (which only guards registration). Prefer the shared secret.
+    secret_key = os.getenv("ABEROWL_SECRET_KEY") or registry_entry.get("secret_key", "")
     name = registry_entry.get("name", ontology_id)
     description = registry_entry.get("description", "")
     if not server_url:
@@ -418,7 +421,10 @@ async def execute_update_pipeline(
     # "server_url". Fall back so the indexing/hot-swap/alias steps (all guarded
     # by `if server_url`) actually run instead of silently no-op'ing.
     server_url = registry_entry.get("server_url") or registry_entry.get("url")
-    secret_key = registry_entry.get("secret_key", "")
+    # Worker mutating servlets (triggerIndexing / updateOntology) authenticate
+    # against the shared ABEROWL_SECRET_KEY env, NOT the per-ontology registry
+    # secret_key (which only guards registration). Prefer the shared secret.
+    secret_key = os.getenv("ABEROWL_SECRET_KEY") or registry_entry.get("secret_key", "")
     stored_etag = registry_entry.get("source_etag")
     stored_lm = registry_entry.get("source_last_modified")
     stored_md5 = registry_entry.get("source_md5")
