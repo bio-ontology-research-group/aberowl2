@@ -191,7 +191,7 @@ async def validate_via_server(server_url: str, owl_path_on_server: str) -> bool:
         async with aiohttp.ClientSession() as session:
             async with session.get(
                 url,
-                params={"owl_path": owl_path_on_server},
+                params={"owlPath": owl_path_on_server},
                 timeout=aiohttp.ClientTimeout(total=300),
             ) as resp:
                 if resp.status == 200:
@@ -217,12 +217,12 @@ async def trigger_hotswap(
     """
     url = f"{server_url.rstrip('/')}/api/updateOntology.groovy"
     payload = {
-        "secret_key": secret_key,
-        "ontology": ontology_id,
-        "owl_path": owl_path_on_server,
+        "secretKey": secret_key,
+        "ontologyId": ontology_id,
+        "owlPath": owl_path_on_server,
     }
     if callback_url:
-        payload["callback_url"] = callback_url
+        payload["callbackUrl"] = callback_url
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
@@ -230,9 +230,9 @@ async def trigger_hotswap(
                 json=payload,
                 timeout=aiohttp.ClientTimeout(total=30),
             ) as resp:
-                if resp.status == 202:
+                if resp.status in (200, 202):
                     data = await resp.json(content_type=None)
-                    return data.get("task_id")
+                    return data.get("taskId")
                 body = await resp.text()
                 logger.error("Hot-swap trigger failed (%s): %s", resp.status, body[:200])
                 return None
@@ -252,7 +252,7 @@ async def wait_for_hotswap(
             try:
                 async with session.get(
                     url,
-                    params={"task_id": task_id},
+                    params={"taskId": task_id},
                     timeout=aiohttp.ClientTimeout(total=15),
                 ) as resp:
                     if resp.status == 200:
@@ -295,19 +295,19 @@ async def trigger_indexing(
     Returns task_id or None.
     """
     url = f"{server_url.rstrip('/')}/api/triggerIndexing.groovy"
+    # The worker servlet reads camelCase params and gets es_url from its own env.
     payload = {
-        "secret_key": secret_key,
-        "ontology": ontology_id,
-        "owl_path": owl_path_on_server,
-        "es_url": es_url,
-        "ontology_index": ontology_index,
-        "class_index": class_index,
-        "ontology_name": ontology_name,
+        "secretKey": secret_key,
+        "ontologyId": ontology_id,
+        "owlPath": owl_path_on_server,
+        "classIndexName": class_index,
+        "ontologyIndexName": ontology_index,
+        "name": ontology_name,
         "description": description,
-        "fresh_index": "True",
+        "freshIndex": "false",
     }
     if callback_url:
-        payload["callback_url"] = callback_url
+        payload["callbackUrl"] = callback_url
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
@@ -315,9 +315,9 @@ async def trigger_indexing(
                 json=payload,
                 timeout=aiohttp.ClientTimeout(total=30),
             ) as resp:
-                if resp.status == 202:
+                if resp.status in (200, 202):
                     data = await resp.json(content_type=None)
-                    return data.get("task_id")
+                    return data.get("taskId")
                 body = await resp.text()
                 logger.error("Indexing trigger failed (%s): %s", resp.status, body[:200])
                 return None
