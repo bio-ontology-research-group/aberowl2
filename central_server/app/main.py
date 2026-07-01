@@ -2405,6 +2405,35 @@ async def admin_trigger_update(
     return {"status": "update_triggered", "ontology_id": ontology_id}
 
 
+@app.post("/admin/ontology/{ontology_id}/reindex")
+async def admin_reindex(
+    ontology_id: str,
+    credentials: HTTPBasicCredentials = Depends(_require_admin),
+):
+    """Re-index an ontology into ES from the OWL the worker already serves —
+    no download/validate/hot-swap. Populates/refreshes its class index and
+    swaps the alias."""
+    entry = await _get_registry_entry(ontology_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Ontology not in registry")
+
+    async def _run():
+        try:
+            await update_pipeline.execute_reindex(
+                ontology_id=ontology_id,
+                registry_entry=entry,
+                redis_client=redis_client,
+                es_mgr=es_mgr,
+                ontologies_base_path=ONTOLOGIES_BASE_PATH,
+                es_url=ELASTICSEARCH_URL,
+            )
+        except Exception as e:
+            logger.error("Manual reindex failed for %s: %s", ontology_id, e)
+
+    asyncio.create_task(_run())
+    return {"status": "reindex_triggered", "ontology_id": ontology_id}
+
+
 @app.post("/admin/sync_sources")
 async def admin_sync_sources(
     credentials: HTTPBasicCredentials = Depends(_require_admin),

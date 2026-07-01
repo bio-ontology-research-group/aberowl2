@@ -337,6 +337,69 @@ async def wait_for_task(
 # Full update pipeline
 # ---------------------------------------------------------------------------
 
+async def execute_reindex(
+    ontology_id: str,
+    registry_entry: Dict[str, Any],
+    redis_client,
+    es_mgr,
+    ontologies_base_path: str,
+    es_url: str,
+) -> Dict[str, Any]:
+    """Re-index an ontology into ES from the OWL the worker ALREADY serves —
+    no download, no validate, no hot-swap. Central creates the (correctly
+    mapped) index, the worker indexes its existing OWL into it, then the alias
+    is swapped. This is the controllable, download-free way to (re)populate an
+    ES class index."""
+    server_url = registry_entry.get("server_url") or registry_entry.get("url")
+    secret_key = registry_entry.get("secret_key", "")
+    name = registry_entry.get("name", ontology_id)
+    description = registry_entry.get("description", "")
+    if not server_url:
+        await _update_registry_status(redis_client, ontology_id, "reindex_failed", "no server url")
+        return {"success": False, "error": "no_server_url"}
+
+    # The ontologies dir is mounted at /data in the worker; it serves {id} from
+    # /data/{id}/{id}.owl.
+    owl_path_on_server = f"/data/{ontology_id}/{ontology_id}.owl"
+
+    new_es_index = await es_mgr.get_next_index_name(ontology_id)
+    old_es_index = await es_mgr.get_current_index(ontology_id)
+    await es_mgr.create_class_index(new_es_index)
+
+    task_id = await trigger_indexing(
+        server_url=server_url, secret_key=secret_key, ontology_id=ontology_id,
+        owl_path_on_server=owl_path_on_server, es_url=es_url,
+        ontology_index="aberowl_ontologies", class_index=new_es_index,
+        ontology_name=name, description=description,
+    )
+    if not task_id:
+        await es_mgr.delete_index(new_es_index)
+        await _update_registry_status(redis_client, ontology_id, "reindex_failed", "indexing trigger failed")
+        return {"success": False, "error": "reindex_trigger_failed"}
+
+    ok = await wait_for_task(server_url, task_id, timeout_secs=1800)
+    if not ok:
+        await es_mgr.delete_index(new_es_index)
+        await _update_registry_status(redis_client, ontology_id, "reindex_failed", "ES indexing failed")
+        return {"success": False, "error": "reindex_failed"}
+
+    alias_ok = await es_mgr.swap_alias(ontology_id, new_es_index, old_es_index)
+    if alias_ok and old_es_index:
+        await es_mgr.delete_index(old_es_index)
+
+    raw = await redis_client.hget("registered_servers", ontology_id)
+    entry = json.loads(raw) if raw else {"ontology": ontology_id, "ontology_id": ontology_id}
+    entry.update({
+        "active_es_index": new_es_index,
+        "update_status": "ok",
+        "update_error": None,
+        "last_indexed": datetime.now(timezone.utc).isoformat(),
+    })
+    await redis_client.hset("registered_servers", ontology_id, json.dumps(entry))
+    logger.info("Reindex complete for %s -> %s", ontology_id, new_es_index)
+    return {"success": True, "error": None, "es_index": new_es_index}
+
+
 async def execute_update_pipeline(
     ontology_id: str,
     registry_entry: Dict[str, Any],
