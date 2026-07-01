@@ -38,7 +38,14 @@ logger = logging.getLogger(__name__)
 SERVERS_FILE_PATH = "app/servers.json"
 CATALOGUE_CONFIG_PATH = "app/catalogue_config.json"
 MANUAL_ONTOLOGIES_PATH = "config/manual_ontologies.json"
-REGISTRY_KEY = "ontology_registry"
+# Unified registry: one Redis hash holds BOTH the worker/serving fields (url,
+# secret_key, status, class counts — written by /register) AND the source/intake
+# fields (source_url, source_md5, update_status — written by source-sync + the
+# update pipeline). Previously these lived in two hashes ("registered_servers"
+# and "ontology_registry"), so the update pipeline saw source_url but not the
+# worker url/secret_key and could never index. Now unified; _migrate_unify_registries()
+# folds the legacy ontology_registry source fields in once on startup.
+REGISTRY_KEY = "registered_servers"
 
 # Redis client instance will be managed in the lifespan context
 redis_client: redis.Redis = None
@@ -57,6 +64,12 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "changeme")
 # Scheduling intervals
 SOURCE_SYNC_INTERVAL = int(os.getenv("SOURCE_SYNC_INTERVAL_SECONDS", "86400"))
 UPDATE_CHECK_INTERVAL = int(os.getenv("UPDATE_CHECK_INTERVAL_SECONDS", "86400"))
+# Automatic source-sync + update-check (which DOWNLOAD every ontology to check
+# for upstream changes) are OFF by default so a central restart never triggers a
+# corpus-wide download. Set ENABLE_AUTO_SYNC=true to run them on the daily
+# schedule; otherwise trigger them on demand via /admin/sync_sources and
+# /admin/check_updates.
+ENABLE_AUTO_SYNC = os.getenv("ENABLE_AUTO_SYNC", "false").lower() in ("1", "true", "yes")
 ONTOLOGIES_BASE_PATH = os.getenv("ONTOLOGIES_HOST_PATH", "/data/ontologies")
 ABEROWL_REPO_PATH = os.getenv("ABEROWL_REPO_PATH", "/opt/aberowl")
 
@@ -581,6 +594,44 @@ async def periodic_metadata_fetch_task():
         await _fetch_and_update_all_servers()
 
 
+async def _migrate_unify_registries() -> None:
+    """One-time fold of the legacy `ontology_registry` hash into the unified
+    `registered_servers` hash. Copies source/intake fields into the unified
+    entry only where the unified entry is missing them, so worker fields
+    (url, secret_key, status, class counts) are never clobbered. Idempotent —
+    safe to run on every startup."""
+    try:
+        legacy = await redis_client.hgetall("ontology_registry")
+    except Exception as e:
+        logger.warning("Registry unification: could not read legacy hash: %s", e)
+        return
+    if not legacy:
+        return
+    source_fields = (
+        "source", "source_url", "source_resolved_url", "source_etag",
+        "source_last_modified", "source_md5", "active_es_index",
+        "active_owl_path", "update_status", "update_error", "update_history",
+        "last_checked", "last_updated", "homepage",
+    )
+    migrated = 0
+    for oid, raw in legacy.items():
+        try:
+            src = json.loads(raw)
+        except Exception:
+            continue
+        existing_raw = await redis_client.hget(REGISTRY_KEY, oid)
+        entry = json.loads(existing_raw) if existing_raw else {"ontology": oid, "ontology_id": oid}
+        changed = False
+        for k in source_fields:
+            if k in src and not entry.get(k):
+                entry[k] = src[k]
+                changed = True
+        if changed:
+            await redis_client.hset(REGISTRY_KEY, oid, json.dumps(entry))
+            migrated += 1
+    logger.info("Registry unification: folded source fields for %d ontologies into %s", migrated, REGISTRY_KEY)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -598,6 +649,9 @@ async def lifespan(app: FastAPI):
     # Load servers from file before fetching metadata
     await _load_servers_from_file()
 
+    # One-time: fold the legacy ontology_registry hash into registered_servers.
+    await _migrate_unify_registries()
+
     # Load OBO Foundry titles/metadata for fallback (fast, blocking).
     await _load_obo_foundry_titles()
     # Backfill remaining ids from BioPortal in the background (slower, optional).
@@ -608,9 +662,18 @@ async def lifespan(app: FastAPI):
     # Start the periodic background task
     asyncio.create_task(periodic_metadata_fetch_task())
 
-    # Start intake scheduler tasks
-    asyncio.create_task(daily_source_sync_task())
-    asyncio.create_task(daily_update_check_task())
+    # Start intake scheduler tasks — ONLY when explicitly enabled, so a restart
+    # never kicks off a corpus-wide download. Otherwise these run on demand via
+    # the /admin/sync_sources and /admin/check_updates endpoints.
+    if ENABLE_AUTO_SYNC:
+        logger.info("ENABLE_AUTO_SYNC=true: starting daily source-sync + update-check tasks")
+        asyncio.create_task(daily_source_sync_task())
+        asyncio.create_task(daily_update_check_task())
+    else:
+        logger.info(
+            "ENABLE_AUTO_SYNC is off: automatic source-sync/update-check disabled. "
+            "Use POST /admin/sync_sources and /admin/check_updates to run them on demand."
+        )
 
     # Start MCP servers if enabled
     await start_mcp_servers()
@@ -697,15 +760,17 @@ async def register_server(payload: RegistrationRequest):
                 logger.warning(f"Registration hijacking attempt blocked for ontology: {ontology_name}. Invalid secret key.")
                 raise HTTPException(status_code=403, detail="Invalid secret key for this ontology.")
         else:
-            # No key stored, allow registration and issue a new key
+            # No key stored, allow registration and issue a new key.
+            # Merge into the existing entry (unified registry) so we don't drop
+            # source/intake fields that may already be present.
             new_secret_key = str(uuid.uuid4())
             new_key_issued = True
-            server_data = {
+            server_data.update({
                 "ontology": ontology_name,
                 "url": server_url,
                 "status": "online",
-                "secret_key": new_secret_key
-            }
+                "secret_key": new_secret_key,
+            })
             message = f"Server for {ontology_name} registered (new key issued)."
             logger.info(f"Registered server for ontology: {ontology_name} (no previous key). New key issued.")
     else:
@@ -2338,6 +2403,60 @@ async def admin_trigger_update(
 
     asyncio.create_task(_run())
     return {"status": "update_triggered", "ontology_id": ontology_id}
+
+
+@app.post("/admin/ontology/{ontology_id}/reindex")
+async def admin_reindex(
+    ontology_id: str,
+    credentials: HTTPBasicCredentials = Depends(_require_admin),
+):
+    """Re-index an ontology into ES from the OWL the worker already serves —
+    no download/validate/hot-swap. Populates/refreshes its class index and
+    swaps the alias."""
+    entry = await _get_registry_entry(ontology_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Ontology not in registry")
+
+    async def _run():
+        try:
+            await update_pipeline.execute_reindex(
+                ontology_id=ontology_id,
+                registry_entry=entry,
+                redis_client=redis_client,
+                es_mgr=es_mgr,
+                ontologies_base_path=ONTOLOGIES_BASE_PATH,
+                es_url=ELASTICSEARCH_URL,
+            )
+        except Exception as e:
+            logger.error("Manual reindex failed for %s: %s", ontology_id, e)
+
+    asyncio.create_task(_run())
+    return {"status": "reindex_triggered", "ontology_id": ontology_id}
+
+
+@app.post("/admin/sync_sources")
+async def admin_sync_sources(
+    credentials: HTTPBasicCredentials = Depends(_require_admin),
+):
+    """On-demand source sync (refresh the ontology source list/metadata).
+
+    This is what `daily_source_sync_task` runs automatically only when
+    ENABLE_AUTO_SYNC=true; expose it here so it can be triggered deliberately.
+    """
+    asyncio.create_task(_sync_sources_once())
+    return {"status": "source_sync_triggered"}
+
+
+@app.post("/admin/check_updates")
+async def admin_check_updates(
+    credentials: HTTPBasicCredentials = Depends(_require_admin),
+):
+    """On-demand corpus update check (downloads each ontology to detect upstream
+    changes and re-index changed ones). Heavy — this is the whole-corpus
+    download pass, run it intentionally. Auto-runs only when ENABLE_AUTO_SYNC=true.
+    """
+    asyncio.create_task(_check_and_update_all())
+    return {"status": "update_check_triggered"}
 
 
 @app.post("/api/webhook/update/{ontology_id}")

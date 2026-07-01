@@ -30,7 +30,11 @@ services:
     volumes:
       - es_data:/usr/share/elasticsearch/data
     networks:
+      # Also on aberowl-net so the WORKERS (which run IndexElastic and write
+      # class documents directly to ES) can reach it — without this the
+      # workers cannot resolve/connect to ES and every indexing job fails.
       - aberowl-internal
+      - aberowl-net
     deploy:
       resources:
         limits:
@@ -45,6 +49,9 @@ services:
       - CENTRAL_ES_URL=http://elasticsearch:9200
       - ADMIN_USER=${ADMIN_USER:-admin}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      # Shared secret used to authenticate central -> worker mutating calls
+      # (triggerIndexing / updateOntology). Must equal the workers' ABEROWL_SECRET_KEY.
+      - ABEROWL_SECRET_KEY=${ABEROWL_SECRET_KEY}
       - ONTOLOGIES_HOST_PATH=${ONTOLOGIES_PATH:-/data/aberowl/ontologies}
       - ABEROWL_REPO_PATH=/app
       - ENABLE_MCP=${ENABLE_MCP:-true}

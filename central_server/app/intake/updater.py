@@ -191,7 +191,7 @@ async def validate_via_server(server_url: str, owl_path_on_server: str) -> bool:
         async with aiohttp.ClientSession() as session:
             async with session.get(
                 url,
-                params={"owl_path": owl_path_on_server},
+                params={"owlPath": owl_path_on_server},
                 timeout=aiohttp.ClientTimeout(total=300),
             ) as resp:
                 if resp.status == 200:
@@ -217,12 +217,12 @@ async def trigger_hotswap(
     """
     url = f"{server_url.rstrip('/')}/api/updateOntology.groovy"
     payload = {
-        "secret_key": secret_key,
-        "ontology": ontology_id,
-        "owl_path": owl_path_on_server,
+        "secretKey": secret_key,
+        "ontologyId": ontology_id,
+        "owlPath": owl_path_on_server,
     }
     if callback_url:
-        payload["callback_url"] = callback_url
+        payload["callbackUrl"] = callback_url
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
@@ -230,9 +230,9 @@ async def trigger_hotswap(
                 json=payload,
                 timeout=aiohttp.ClientTimeout(total=30),
             ) as resp:
-                if resp.status == 202:
+                if resp.status in (200, 202):
                     data = await resp.json(content_type=None)
-                    return data.get("task_id")
+                    return data.get("taskId")
                 body = await resp.text()
                 logger.error("Hot-swap trigger failed (%s): %s", resp.status, body[:200])
                 return None
@@ -252,7 +252,7 @@ async def wait_for_hotswap(
             try:
                 async with session.get(
                     url,
-                    params={"task_id": task_id},
+                    params={"taskId": task_id},
                     timeout=aiohttp.ClientTimeout(total=15),
                 ) as resp:
                     if resp.status == 200:
@@ -295,19 +295,19 @@ async def trigger_indexing(
     Returns task_id or None.
     """
     url = f"{server_url.rstrip('/')}/api/triggerIndexing.groovy"
+    # The worker servlet reads camelCase params and gets es_url from its own env.
     payload = {
-        "secret_key": secret_key,
-        "ontology": ontology_id,
-        "owl_path": owl_path_on_server,
-        "es_url": es_url,
-        "ontology_index": ontology_index,
-        "class_index": class_index,
-        "ontology_name": ontology_name,
+        "secretKey": secret_key,
+        "ontologyId": ontology_id,
+        "owlPath": owl_path_on_server,
+        "classIndexName": class_index,
+        "ontologyIndexName": ontology_index,
+        "name": ontology_name,
         "description": description,
-        "fresh_index": "True",
+        "freshIndex": "false",
     }
     if callback_url:
-        payload["callback_url"] = callback_url
+        payload["callbackUrl"] = callback_url
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
@@ -315,9 +315,9 @@ async def trigger_indexing(
                 json=payload,
                 timeout=aiohttp.ClientTimeout(total=30),
             ) as resp:
-                if resp.status == 202:
+                if resp.status in (200, 202):
                     data = await resp.json(content_type=None)
-                    return data.get("task_id")
+                    return data.get("taskId")
                 body = await resp.text()
                 logger.error("Indexing trigger failed (%s): %s", resp.status, body[:200])
                 return None
@@ -337,6 +337,72 @@ async def wait_for_task(
 # Full update pipeline
 # ---------------------------------------------------------------------------
 
+async def execute_reindex(
+    ontology_id: str,
+    registry_entry: Dict[str, Any],
+    redis_client,
+    es_mgr,
+    ontologies_base_path: str,
+    es_url: str,
+) -> Dict[str, Any]:
+    """Re-index an ontology into ES from the OWL the worker ALREADY serves —
+    no download, no validate, no hot-swap. Central creates the (correctly
+    mapped) index, the worker indexes its existing OWL into it, then the alias
+    is swapped. This is the controllable, download-free way to (re)populate an
+    ES class index."""
+    server_url = registry_entry.get("server_url") or registry_entry.get("url")
+    # Worker mutating servlets (triggerIndexing / updateOntology) authenticate
+    # against the shared ABEROWL_SECRET_KEY env, NOT the per-ontology registry
+    # secret_key (which only guards registration). Prefer the shared secret.
+    secret_key = os.getenv("ABEROWL_SECRET_KEY") or registry_entry.get("secret_key", "")
+    name = registry_entry.get("name", ontology_id)
+    description = registry_entry.get("description", "")
+    if not server_url:
+        await _update_registry_status(redis_client, ontology_id, "reindex_failed", "no server url")
+        return {"success": False, "error": "no_server_url"}
+
+    # The ontologies dir is mounted at /data in the worker; it serves {id} from
+    # /data/{id}/{id}.owl.
+    owl_path_on_server = f"/data/{ontology_id}/{ontology_id}.owl"
+
+    new_es_index = await es_mgr.get_next_index_name(ontology_id)
+    old_es_index = await es_mgr.get_current_index(ontology_id)
+    await es_mgr.create_class_index(new_es_index)
+
+    task_id = await trigger_indexing(
+        server_url=server_url, secret_key=secret_key, ontology_id=ontology_id,
+        owl_path_on_server=owl_path_on_server, es_url=es_url,
+        ontology_index="aberowl_ontologies", class_index=new_es_index,
+        ontology_name=name, description=description,
+    )
+    if not task_id:
+        await es_mgr.delete_index(new_es_index)
+        await _update_registry_status(redis_client, ontology_id, "reindex_failed", "indexing trigger failed")
+        return {"success": False, "error": "reindex_trigger_failed"}
+
+    ok = await wait_for_task(server_url, task_id, timeout_secs=1800)
+    if not ok:
+        await es_mgr.delete_index(new_es_index)
+        await _update_registry_status(redis_client, ontology_id, "reindex_failed", "ES indexing failed")
+        return {"success": False, "error": "reindex_failed"}
+
+    alias_ok = await es_mgr.swap_alias(ontology_id, new_es_index, old_es_index)
+    if alias_ok and old_es_index:
+        await es_mgr.delete_index(old_es_index)
+
+    raw = await redis_client.hget("registered_servers", ontology_id)
+    entry = json.loads(raw) if raw else {"ontology": ontology_id, "ontology_id": ontology_id}
+    entry.update({
+        "active_es_index": new_es_index,
+        "update_status": "ok",
+        "update_error": None,
+        "last_indexed": datetime.now(timezone.utc).isoformat(),
+    })
+    await redis_client.hset("registered_servers", ontology_id, json.dumps(entry))
+    logger.info("Reindex complete for %s -> %s", ontology_id, new_es_index)
+    return {"success": True, "error": None, "es_index": new_es_index}
+
+
 async def execute_update_pipeline(
     ontology_id: str,
     registry_entry: Dict[str, Any],
@@ -351,8 +417,14 @@ async def execute_update_pipeline(
     Returns {"success": bool, "error": str|None, "new_md5": str|None}
     """
     source_url = registry_entry.get("source_url")
-    server_url = registry_entry.get("server_url")
-    secret_key = registry_entry.get("secret_key", "")
+    # Registry entries store the worker URL under "url"; older code/paths used
+    # "server_url". Fall back so the indexing/hot-swap/alias steps (all guarded
+    # by `if server_url`) actually run instead of silently no-op'ing.
+    server_url = registry_entry.get("server_url") or registry_entry.get("url")
+    # Worker mutating servlets (triggerIndexing / updateOntology) authenticate
+    # against the shared ABEROWL_SECRET_KEY env, NOT the per-ontology registry
+    # secret_key (which only guards registration). Prefer the shared secret.
+    secret_key = os.getenv("ABEROWL_SECRET_KEY") or registry_entry.get("secret_key", "")
     stored_etag = registry_entry.get("source_etag")
     stored_lm = registry_entry.get("source_last_modified")
     stored_md5 = registry_entry.get("source_md5")
@@ -365,8 +437,9 @@ async def execute_update_pipeline(
     ont_dir = Path(ontologies_base_path) / ontology_id
     ont_dir.mkdir(parents=True, exist_ok=True)
     staging_path_host = str(ont_dir / f"{ontology_id}_staging.owl")
-    # Path as seen inside each container (mounted at /data/ontologies/{id}/ → /data/)
-    staging_path_container = f"/data/{ontology_id}_staging.owl"
+    # Path as seen inside the worker: the host ontologies dir is mounted at /data
+    # (`/data/aberowl/ontologies → /data`), so the file lives under /data/{id}/.
+    staging_path_container = f"/data/{ontology_id}/{ontology_id}_staging.owl"
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
 
@@ -405,12 +478,17 @@ async def execute_update_pipeline(
 
         new_md5 = dl_result["md5"]
 
-        # MD5 fallback: if no version headers were present, check MD5 now
+        # MD5 fallback: if no version headers were present, check MD5 now.
+        # Only treat "unchanged" as nothing-to-do when an ES index already
+        # exists — otherwise (e.g. a never-indexed ontology) we must still index
+        # the existing OWL even though the file hasn't changed.
         if version_info.get("need_md5") and new_md5 == stored_md5:
-            logger.info("%s: MD5 unchanged (%s), no update needed", ontology_id, new_md5)
-            await _touch_last_checked(redis_client, ontology_id)
-            _cleanup_staging(staging_path_host)
-            return {"success": True, "error": None, "new_md5": new_md5, "changed": False}
+            if await es_mgr.get_current_index(ontology_id):
+                logger.info("%s: MD5 unchanged (%s) and ES index present, no update needed", ontology_id, new_md5)
+                await _touch_last_checked(redis_client, ontology_id)
+                _cleanup_staging(staging_path_host)
+                return {"success": True, "error": None, "new_md5": new_md5, "changed": False}
+            logger.info("%s: MD5 unchanged but no ES index — indexing existing OWL", ontology_id)
 
     # Step 3: Validate via OntologyServer (if server is online)
     if server_url:
@@ -425,6 +503,14 @@ async def execute_update_pipeline(
     # Step 4: ES staging index
     new_es_index = await es_mgr.get_next_index_name(ontology_id)
     old_es_index = await es_mgr.get_current_index(ontology_id)
+
+    # Create the index centrally so it carries the single authoritative mapping
+    # (es_manager.CLASS_INDEX_SETTINGS, incl. the synonyms.raw sub-field that
+    # /api/resolve + find_iri need). The worker's IndexElastic.groovy only
+    # creates an index when one does not already exist, so pre-creating here
+    # makes the central mapping the global source of truth and the worker just
+    # writes documents into it.
+    await es_mgr.create_class_index(new_es_index)
 
     es_ok = True
     if server_url:
@@ -517,7 +603,7 @@ async def execute_update_pipeline(
     registry_entry["update_history"] = history[-10:]
 
     await redis_client.hset(
-        "ontology_registry", ontology_id, json.dumps(registry_entry)
+        "registered_servers", ontology_id, json.dumps(registry_entry)
     )
     logger.info("Update pipeline complete for %s", ontology_id)
     return {"success": True, "error": None, "new_md5": new_md5, "changed": True}
@@ -538,7 +624,7 @@ def _cleanup_staging(staging_path: str) -> None:
 async def _update_registry_status(
     redis_client, ontology_id: str, update_status: str, error_msg: str
 ) -> None:
-    raw = await redis_client.hget("ontology_registry", ontology_id)
+    raw = await redis_client.hget("registered_servers", ontology_id)
     if raw:
         entry = json.loads(raw)
     else:
@@ -556,12 +642,12 @@ async def _update_registry_status(
         }
     )
     entry["update_history"] = history[-10:]
-    await redis_client.hset("ontology_registry", ontology_id, json.dumps(entry))
+    await redis_client.hset("registered_servers", ontology_id, json.dumps(entry))
 
 
 async def _touch_last_checked(redis_client, ontology_id: str) -> None:
-    raw = await redis_client.hget("ontology_registry", ontology_id)
+    raw = await redis_client.hget("registered_servers", ontology_id)
     if raw:
         entry = json.loads(raw)
         entry["last_checked"] = datetime.now(timezone.utc).isoformat()
-        await redis_client.hset("ontology_registry", ontology_id, json.dumps(entry))
+        await redis_client.hset("registered_servers", ontology_id, json.dumps(entry))

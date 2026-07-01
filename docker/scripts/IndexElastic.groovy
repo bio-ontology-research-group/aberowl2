@@ -175,7 +175,10 @@ def initIndex() {
 			"oboid": [
 			"type": "keyword", "normalizer": "aberowl_normalizer"],
 			"owlClass": ["type": "keyword"],
-			"synonyms": ["type": "text"],
+			// `.raw` keyword sub-field (lowercased) enables exact synonym
+			// matching for /api/resolve + the find_iri MCP tool; keep in sync
+			// with central_server/app/es_manager.py CLASS_INDEX_SETTINGS.
+			"synonyms": ["type": "text", "fields": ["raw": ["type": "keyword", "normalizer": "aberowl_normalizer"]]],
 		]
 		]
 	]
