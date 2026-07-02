@@ -64,6 +64,12 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "changeme")
 # Scheduling intervals
 SOURCE_SYNC_INTERVAL = int(os.getenv("SOURCE_SYNC_INTERVAL_SECONDS", "86400"))
 UPDATE_CHECK_INTERVAL = int(os.getenv("UPDATE_CHECK_INTERVAL_SECONDS", "86400"))
+# Periodic per-server metadata refresh (class counts, status). Every 60s over
+# hundreds of servers with unbounded concurrency exhausted the connection pool
+# and spiked worker load (degraded browsing); metadata barely changes, so poll
+# less often and cap in-flight requests.
+METADATA_FETCH_INTERVAL = int(os.getenv("METADATA_FETCH_INTERVAL_SECONDS", "600"))
+METADATA_FETCH_CONCURRENCY = int(os.getenv("METADATA_FETCH_CONCURRENCY", "8"))
 # Automatic source-sync + update-check (which DOWNLOAD every ontology to check
 # for upstream changes) are OFF by default so a central restart never triggers a
 # corpus-wide download. Set ENABLE_AUTO_SYNC=true to run them on the daily
@@ -571,13 +577,23 @@ async def _fetch_and_update_all_servers():
         logger.info("No registered servers to fetch metadata for.")
         return
 
+    sem = asyncio.Semaphore(METADATA_FETCH_CONCURRENCY)
+
+    async def _fetch_one(server):
+        async with sem:
+            await fetch_and_update_server_metadata(server)
+
     tasks = []
     for key in server_keys:
         server_json = await redis_client.hget("registered_servers", key)
-        if server_json:
-            server = json.loads(server_json)
-            tasks.append(fetch_and_update_server_metadata(server))
-    
+        if not server_json:
+            continue
+        server = json.loads(server_json)
+        # Nothing to fetch from an entry without a worker URL.
+        if not server.get("url"):
+            continue
+        tasks.append(_fetch_one(server))
+
     if tasks:
         await asyncio.gather(*tasks)
     # Persist the registry to the backup file ONCE per cycle, not once per
@@ -590,7 +606,7 @@ async def _fetch_and_update_all_servers():
 async def periodic_metadata_fetch_task():
     """Periodically fetches metadata for all registered servers."""
     while True:
-        await asyncio.sleep(60)
+        await asyncio.sleep(METADATA_FETCH_INTERVAL)
         await _fetch_and_update_all_servers()
 
 
