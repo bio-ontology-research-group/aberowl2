@@ -1,0 +1,173 @@
+{"term": "apoptosis", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0006915", "difficulty": "L1_easy", "note": "curated famous"}
+{"term": "glucose", "ontology": "chebi", "gold_iri": "http://purl.obolibrary.org/obo/CHEBI_17234", "difficulty": "L1_easy", "note": "curated famous"}
+{"term": "neuron", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0000540", "difficulty": "L1_easy", "note": "curated famous"}
+{"term": "brain", "ontology": "uberon", "gold_iri": "http://purl.obolibrary.org/obo/UBERON_0000955", "difficulty": "L1_easy", "note": "curated famous"}
+{"term": "seizure", "ontology": "hp", "gold_iri": "http://purl.obolibrary.org/obo/HP_0001250", "difficulty": "L1_easy", "note": "curated famous"}
+{"term": "diabetes mellitus", "ontology": "mondo", "gold_iri": "http://purl.obolibrary.org/obo/MONDO_0005015", "difficulty": "L1_easy", "note": "curated famous"}
+{"term": "membrane", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0016020", "difficulty": "L1_easy", "note": "curated famous"}
+{"term": "water", "ontology": "chebi", "gold_iri": "http://purl.obolibrary.org/obo/CHEBI_15377", "difficulty": "L1_easy", "note": "curated famous"}
+{"term": "cell surface", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0009986", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "cell associated", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0009986", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "obsolete cell-cell signaling involved in cell-cell junction organization", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_1901350", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "cell-cell signaling involved in cell-cell junction assembly and maintenance", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_1901350", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "cell fusion", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0140253", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "negative regulation of compound eye retinal cell programmed cell death", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0046673", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "negative regulation of retinal cell programmed cell death", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0046673", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "positive regulation of calcium-independent cell-cell adhesion", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0051041", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "upregulation of calcium-independent cell-cell adhesion", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0051041", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "cell-cell signaling involved in cell fate commitment", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0045168", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "cell-cell signalling involved in cell fate specification", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0045168", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "Gram-negative-bacterium-type cell wall biogenesis", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0043164", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "Wnt signalling inhibitor", "ontology": "chebi", "gold_iri": "http://purl.obolibrary.org/obo/CHEBI_78031", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "Wnt signalling activator", "ontology": "chebi", "gold_iri": "http://purl.obolibrary.org/obo/CHEBI_131492", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "osmolyte", "ontology": "chebi", "gold_iri": "http://purl.obolibrary.org/obo/CHEBI_25728", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "delanzomib", "ontology": "chebi", "gold_iri": "http://purl.obolibrary.org/obo/CHEBI_141530", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "autophagy inhibitor", "ontology": "chebi", "gold_iri": "http://purl.obolibrary.org/obo/CHEBI_88230", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "Abemaciclib", "ontology": "chebi", "gold_iri": "http://purl.obolibrary.org/obo/CHEBI_233362", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "3,8-diamino-5-ethyl-6-phenylphenanthridinium", "ontology": "chebi", "gold_iri": "http://purl.obolibrary.org/obo/CHEBI_42478", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "(9Z)-2-hydroxyoctadec-9-enoic acid", "ontology": "chebi", "gold_iri": "http://purl.obolibrary.org/obo/CHEBI_143096", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "N,N,N',N'-tetramethylacridine-3,6-diamine hydrochloride", "ontology": "chebi", "gold_iri": "http://purl.obolibrary.org/obo/CHEBI_51739", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "Mast cell degranulating peptide (Vespa affinis)", "ontology": "chebi", "gold_iri": "http://purl.obolibrary.org/obo/CHEBI_78507", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "Energy dependent regulation of mTOR by LKB1-AMPK", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0051726", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "modulation of cell cycle progression", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0051726", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "multiciliated epithelial cell", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0005012", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "multi-ciliated epithelial cell", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0005012", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "type B pancreatic cell", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0000169", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "B-cell of pancreatic islet", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0000169", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "positive regulation of cellular component organization", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0051130", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "stimulation of cell organization", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0051130", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "mononuclear leukocyte", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0000842", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "peripheral blood mononuclear cell", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0000842", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "ameboidal-type cell migration", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0001667", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "amoeboidal cell migration", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0001667", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "leukocyte mediated cytotoxicity", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0001909", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "leucocyte mediated cytotoxicity", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0001909", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "pancreatic D cell on CELLxGENE CellGuide", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0000173", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "D-cell of pancreatic islet", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0000173", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "multi fate stem cell", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0000048", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "multifate stem cell", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0000048", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "cell-cell signaling", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0007267", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "cell-cell signalling", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0007267", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "cell-cell adhesion mediator activity", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0098632", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "cell-cell adhesion molecule", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0098632", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "T cell mediated cytotoxicity", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0001913", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "T cell mediated cell death", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0001913", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "hepatic stellate cell", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0000632", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "Ito cell", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0000632", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "cell-cell signaling", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0007267", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "cell-cell signalling", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0007267", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "mature natural killer cell", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0000824", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "mature NK cell", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0000824", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "obsolete mortal cell line cell", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0007015", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "finite cell line cell", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0007015", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "negative regulation of cell-cell adhesion", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0022408", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "downregulation of cell-cell adhesion", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0022408", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "paraxial cell", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0011007", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "paraxial mesoderm cell", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0011007", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "T-cell and NK-cell neoplasm", "ontology": "mondo", "gold_iri": "http://purl.obolibrary.org/obo/MONDO_0024615", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "T-cell neoplasm", "ontology": "mondo", "gold_iri": "http://purl.obolibrary.org/obo/MONDO_0024615", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "hereditary clear cell renal cell carcinoma", "ontology": "mondo", "gold_iri": "http://purl.obolibrary.org/obo/MONDO_0018492", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "hereditary conventional (clear cell) renal cell carcinoma", "ontology": "mondo", "gold_iri": "http://purl.obolibrary.org/obo/MONDO_0018492", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "Leydig cell tumor", "ontology": "mondo", "gold_iri": "http://purl.obolibrary.org/obo/MONDO_0006266", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "interstitial cell tumour", "ontology": "mondo", "gold_iri": "http://purl.obolibrary.org/obo/MONDO_0006266", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "spindle cell neoplasm", "ontology": "mondo", "gold_iri": "http://purl.obolibrary.org/obo/MONDO_0020664", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "spindle cell tumor", "ontology": "mondo", "gold_iri": "http://purl.obolibrary.org/obo/MONDO_0020664", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "clear cell squamous cell skin carcinoma", "ontology": "mondo", "gold_iri": "http://purl.obolibrary.org/obo/MONDO_0004523", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "clear cell squamous cell carcinoma of the skin", "ontology": "mondo", "gold_iri": "http://purl.obolibrary.org/obo/MONDO_0004523", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "mediastinal germ cell tumor", "ontology": "mondo", "gold_iri": "http://purl.obolibrary.org/obo/MONDO_0021067", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "germ cell neoplasm of the mediastinum", "ontology": "mondo", "gold_iri": "http://purl.obolibrary.org/obo/MONDO_0021067", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "mononuclear leukocyte", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0000842", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "peripheral blood mononuclear cell", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0000842", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "Schwann cell precursor", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0002375", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "Schwann cell precursor cell", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0002375", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "cell fusion", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0140253", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "negative regulation of compound eye retinal cell programmed cell death", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0046673", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "negative regulation of retinal cell programmed cell death", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0046673", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "nodal myocyte", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0002072", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "pacemaker cell", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0002072", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "positive regulation of cell activation", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0050867", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "up regulation of cell activation", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0050867", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "cell motility", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0048870", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "V_heptamer", "ontology": "so", "gold_iri": "http://purl.obolibrary.org/obo/SO_0000533", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "V heptamer", "ontology": "so", "gold_iri": "http://purl.obolibrary.org/obo/SO_0000533", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "nuclear_sequence", "ontology": "so", "gold_iri": "http://purl.obolibrary.org/obo/SO_0000738", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "nuclear sequence", "ontology": "so", "gold_iri": "http://purl.obolibrary.org/obo/SO_0000738", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "V_D_DJ_cluster", "ontology": "so", "gold_iri": "http://purl.obolibrary.org/obo/SO_0000528", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "V-D-(DJ)-CLUSTER", "ontology": "so", "gold_iri": "http://purl.obolibrary.org/obo/SO_0000528", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "D_J_cluster", "ontology": "so", "gold_iri": "http://purl.obolibrary.org/obo/SO_0000560", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "D-J-CLUSTER", "ontology": "so", "gold_iri": "http://purl.obolibrary.org/obo/SO_0000560", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "TR_J_Gene", "ontology": "so", "gold_iri": "http://purl.obolibrary.org/obo/SO_0002136", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "T_cell_receptor_J_gene", "ontology": "so", "gold_iri": "http://purl.obolibrary.org/obo/SO_0002136", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "sequence_rearrangement_feature", "ontology": "so", "gold_iri": "http://purl.obolibrary.org/obo/SO_0000669", "difficulty": "L2_medium", "note": "primary label"}
+{"term": "sequence rearrangement feature", "ontology": "so", "gold_iri": "http://purl.obolibrary.org/obo/SO_0000669", "difficulty": "L3_hard", "note": "exact synonym"}
+{"term": "necrotic lesion", "ontology": "symp", "gold_iri": "http://purl.obolibrary.org/obo/SYMP_0019178", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "nephritis", "ontology": "symp", "gold_iri": "http://purl.obolibrary.org/obo/SYMP_0000098", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "bleeding", "ontology": "symp", "gold_iri": "http://purl.obolibrary.org/obo/SYMP_0000007", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "chronic enteritis", "ontology": "symp", "gold_iri": "http://purl.obolibrary.org/obo/SYMP_0000822", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "scrotal abscess", "ontology": "symp", "gold_iri": "http://purl.obolibrary.org/obo/SYMP_0000374", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "acute mental dysfunction", "ontology": "symp", "gold_iri": "http://purl.obolibrary.org/obo/SYMP_0000678", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "proteinuria", "ontology": "symp", "gold_iri": "http://purl.obolibrary.org/obo/SYMP_0000367", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "cell lysis", "ontology": "obi", "gold_iri": "http://purl.obolibrary.org/obo/OBI_0302894", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "assay measuring epitope specific granzyme A release by T cells", "ontology": "obi", "gold_iri": "http://purl.obolibrary.org/obo/OBI_0001809", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "fluorescence imaging-based cell proliferation assay", "ontology": "obi", "gold_iri": "http://purl.obolibrary.org/obo/OBI_0002947", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "cultured PBMC cell population", "ontology": "obi", "gold_iri": "http://purl.obolibrary.org/obo/OBI_1110044", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "assay measuring epitope specific proliferation of T cells", "ontology": "obi", "gold_iri": "http://purl.obolibrary.org/obo/OBI_1110131", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "cultured CD4-/CD8- T cell population", "ontology": "obi", "gold_iri": "http://purl.obolibrary.org/obo/OBI_1110052", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "cultured immune cell population", "ontology": "obi", "gold_iri": "http://purl.obolibrary.org/obo/OBI_0001875", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "process profile", "ontology": "bfo", "gold_iri": "http://purl.obolibrary.org/obo/BFO_0000144", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "process boundary", "ontology": "bfo", "gold_iri": "http://purl.obolibrary.org/obo/BFO_0000035", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "process", "ontology": "bfo", "gold_iri": "http://purl.obolibrary.org/obo/BFO_0000015", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "process", "ontology": "bfo", "gold_iri": "http://purl.obolibrary.org/obo/BFO_0000015", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "data transformation", "ontology": "obi", "gold_iri": "http://purl.obolibrary.org/obo/OBI_0200000", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "investigation", "ontology": "obi", "gold_iri": "http://purl.obolibrary.org/obo/OBI_0000066", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "publication", "ontology": "iao", "gold_iri": "http://purl.obolibrary.org/obo/IAO_0000311", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "process boundary", "ontology": "bfo", "gold_iri": "http://purl.obolibrary.org/obo/BFO_0000035", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "study design execution", "ontology": "obi", "gold_iri": "http://purl.obolibrary.org/obo/OBI_0000471", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "binary executable", "ontology": "iao", "gold_iri": "http://purl.obolibrary.org/obo/IAO_0000093", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "realizable entity", "ontology": "bfo", "gold_iri": "http://purl.obolibrary.org/obo/BFO_0000017", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "neuron", "ontology": "cl", "gold_iri": "http://purl.obolibrary.org/obo/CL_0000540", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "biological_process", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0008150", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "process", "ontology": "bfo", "gold_iri": "http://purl.obolibrary.org/obo/BFO_0000015", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "obsolete exposure event or process", "ontology": "ro", "gold_iri": "http://purl.obolibrary.org/obo/RO_0002310", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "assay", "ontology": "obi", "gold_iri": "http://purl.obolibrary.org/obo/OBI_0000070", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "Autoubiquitination of phospho-COP1(Ser-387 )", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0004842", "difficulty": "L4_adversarial", "note": "obscure ontology"}
+{"term": "intracellular protein localizationosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "positive regulation of antimicrobial peptide biosynthetic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "positive regulation of protein monoubiquitinationosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "positive regulation of cellular processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "positive regulation of protein metabolic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "cell leading edge cell cortexosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "oxalate metabolic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "obsolete positive regulation of elastin biosynthetic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "negative regulation of calcium-independent cell-cell adhesionosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "positive regulation of mitotic cytokinetic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "mitochondrial translationosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "negative regulation of developmental processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "obsolete protein import into nucleus, dockingosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "negative regulation of glucocorticoid biosynthetic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "obsolete protein import into nucleus, translocationosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "obsolete negative regulation of olefin metabolic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "Gram-negative-bacterium-type cell wall biogenesisosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "negative regulation of protein localization to adherens junctionosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "regulation of G protein-coupled receptor signaling pathwayosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "negative regulation of hormone biosynthetic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "protein insertion into membraneosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "negative regulation of immune system processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "protein homotetramerizationosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "positive regulation of biological processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "Energy dependent regulation of mTOR by LKB1-AMPKosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "modification-dependent protein catabolic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "negative regulation of cell-cell adhesionosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "cell-cell junctionosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "unidimensional cell growthosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "obsolete induction by virus of host cell-cell fusionosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "obsolete negative regulation of hexadecanal metabolic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "establishment of protein localizationosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "biological_processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "positive regulation of flavonol biosynthetic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "plastid translationosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "obsolete cell-cell signaling involved in cell-cell junction organizationosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "negative regulation of mitotic cytokinetic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "cell-cell signalingosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "neuromuscular processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "obsolete negative regulation of elastin biosynthetic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
