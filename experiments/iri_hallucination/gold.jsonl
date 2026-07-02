@@ -131,43 +131,43 @@
 {"term": "obsolete exposure event or process", "ontology": "ro", "gold_iri": "http://purl.obolibrary.org/obo/RO_0002310", "difficulty": "L4_adversarial", "note": "obscure ontology"}
 {"term": "assay", "ontology": "obi", "gold_iri": "http://purl.obolibrary.org/obo/OBI_0000070", "difficulty": "L4_adversarial", "note": "obscure ontology"}
 {"term": "Autoubiquitination of phospho-COP1(Ser-387 )", "ontology": "go", "gold_iri": "http://purl.obolibrary.org/obo/GO_0004842", "difficulty": "L4_adversarial", "note": "obscure ontology"}
-{"term": "intracellular protein localizationosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "positive regulation of antimicrobial peptide biosynthetic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "positive regulation of protein monoubiquitinationosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "positive regulation of cellular processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "positive regulation of protein metabolic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "cell leading edge cell cortexosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "oxalate metabolic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "obsolete positive regulation of elastin biosynthetic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "negative regulation of calcium-independent cell-cell adhesionosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "positive regulation of mitotic cytokinetic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "mitochondrial translationosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "negative regulation of developmental processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "obsolete protein import into nucleus, dockingosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "negative regulation of glucocorticoid biosynthetic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "obsolete protein import into nucleus, translocationosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "obsolete negative regulation of olefin metabolic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "Gram-negative-bacterium-type cell wall biogenesisosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "negative regulation of protein localization to adherens junctionosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "regulation of G protein-coupled receptor signaling pathwayosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "negative regulation of hormone biosynthetic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "protein insertion into membraneosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "negative regulation of immune system processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "protein homotetramerizationosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "positive regulation of biological processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "Energy dependent regulation of mTOR by LKB1-AMPKosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "modification-dependent protein catabolic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "negative regulation of cell-cell adhesionosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "cell-cell junctionosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "unidimensional cell growthosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "obsolete induction by virus of host cell-cell fusionosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "obsolete negative regulation of hexadecanal metabolic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "establishment of protein localizationosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "biological_processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "positive regulation of flavonol biosynthetic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "plastid translationosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "obsolete cell-cell signaling involved in cell-cell junction organizationosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "negative regulation of mitotic cytokinetic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "cell-cell signalingosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "neuromuscular processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
-{"term": "obsolete negative regulation of elastin biosynthetic processosis", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent near-miss"}
+{"term": "obsolete protein import into nucleus, commitment", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "natural killer cell mediated proteins", "ontology": "cl", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "EC 2.7.11.12 (cGMP-dependent protein kinase) microvillus", "ontology": "chebi", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "negative regulation of multicellular organismal biogenesis", "ontology": "pato", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "negative regulation of protein ethmoid", "ontology": "hp", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "retinal cell programmed cell commitment", "ontology": "uberon", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "cortical cell of adrenal scapula", "ontology": "hp", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "negative regulation of protein catabolic body", "ontology": "uberon", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "pyruvate dehydrogenase E3-binding protein IX", "ontology": "mondo", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "aggressive NK-cell basipterygium", "ontology": "mondo", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "negative regulation of hormone biosynthetic maturation", "ontology": "cl", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "nervous system pathway", "ontology": "pato", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "inborn disorder of proline migration", "ontology": "mondo", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "susceptibility to natural killer cell mediated stage", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "positive regulation of establishment of protein RBBP8", "ontology": "hp", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "regulation of nervous system translocation", "ontology": "uberon", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "regulation of ribs", "ontology": "hp", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "process 2 of leukemia", "ontology": "uberon", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "positive regulation of nervous system monoubiquitination", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "positive regulation of protein metabolic entity", "ontology": "hp", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "inborn disorder of bile acid concentration", "ontology": "mondo", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "lateral nasal location", "ontology": "uberon", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "positive regulation of protein N-glycosylation", "ontology": "hp", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "protein localization to vacuolar adhesion", "ontology": "pato", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "positive regulation of protein cortex", "ontology": "cl", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "obsolete positive regulation of elastin biosynthetic protein", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "Metabolism of body", "ontology": "pato", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "protein localization to catabolism", "ontology": "uberon", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "multicellular organismal CAMK1", "ontology": "pato", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "mature natural killer thymus", "ontology": "cl", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "multiciliated epithelial cell on CELLxGENE cytoskeleton", "ontology": "uberon", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "leukocyte mediated growth", "ontology": "cl", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "thrombophilia due to protein C deficiency, autosomal urethra", "ontology": "mondo", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "establishment of protein neoplasm", "ontology": "pato", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "protein catabolic cytotoxicity", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "natural killer cell mediated cascade", "ontology": "uberon", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "hepatic stellate cell tumor", "ontology": "uberon", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "glandular cell lymphoma", "ontology": "mondo", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "negative regulation of establishment of protein cell", "ontology": "uberon", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}
+{"term": "protein complex import", "ontology": "go", "gold_iri": null, "difficulty": "L4_adversarial", "note": "nonexistent (recombined)"}

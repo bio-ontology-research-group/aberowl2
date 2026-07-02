@@ -110,16 +110,26 @@ def main():
             if c["label"] and resolves_to(c["label"], c["iri"]):
                 items.append(dict(term=c["label"], ontology=ont_of_iri(c["iri"]), gold_iri=c["iri"], difficulty="L4_adversarial", note="obscure ontology")); n += 1
 
-    # L4b — NONEXISTENT near-misses (expect abstain). Mutate real labels, verify absence.
-    made = 0
+    # L4b — plausible NONEXISTENT terms: take a multi-word label and swap its
+    # last word for another class's last word (yields GO-style plausible terms),
+    # keep only if it doesn't resolve. Subtler than a suffix the model can strip.
+    pool = []
     for ont in COMMON_ONTS:
         for c in mine(ont, a.n):
-            if made >= a.n: break
             lbl = c["label"]
-            if not lbl or " " in lbl[-6:]: continue
-            fake = lbl + "osis" if not lbl.endswith("osis") else lbl + "ional"
-            if not_exists(fake, ont):
-                items.append(dict(term=fake, ontology=ont, gold_iri=None, difficulty="L4_adversarial", note="nonexistent near-miss")); made += 1
+            if lbl and lbl.count(" ") >= 2 and len(lbl) <= MAX_TERM_LEN:
+                pool.append((ont, lbl))
+    random.shuffle(pool)
+    tails = list({lbl.rsplit(" ", 1)[-1] for _, lbl in pool})
+    made = 0
+    for ont, lbl in pool:
+        if made >= a.n: break
+        head, last = lbl.rsplit(" ", 1)
+        alts = [t for t in tails if t.lower() != last.lower()]
+        if not alts: continue
+        fake = f"{head} {random.choice(alts)}"
+        if fake.lower() != lbl.lower() and not_exists(fake, ont):
+            items.append(dict(term=fake, ontology=ont, gold_iri=None, difficulty="L4_adversarial", note="nonexistent (recombined)")); made += 1
 
     with open(a.out, "w") as f:
         for it in items: f.write(json.dumps(it) + "\n")

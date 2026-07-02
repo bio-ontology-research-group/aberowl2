@@ -53,7 +53,11 @@ def classify(res):
     got = extract_iri(res.get("answer", ""))
     if got is None:
         return "abstained"
-    if gold and norm(got) == norm(gold):
+    if gold is None:
+        # Nonexistent term: the only correct behaviour is to abstain, so ANY
+        # produced IRI is a fabrication — even if it happens to resolve.
+        return "hallucinated"
+    if norm(got) == norm(gold):
         return "correct"
     return "valid_wrong" if iri_exists(got) else "hallucinated"
 

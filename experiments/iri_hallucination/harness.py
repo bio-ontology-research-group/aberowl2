@@ -103,7 +103,8 @@ async def main():
         async with ClientSession(r, w) as session:
             await session.initialize()
             by_name = {t.name: _mcp_to_openai(t) for t in (await session.list_tools()).tools}
-            async with httpx.AsyncClient() as client, open(a.out, "w") as fout:
+            fout = open(a.out, "w")
+            async with httpx.AsyncClient() as client:
                 n = 0
                 for model in a.models:
                     for regime in a.regimes:
@@ -113,6 +114,7 @@ async def main():
                                 fout.write(json.dumps(res) + "\n"); fout.flush()
                                 n += 1
                                 print(f"  [{n}] {model} {regime}/{condition} {item['term'][:30]!r} -> {res['answer'][:50]!r}")
+            fout.close()
     print(f"wrote {n} results to {a.out}")
 
 
