@@ -42,3 +42,4 @@ REGIMES = ["forced", "abstain"]
 MAX_TOOL_TURNS = 6      # agent loop cap
 TEMPERATURE = 0.0       # deterministic; bump + repeat for robustness runs
 REQUEST_TIMEOUT = 120
+CONCURRENCY = 10        # items in flight at once (reasoning models are slow -> parallelize)

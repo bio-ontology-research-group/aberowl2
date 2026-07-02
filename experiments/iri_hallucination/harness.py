@@ -120,22 +120,29 @@ async def main():
         sys.exit("set OPENROUTER_API_KEY")
     gold = [json.loads(l) for l in open(a.gold) if l.strip()]
 
-    fout = open(a.out, "w")
+    jobs = [(model, regime, condition, item)
+            for model in a.models for regime in a.regimes
+            for condition in a.conditions for item in gold]
+    sem = asyncio.Semaphore(C.CONCURRENCY)
+    fout = open(a.out, "w"); lock = asyncio.Lock(); done = 0
+
     async with httpx.AsyncClient() as client:
-        n = 0
-        for model in a.models:
-            for regime in a.regimes:
-                for condition in a.conditions:
-                    for item in gold:
-                        try:
-                            res = await run_item(client, model, condition, regime, item)
-                        except Exception as e:
-                            res = _result(item, model, condition, regime, "", [], error=f"{type(e).__name__}: {e}")
-                        fout.write(json.dumps(res) + "\n"); fout.flush()
-                        n += 1
-                        print(f"  [{n}] {model} {regime}/{condition} {item['term'][:30]!r} -> {res['answer'][:50]!r}")
+        async def worker(model, regime, condition, item):
+            nonlocal done
+            async with sem:
+                try:
+                    res = await run_item(client, model, condition, regime, item)
+                except Exception as e:
+                    res = _result(item, model, condition, regime, "", [], error=f"{type(e).__name__}: {e}")
+            async with lock:
+                done += 1
+                fout.write(json.dumps(res) + "\n"); fout.flush()
+                if done % 20 == 0 or done == len(jobs):
+                    print(f"  [{done}/{len(jobs)}] {model.split('/')[-1]} {regime}/{condition} -> {res['answer'][:40]!r}")
+            return res
+        await asyncio.gather(*(worker(*j) for j in jobs))
     fout.close()
-    print(f"wrote {n} results to {a.out}")
+    print(f"wrote {done} results to {a.out}")
 
 
 if __name__ == "__main__":
