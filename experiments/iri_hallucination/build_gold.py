@@ -39,11 +39,25 @@ def api_get(path, **params):
 
 def first(v): return (v[0] if isinstance(v, list) and v else v) or ""
 
+MAX_TERM_LEN = 80   # skip IUPAC-monster synonyms and other pathological terms
+
+def ont_of_iri(iri):
+    """Real ontology of an IRI from its prefix (GO_x -> go), not the query."""
+    frag = re.split(r"[#/]", (iri or "").rstrip("#/"))[-1]
+    m = re.match(r"([A-Za-z]+)[_:]", frag)
+    return m.group(1).lower() if m else None
+
 def resolve(term, ont):
     """Canonical IRI for a term via AberOWL (grounded gold), or None."""
     d = api_get("resolve", query=term, ontologies=ont)
     r = (d.get("result") or [])
     return r[0].get("class") if r else None
+
+def resolves_to(term, iri):
+    """True iff an EXACT resolve of `term` (in the IRI's own ontology) returns
+    `iri` — round-trip validation that `term` really is that class's label/synonym."""
+    ont = ont_of_iri(iri)
+    return bool(ont) and len(term) <= MAX_TERM_LEN and resolve(term, ont) == iri
 
 def mine(ont, want):
     """Sample classes (class, label, synonyms) for an ontology via search_all."""
@@ -75,22 +89,26 @@ def main():
         iri = resolve(term, ont)
         if iri: items.append(dict(term=term, ontology=ont, gold_iri=iri, difficulty="L1_easy", note="curated famous"))
 
-    # L2 / L3 — mine common ontologies
+    # L2 / L3 — mine common ontologies (ontology DERIVED from IRI, round-trip validated)
+    per = a.n // len(COMMON_ONTS) + 1
     for ont in COMMON_ONTS:
-        picked = mine(ont, a.n // len(COMMON_ONTS) + 1)
         n2 = n3 = 0
-        for c in picked:
-            if c["label"] and n2 <= a.n // len(COMMON_ONTS):
-                items.append(dict(term=c["label"], ontology=ont, gold_iri=c["iri"], difficulty="L2_medium", note="primary label")); n2 += 1
+        for c in mine(ont, per):
+            oi = ont_of_iri(c["iri"])
+            if c["label"] and n2 < per and resolves_to(c["label"], c["iri"]):
+                items.append(dict(term=c["label"], ontology=oi, gold_iri=c["iri"], difficulty="L2_medium", note="primary label")); n2 += 1
             syn = next((s for s in c["synonyms"] if s.lower() != c["label"].lower()), None)
-            if syn and n3 <= a.n // len(COMMON_ONTS):
-                items.append(dict(term=syn, ontology=ont, gold_iri=c["iri"], difficulty="L3_hard", note="exact synonym")); n3 += 1
+            if syn and n3 < per and resolves_to(syn, c["iri"]):
+                items.append(dict(term=syn, ontology=oi, gold_iri=c["iri"], difficulty="L3_hard", note="exact synonym")); n3 += 1
 
-    # L4a — obscure ontologies (labels unlikely memorized)
+    # L4a — obscure ontologies (labels unlikely memorized), same validation
+    per = a.n // len(OBSCURE_ONTS) + 1
     for ont in OBSCURE_ONTS:
-        for c in mine(ont, a.n // len(OBSCURE_ONTS) + 1)[: a.n // len(OBSCURE_ONTS) + 1]:
-            if c["label"]:
-                items.append(dict(term=c["label"], ontology=ont, gold_iri=c["iri"], difficulty="L4_adversarial", note="obscure ontology"))
+        n = 0
+        for c in mine(ont, per):
+            if n >= per: break
+            if c["label"] and resolves_to(c["label"], c["iri"]):
+                items.append(dict(term=c["label"], ontology=ont_of_iri(c["iri"]), gold_iri=c["iri"], difficulty="L4_adversarial", note="obscure ontology")); n += 1
 
     # L4b — NONEXISTENT near-misses (expect abstain). Mutate real labels, verify absence.
     made = 0
