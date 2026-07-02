@@ -620,7 +620,14 @@ async def _migrate_unify_registries() -> None:
         except Exception:
             continue
         existing_raw = await redis_client.hget(REGISTRY_KEY, oid)
-        entry = json.loads(existing_raw) if existing_raw else {"ontology": oid, "ontology_id": oid}
+        if not existing_raw:
+            # Only ENRICH ontologies that are actually hosted (already have a
+            # worker entry). Do NOT create worker-less entries for source-only
+            # ontologies — they never get served, and the periodic metadata
+            # fetch (which fans out to every registry entry) then fails on them
+            # every cycle, degrading browsing.
+            continue
+        entry = json.loads(existing_raw)
         changed = False
         for k in source_fields:
             if k in src and not entry.get(k):
