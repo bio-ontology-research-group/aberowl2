@@ -48,6 +48,22 @@ non-abstentions), **abst%**, **usedTool%** (autonomously invoked find_iri).
 5. **Autonomous tool use = 100%** — every time find_iri was available (unhinted),
    both models chose to call it.
 
+## Next run (ready to fire — paused 2026-07, awaiting internet)
+Remaining 3 models (gpt-5.5 deferred for cost — rerun later, it's cheap to add).
+On the laptop, online:
+```bash
+cd ~/claude-projects/aberowl2/experiments/iri_hallucination
+source ~/.local/bin/export_openrouter_key            # sets OPENROUTER_API_KEY
+setsid bash -c 'uv run --extra test --project ../.. python harness.py \
+  --gold gold.jsonl --out runs_rest.jsonl \
+  --models google/gemini-3.5-flash qwen/qwen3.6-35b-a3b openai/gpt-oss-20b \
+  > rest.log 2>&1' &                                 # detached (~$6.5, ~15-25 min)
+# when done:
+cat runs_pilot.jsonl runs_rest.jsonl > runs_full.jsonl
+uv run --extra test --project ../.. python score.py --runs runs_full.jsonl --by-difficulty
+```
+Then optionally add `openai/gpt-5.5` (~$19) for the frontier data point.
+
 ## Caveats
 - Pilot n per stratum: L1=8 (small), L2=48, L3=46, L4=71.
 - deepseek loops find_iri to the turn cap on hard/nonexistent terms (cost/latency).
