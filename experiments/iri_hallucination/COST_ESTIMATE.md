@@ -1,33 +1,35 @@
 # Cost estimate — OpenRouter run
 
-Live OpenRouter pricing (fetched 2026-07). One **full run** = ~160 gold items
-(`--n 40`) × 6 models × 2 conditions (`none`, `find_iri`) × 2 regimes
-(`forced`, `abstain`) ≈ **5,760 LLM calls**.
+## Measured (pilot, 2026-07)
+2-model pilot (`deepseek/deepseek-v3.2` + `meta-llama/llama-4-scout`), gold
+`--n 40` (173 items) × 2 conditions × 2 regimes = **1,384 runs**:
 
-| Model | in $/M | out $/M | low $ | high $ |
-|---|---|---|---|---|
-| openai/gpt-5.5 | 5.00 | 30.00 | 4.69 | 15.73 |
-| google/gemini-3.5-flash | 1.50 | 9.00 | 1.41 | 2.07 |
-| deepseek/deepseek-v3.2 | 0.23 | 0.34 | 0.14 | 0.24 |
-| qwen/qwen3.6-35b-a3b | 0.14 | 1.00 | 0.14 | 0.36 |
-| meta-llama/llama-4-scout | 0.10 | 0.30 | 0.07 | 0.07 |
-| openai/gpt-oss-20b | 0.03 | 0.14 | 0.02 | 0.03 |
-| **TOTAL (one full run)** | | | **~6.50** | **~18.50** |
+- **Spent: $0.373** (credits 32.512 → 32.139) → **~$0.00027/run** average.
+- Backed-out token volume ≈ **~680 input + ~820 output tokens/run** (avg over
+  the `none` 1-call and `find_iri` multi-call+reasoning mix; DeepSeek loops the
+  tool, inflating output).
 
-## Takeaways
-- **One full run ≈ $6–19** (realistically ~$8–12). The band is reasoning-token
-  volume; a "return one IRI" task should sit low-to-mid.
-- **gpt-5.5 is ~75–85% of the cost.** The other five combined are ~$2–3. Drop or
-  downgrade gpt-5.5 (e.g. `gpt-5.4-mini`) → whole run under ~$3.
-- **Pilot (deepseek-v3.2 + llama-4-scout, full 160 items)** ≈ **$0.30**.
-- **Upgrade to 100/stratum** (~400 items) ≈ **$16–46**.
+This ran **higher** than the first a-priori estimate — reasoning + tool-looping
+tokens dominate. Calibrated per-model projection below uses that token volume ×
+each model's live price.
 
-## Assumptions
-Per call: `none`=1 call, `find_iri`≈2 calls; tokens ~150 (none) to ~450+950
-(find_iri call1+call2, incl. tool schema + result); reasoning models emit 4–6×
-output on the high end. The harness logs real token usage — recalibrate from a
-pilot.
+## Projected — full run, per model (692 runs = 173 × 2 cond × 2 regime)
+| Model | in/out $/M | projected $ | note |
+|---|---|---|---|
+| deepseek/deepseek-v3.2 | 0.23 / 0.34 | ~0.30 | measured (part of pilot) |
+| meta-llama/llama-4-scout | 0.10 / 0.30 | ~0.07 | measured (part of pilot) |
+| **openai/gpt-5.5** | 5.00 / 30.00 | **~19** | **cost driver (~75% of remaining)** |
+| google/gemini-3.5-flash | 1.50 / 9.00 | ~5.8 | |
+| qwen/qwen3.6-35b-a3b | 0.14 / 1.00 | ~0.6 | |
+| openai/gpt-oss-20b | 0.03 / 0.14 | ~0.1 | |
 
-## Recompute
-Re-fetch pricing + re-estimate: see the pricing block in the session, or query
-`https://openrouter.ai/api/v1/models` and multiply by the token assumptions above.
+- **4 remaining models ≈ $25** (dominated by gpt-5.5 ~$19).
+- **Full 6-model run ≈ $26** ($0.37 already spent on the 2 pilot models).
+
+## Levers
+- **gpt-5.5 dominates.** Swapping it for `openai/gpt-5.4-mini` (or `gpt-oss-120b`)
+  drops the remaining run to **~$7**. Keep gpt-5.5 only if the frontier-model
+  data point is worth ~$19.
+- Caveat: gpt-5.5 / gemini may reason more or less than DeepSeek per item, so
+  their figures are ±50%. The harness could log real token usage for exact
+  numbers on a first small batch.
