@@ -35,15 +35,25 @@ async def call_openrouter(client, model, messages, tools):
     if tools:
         body["tools"] = tools
         body["tool_choice"] = "auto"
-    for attempt in range(4):
-        r = await client.post(C.OPENROUTER_URL, json=body,
-                              headers={"Authorization": f"Bearer {C.OPENROUTER_API_KEY}"},
-                              timeout=C.REQUEST_TIMEOUT)
-        if r.status_code == 200:
-            return r.json()["choices"][0]["message"]
-        if r.status_code in (429, 500, 502, 503) and attempt < 3:
+    last = "?"
+    for attempt in range(6):
+        try:
+            r = await client.post(C.OPENROUTER_URL, json=body,
+                                  headers={"Authorization": f"Bearer {C.OPENROUTER_API_KEY}"},
+                                  timeout=C.REQUEST_TIMEOUT)
+        except Exception as e:                      # ReadError/ConnectError/timeouts
+            last = f"{type(e).__name__}: {e}"
             await asyncio.sleep(2 * (attempt + 1)); continue
-        return {"role": "assistant", "content": "", "_error": f"HTTP {r.status_code}: {r.text[:300]}"}
+        if r.status_code == 200:
+            try:
+                return r.json()["choices"][0]["message"]
+            except Exception as e:
+                last = f"parse: {e}: {r.text[:200]}"; break
+        last = f"HTTP {r.status_code}: {r.text[:300]}"
+        if r.status_code in (429, 500, 502, 503) and attempt < 5:
+            await asyncio.sleep(2 * (attempt + 1)); continue
+        break
+    return {"role": "assistant", "content": "", "_error": last}
 
 
 async def exec_tool(session, name, args):
@@ -54,9 +64,7 @@ async def exec_tool(session, name, args):
         return f"(tool error: {e})"
 
 
-async def run_item(client, session, all_tools_by_name, model, condition, regime, item):
-    tool_names = P.CONDITION_TOOLS[condition]
-    tools = [all_tools_by_name[n] for n in tool_names if n in all_tools_by_name] or None
+async def _agent(client, session, tools, model, condition, regime, item):
     messages = [
         {"role": "system", "content": P.system_prompt(condition, regime)},
         {"role": "user", "content": P.user_prompt(item["term"], item.get("ontology"))},
@@ -80,6 +88,19 @@ async def run_item(client, session, all_tools_by_name, model, condition, regime,
     return _result(item, model, condition, regime, msg.get("content") or "", invoked, truncated=True)
 
 
+async def run_item(client, model, condition, regime, item):
+    """Run one item. Tool conditions open a FRESH MCP session (robust to idle drops)."""
+    tool_names = P.CONDITION_TOOLS[condition]
+    if not tool_names:
+        return await _agent(client, None, None, model, condition, regime, item)
+    async with streamablehttp_client(C.MCP_URL) as (r, w, _):
+        async with ClientSession(r, w) as session:
+            await session.initialize()
+            by_name = {t.name: _mcp_to_openai(t) for t in (await session.list_tools()).tools}
+            tools = [by_name[n] for n in tool_names if n in by_name] or None
+            return await _agent(client, session, tools, model, condition, regime, item)
+
+
 def _result(item, model, condition, regime, text, invoked, error=None, truncated=False):
     return {"term": item["term"], "ontology": item.get("ontology"), "gold_iri": item.get("gold_iri"),
             "difficulty": item.get("difficulty"), "model": model, "condition": condition,
@@ -99,22 +120,21 @@ async def main():
         sys.exit("set OPENROUTER_API_KEY")
     gold = [json.loads(l) for l in open(a.gold) if l.strip()]
 
-    async with streamablehttp_client(C.MCP_URL) as (r, w, _):
-        async with ClientSession(r, w) as session:
-            await session.initialize()
-            by_name = {t.name: _mcp_to_openai(t) for t in (await session.list_tools()).tools}
-            fout = open(a.out, "w")
-            async with httpx.AsyncClient() as client:
-                n = 0
-                for model in a.models:
-                    for regime in a.regimes:
-                        for condition in a.conditions:
-                            for item in gold:
-                                res = await run_item(client, session, by_name, model, condition, regime, item)
-                                fout.write(json.dumps(res) + "\n"); fout.flush()
-                                n += 1
-                                print(f"  [{n}] {model} {regime}/{condition} {item['term'][:30]!r} -> {res['answer'][:50]!r}")
-            fout.close()
+    fout = open(a.out, "w")
+    async with httpx.AsyncClient() as client:
+        n = 0
+        for model in a.models:
+            for regime in a.regimes:
+                for condition in a.conditions:
+                    for item in gold:
+                        try:
+                            res = await run_item(client, model, condition, regime, item)
+                        except Exception as e:
+                            res = _result(item, model, condition, regime, "", [], error=f"{type(e).__name__}: {e}")
+                        fout.write(json.dumps(res) + "\n"); fout.flush()
+                        n += 1
+                        print(f"  [{n}] {model} {regime}/{condition} {item['term'][:30]!r} -> {res['answer'][:50]!r}")
+    fout.close()
     print(f"wrote {n} results to {a.out}")
 
 
