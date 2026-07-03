@@ -46,7 +46,10 @@ async def call_openrouter(client, model, messages, tools):
             await asyncio.sleep(2 * (attempt + 1)); continue
         if r.status_code == 200:
             try:
-                return r.json()["choices"][0]["message"]
+                data = r.json()
+                msg = data["choices"][0]["message"]
+                msg["_usage"] = data.get("usage") or {}   # captured for per-model cost
+                return msg
             except Exception as e:
                 last = f"parse: {e}: {r.text[:200]}"; break
         last = f"HTTP {r.status_code}: {r.text[:300]}"
@@ -70,14 +73,17 @@ async def _agent(client, session, tools, model, condition, regime, item):
         {"role": "user", "content": P.user_prompt(item["term"], item.get("ontology"))},
     ]
     invoked = []          # which tools the model actually chose
+    pt = ct = 0           # accumulated prompt/completion tokens (for per-model cost)
     for _ in range(C.MAX_TOOL_TURNS):
         msg = await call_openrouter(client, model, messages, tools)
+        u = msg.get("_usage") or {}
+        pt += u.get("prompt_tokens") or 0; ct += u.get("completion_tokens") or 0
         if msg.get("_error"):
-            return _result(item, model, condition, regime, "", invoked, error=msg["_error"])
+            return _result(item, model, condition, regime, "", invoked, error=msg["_error"], pt=pt, ct=ct)
         messages.append({k: msg[k] for k in ("role", "content", "tool_calls") if k in msg and msg[k] is not None})
         tcs = msg.get("tool_calls")
         if not tcs:
-            return _result(item, model, condition, regime, msg.get("content") or "", invoked)
+            return _result(item, model, condition, regime, msg.get("content") or "", invoked, pt=pt, ct=ct)
         for tc in tcs:
             fn = tc["function"]["name"]
             try: args = json.loads(tc["function"].get("arguments") or "{}")
@@ -85,7 +91,7 @@ async def _agent(client, session, tools, model, condition, regime, item):
             out = await exec_tool(session, fn, args)
             invoked.append({"tool": fn, "args": args, "result": out[:600]})
             messages.append({"role": "tool", "tool_call_id": tc.get("id"), "content": out})
-    return _result(item, model, condition, regime, msg.get("content") or "", invoked, truncated=True)
+    return _result(item, model, condition, regime, msg.get("content") or "", invoked, truncated=True, pt=pt, ct=ct)
 
 
 async def run_item(client, model, condition, regime, item):
@@ -101,11 +107,12 @@ async def run_item(client, model, condition, regime, item):
             return await _agent(client, session, tools, model, condition, regime, item)
 
 
-def _result(item, model, condition, regime, text, invoked, error=None, truncated=False):
+def _result(item, model, condition, regime, text, invoked, error=None, truncated=False, pt=0, ct=0):
     return {"term": item["term"], "ontology": item.get("ontology"), "gold_iri": item.get("gold_iri"),
             "difficulty": item.get("difficulty"), "model": model, "condition": condition,
             "regime": regime, "answer": text.strip(), "tools_invoked": [t["tool"] for t in invoked],
-            "tool_calls": invoked, "error": error, "truncated": truncated}
+            "tool_calls": invoked, "error": error, "truncated": truncated,
+            "prompt_tokens": pt, "completion_tokens": ct}
 
 
 async def main():

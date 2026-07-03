@@ -1,5 +1,22 @@
 # Cost estimate — OpenRouter run
 
+## Actual spend registered (2026-07)
+Per-model **exact** cost is not recoverable (OpenRouter `/activity` needs a
+management key; the harness didn't log token `usage` at the time). Only **batch
+aggregates** were captured; per-model is a best estimate.
+
+| Batch | models | runs | measured $ | per-model estimate |
+|---|---|---|---|---|
+| pilot | deepseek-v3.2 + llama-4-scout | 1,384 | **$0.37** | deepseek ~$0.30, llama ~$0.07 |
+| rest | gemini-3.5-flash + qwen3.6-35b-a3b + gpt-oss-20b | 2,076 | **$25.9** | **gemini ~$24**, qwen ~$1, gpt-oss ~$0.1 |
+| smokes/retries | (misc) | — | ~$0.1 | — |
+| **total** | 5 models | | **~$26.4** | credits left: ~$6.2 |
+
+**gpt-5.5: DROPPED** (not run) — would be ~$40+ (reasoning tokens); not worth the cost.
+Harness now logs `usage` → future runs will have exact per-model token/cost.
+
+
+
 ## Measured (pilot, 2026-07)
 2-model pilot (`deepseek/deepseek-v3.2` + `meta-llama/llama-4-scout`), gold
 `--n 40` (173 items) × 2 conditions × 2 regimes = **1,384 runs**:

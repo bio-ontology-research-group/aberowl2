@@ -72,6 +72,6 @@ or any IRI for a nonexistent-term item) · **h/ans%** (of non-abstentions) ·
 ## Cost & next
 - Measured: 2 models $0.37; +3 models **$25.9** — **gemini-3.5-flash dominated**
   (extended-thinking tokens at $9/M output; see `COST_ESTIMATE.md`).
-- **gpt-5.5 still pending** (would be ~$40+ if it thinks like gemini) — needs a
-  credit top-up and ideally a thinking-token cap before running. Adding it is a
-  one-command rerun (`--models openai/gpt-5.5`, then re-score).
+- **gpt-5.5 DROPPED** (not run) — would be ~$40+ (reasoning tokens), not worth it.
+  The 5 models already show the effect cleanly across the capability gradient.
+  If ever wanted, it's a one-command add (`--models openai/gpt-5.5`, then re-score).
