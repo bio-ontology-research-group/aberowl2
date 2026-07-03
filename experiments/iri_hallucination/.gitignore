@@ -5,3 +5,4 @@ runs_smoke.jsonl
 runs_conc.jsonl
 runs_tiny.jsonl
 *.log
+iri_exists_cache.json

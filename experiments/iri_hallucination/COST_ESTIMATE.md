@@ -13,6 +13,17 @@ This ran **higher** than the first a-priori estimate — reasoning + tool-loopin
 tokens dominate. Calibrated per-model projection below uses that token volume ×
 each model's live price.
 
+## Measured — 3-model run (reality check, blew the estimate)
+gemini-3.5-flash + qwen3.6-35b-a3b + gpt-oss-20b, 2,076 runs: **spent ~$25.9**
+(est. was ~$6.5 → **4× over**). qwen + gpt-oss are cheap; **gemini-3.5-flash ate
+~$24**. Cause: Gemini 3.x "flash" runs **extended thinking on by default**,
+emitting several thousand reasoning tokens/call at $9/M output — the token model
+below (~820 out/run) is far too low for thinking models.
+
+**Lesson:** for thinking/reasoning models, assume **3,000–5,000+ output
+tokens/run**, not ~820. That makes **gpt-5.5 (30/M out) ~$40+**, not $19 — cap
+thinking tokens or top up credits before running it.
+
 ## Projected — full run, per model (692 runs = 173 × 2 cond × 2 regime)
 | Model | in/out $/M | projected $ | note |
 |---|---|---|---|
