@@ -83,7 +83,7 @@ const jsonStdio = `{
 }`
 
 const dlExample = `run_dl_query(
-  query="'part of' some 'cell'",
+  query="'part of' some cell",
   type="subeq",
   ontology="GO"
 )`
@@ -188,13 +188,12 @@ export default function Docs() {
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <div className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Syntax</div>
             <ul className="text-sm text-gray-600 space-y-1 font-mono">
-              <li><span className="text-gray-400">label:</span> 'cell'</li>
+              <li><span className="text-gray-400">label:</span> cell <span className="text-gray-400">(quote only if multi-word: 'cell death')</span></li>
               <li><span className="text-gray-400">IRI:</span> &lt;http://…/GO_0005623&gt;</li>
-              <li><span className="text-gray-400">existential:</span> 'part of' some 'cell'</li>
-              <li><span className="text-gray-400">intersection:</span> 'cell' and 'part of' some 'organism'</li>
-              <li><span className="text-gray-400">union:</span> 'cell' or 'tissue'</li>
-              <li><span className="text-gray-400">negation:</span> not 'cell'</li>
+              <li><span className="text-gray-400">existential:</span> 'part of' some cell</li>
+              <li><span className="text-gray-400">intersection:</span> cell and 'part of' some organism</li>
             </ul>
+            <p className="text-xs text-gray-400 mt-2 font-sans">Not supported: <span className="font-mono">or</span>, <span className="font-mono">only</span>, <span className="font-mono">not</span> — AberOWL reasons in the OWL EL profile (ELK).</p>
           </div>
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <div className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Query types</div>

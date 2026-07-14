@@ -262,7 +262,7 @@ export default function OntologyPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Manchester OWL Syntax Query</label>
               <textarea
                 value={queryText} onChange={e => setQueryText(e.target.value)}
-                placeholder="e.g. 'part of' some 'cell'" rows={2}
+                placeholder="e.g. 'part of' some cell" rows={2}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 focus:outline-none resize-none"
               />
               {queryText.trim() && (

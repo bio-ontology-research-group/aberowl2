@@ -78,7 +78,7 @@ export default function DLQueryPage() {
           <textarea
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="e.g. 'part of' some 'cell'"
+            placeholder="e.g. 'part of' some cell"
             rows={3}
             className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 focus:outline-none resize-none"
           />
@@ -125,12 +125,14 @@ export default function DLQueryPage() {
 
         <div className="mt-4 p-3 bg-gray-50 rounded-lg text-xs text-gray-500 border border-gray-100">
           <strong className="text-gray-700">Syntax guide:</strong>{' '}
-          Named classes: <code className="bg-white px-1 rounded border text-emerald-700">'cell'</code>{' · '}
-          Existential: <code className="bg-white px-1 rounded border"><span className="text-emerald-700">'part of'</span> <span className="text-amber-600 font-bold">some</span> <span className="text-emerald-700">'cell'</span></code>{' · '}
+          Named class: <code className="bg-white px-1 rounded border text-emerald-700">cell</code>{' '}
+          <span className="text-gray-400">(quote only multi-word names: <code className="bg-white px-1 rounded border text-emerald-700">'cell death'</code>)</span>{' · '}
+          Existential: <code className="bg-white px-1 rounded border"><span className="text-emerald-700">'part of'</span> <span className="text-amber-600 font-bold">some</span> <span className="text-emerald-700">cell</span></code>{' · '}
           Intersection: <code className="bg-white px-1 rounded border"><span className="text-amber-600 font-bold">and</span></code>{' · '}
-          Union: <code className="bg-white px-1 rounded border"><span className="text-amber-600 font-bold">or</span></code>{' · '}
-          Universal: <code className="bg-white px-1 rounded border"><span className="text-amber-600 font-bold">only</span></code>{' · '}
           IRI: <code className="bg-white px-1 rounded border text-blue-600">&lt;http://...&gt;</code>
+          <div className="mt-1.5 text-gray-400">
+            Not supported: <code className="bg-white px-1 rounded border">or</code>, <code className="bg-white px-1 rounded border">only</code>, <code className="bg-white px-1 rounded border">not</code> — AberOWL reasons in the OWL EL profile (ELK).
+          </div>
         </div>
       </form>
 

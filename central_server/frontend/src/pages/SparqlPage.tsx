@@ -348,7 +348,7 @@ export default function SparqlPage() {
         <p className="text-xs mt-3">
           <strong>Types:</strong> subclass, subeq, superclass, supeq, equivalent<br />
           <strong>Ontology id:</strong> a registered AberOWL ontology id (case-insensitive; <code>go-plus</code>, <code>chebi</code>, …)<br />
-          <strong>DL query:</strong> Manchester OWL Syntax (e.g. <code className="font-mono">'part of' some 'cell'</code>)
+          <strong>DL query:</strong> Manchester OWL Syntax (e.g. <code className="font-mono">'part of' some cell</code>)
         </p>
       </div>
     </div>
