@@ -131,6 +131,40 @@ The central server image is built from `central_server/Dockerfile`. The SPA fron
 is pre-built locally (`cd central_server/frontend && npm run build`) and the output
 at `app/static/dist/` is bind-mounted into the container.
 
+### Which git ref a deployment runs
+
+A deploy host's checkout is **not inert**: `docker-compose.central.yml` builds with
+`context: ..`, and `central_server/Dockerfile` does `COPY ./central_server/app /code/app`,
+so **the checked-out commit determines the Python image that runs**. (The frontend is the
+exception — `app/static/dist/` is gitignored and shipped as a locally-built bundle, so its
+`.tsx` *source* on the host can lag what's served.) Treat the deploy host's git ref as part
+of the running state:
+
+- **Sit on `main`, tracking `origin/main`.** Do not create a long-lived `prod`/`release`
+  branch — the deploy history *is* `main`'s, and a second pointer only drifts. Record what
+  is live with **tags**, not a branch.
+- **Never deploy by a bare `git pull`.** Move forward explicitly and forward-only:
+  ```bash
+  git -C <deploy-dir> fetch origin main
+  git -C <deploy-dir> merge --ff-only <reviewed-commit>   # refuses if history diverged
+  docker compose -f deploy/docker-compose.central.yml [-f deploy/docker-compose.central.override.yml] \
+      --env-file <env> up -d --build central-server
+  ```
+- **Tag every deploy** so rollback is a checkout:
+  ```bash
+  git -C <deploy-dir> tag prod-$(date +%Y-%m-%d) <deployed-commit>
+  ```
+
+**Gotcha — a host stood up with `git init` + `fetch` + `reset` (not `clone`)** ends up on a
+local `master` branch (git init's default) that does not exist on the remote and has **no
+upstream**, so `git pull` fails with "no tracking information" and the host can sit silently
+stale. If you find a deploy host like that, put it on a tracking `main`:
+```bash
+git -C <deploy-dir> fetch origin main
+git -C <deploy-dir> checkout -B main origin/main
+git -C <deploy-dir> branch -d master
+```
+
 ### Worker Containers
 
 Workers are started individually with `docker run` (not compose), because each has
