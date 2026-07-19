@@ -417,6 +417,19 @@ All secrets are in `/data/aberowl/deploy/.env` on `onto`:
 | `ADMIN_PASSWORD` | HTTP Basic auth for `/admin/*` endpoints |
 | `ABEROWL_SECRET_KEY` | Inter-service auth (worker ↔ central) |
 
+Separately, each registry entry carries a per-ontology `secret_key` (a uuid4 in
+Redis, used only for `/register` re-registration auth and the `/webhook` update
+trigger — **not** the worker `ABEROWL_SECRET_KEY` above). To invalidate those keys
+(e.g. after a leak), rotate them — Redis-only, no worker restarts, no downtime:
+
+```bash
+docker cp scripts/rotate_registry_keys.py deploy-central-server-1:/tmp/
+docker exec deploy-central-server-1 python3 /tmp/rotate_registry_keys.py            # dry-run
+docker exec deploy-central-server-1 python3 /tmp/rotate_registry_keys.py --apply    # rotate + resync servers.json
+```
+
+Back up the `deploy_redis_data` volume first (see the rollback section above).
+
 ## Monitoring
 
 ```bash
