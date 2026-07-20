@@ -1,0 +1,129 @@
+# Single-host AberOWL 2 — run your own instance over your own ontologies with
+# one command. See deploy/SELF_HOSTING.md for the full guide.
+#
+#   ONTOLOGIES_DIR=./my-ontologies docker compose -f deploy/docker-compose.selfhost.yml up
+#
+# Everything talks over the internal `aberowl-net` by container name, so there
+# is no cross-host IP wiring (unlike the production cluster). Point ONTOLOGIES_DIR
+# at a folder holding .owl files (and/or a sources.txt of URLs); it defaults to a
+# tiny example (the pizza ontology) so `up` works out of the box.
+name: aberowl-selfhost
+
+services:
+  redis:
+    image: redis:alpine
+    container_name: aberowl-selfhost-redis
+    restart: unless-stopped
+    networks: [aberowl-net]
+
+  elasticsearch:
+    image: elasticsearch:7.17.10
+    container_name: aberowl-selfhost-es
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s --fail 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks: [aberowl-net]
+
+  # One-shot: download any web sources, then write the worker's ontologies.json.
+  # Runs to completion before the worker starts.
+  ontology-prepare:
+    image: python:3.11-slim
+    container_name: aberowl-selfhost-prepare
+    working_dir: /work
+    volumes:
+      - ${ONTOLOGIES_DIR:-../examples/selfhost/ontologies}:/data
+      - ./selfhost_init.py:/work/selfhost_init.py:ro
+    command: python3 selfhost_init.py prepare --onto-dir /data
+    networks: [aberowl-net]
+
+  worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile.api
+    container_name: aberowl-selfhost-worker
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      ontology-prepare:
+        condition: service_completed_successfully
+    environment:
+      - CONTAINER_ID=selfhost-worker
+      - ABEROWL_SECRET_KEY=${ABEROWL_SECRET_KEY:-selfhost-dev-key}
+      - CENTRAL_ES_URL=http://elasticsearch:9200
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - ONTOLOGY_PATH=/data/ontologies.json
+    volumes:
+      - ${ONTOLOGIES_DIR:-../examples/selfhost/ontologies}:/data:ro
+      - ../aberowlapi:/app/aberowlapi
+      - ../docker/scripts:/scripts
+    command: python3 /app/api_server.py /data/ontologies.json
+    healthcheck:
+      # groovy image has python3 (not curl); "ok" means >=1 ontology classified
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request,sys; sys.exit(0 if '\\\"status\\\":\\\"ok\\\"' in urllib.request.urlopen('http://localhost:8080/api/health.groovy',timeout=5).read().decode() else 1)\""]
+      interval: 15s
+      timeout: 10s
+      retries: 60
+    networks: [aberowl-net]
+
+  central-server:
+    build:
+      context: ..
+      dockerfile: central_server/Dockerfile
+    container_name: aberowl-selfhost-central
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "${CENTRAL_PORT:-8000}:8000"
+      # MCP endpoint for AI agents (http://localhost:8766/mcp)
+      - "${MCP_PORT:-8766}:8766"
+    environment:
+      - CENTRAL_ES_URL=http://elasticsearch:9200
+      # owlPath central hands the worker must match the worker's /data mount
+      - ONTOLOGIES_HOST_PATH=/data
+      - ADMIN_USER=${ADMIN_USER:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
+      - ABEROWL_SECRET_KEY=${ABEROWL_SECRET_KEY:-selfhost-dev-key}
+      - ENABLE_MCP=true
+      - ENABLE_MCP_ONTOLOGY=true
+      - MCP_ONTOLOGY_PORT=8766
+      # a self-host serves a fixed set; don't crawl OBO/BioPortal
+      - ENABLE_AUTO_SYNC=false
+    networks: [aberowl-net]
+
+  # One-shot: once the worker has classified its ontologies, register each with
+  # central and build its search index. Runs to completion, then exits.
+  ontology-register:
+    image: python:3.11-slim
+    container_name: aberowl-selfhost-register
+    depends_on:
+      worker:
+        condition: service_healthy
+      central-server:
+        condition: service_started
+    working_dir: /work
+    volumes:
+      - ./selfhost_init.py:/work/selfhost_init.py:ro
+    environment:
+      - ADMIN_USER=${ADMIN_USER:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
+    command: >
+      python3 selfhost_init.py register
+      --central http://central-server:8000
+      --worker-url http://worker:8080
+    networks: [aberowl-net]
+
+volumes:
+  es_data:
+
+networks:
+  aberowl-net:

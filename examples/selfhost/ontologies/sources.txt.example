@@ -1,0 +1,11 @@
+# Optional: list ontologies to download from the web, one per line.
+# Rename this file to  sources.txt  to activate it.
+#
+# Format:  [id]  URL  [reasoner]
+#   - id and reasoner are optional (id is derived from the filename; reasoner
+#     defaults to elk). Lines starting with # are ignored.
+#
+# Examples (uncomment to use):
+# http://purl.obolibrary.org/obo/go.owl
+# hp   http://purl.obolibrary.org/obo/hp.owl
+# mp   http://purl.obolibrary.org/obo/mp.owl   hermit

@@ -23,33 +23,56 @@ so docker DNS resolves the names and **none of the cross-host IP wiring the prod
 cluster needed applies here**. That is the whole reason a turnkey single-host path is
 feasible with little new code.
 
-## Target UX (what we are building)
+## How you feed in ontologies (simplest first)
+
+Point `ONTOLOGIES_DIR` at a folder (defaults to the bundled example). The folder can hold:
+
+1. **Bare files** — drop `myont.owl` in; id becomes `myont`, reasoner ELK. Zero config.
+2. **Web sources** — a `sources.txt`, one `[id] URL [reasoner]` per line, downloaded on startup.
+3. **Full control** — an `ontologies.config.json` (authoritative): `[{"id","path"|"url","reasoner"}]`.
+
+The `ontology-prepare` step turns whichever of these it finds into a single canonical
+`ontologies.json` that the worker loads, so the three modes share one code path
+(`deploy/selfhost_init.py`, unit-tested in `tests/test_selfhost_init.py`).
+
+## UX
 ```bash
-# 1. drop your ontologies + a config in ./ontologies/
-#    ontologies/
-#      ontologies.json        # [{"id":"MYONT","path":"/data/myont/myont.owl","reasoner":"elk"}, ...]
-#      myont/myont.owl
-# 2. one command
+# defaults to examples/selfhost/ontologies (the pizza ontology) so `up` just works:
 docker compose -f deploy/docker-compose.selfhost.yml up
-# 3. use it
-#    web/API  -> http://localhost:8000
-#    MCP      -> http://localhost:8000/mcp/ontology/mcp  (point your agent here)
+# your own set:
+ONTOLOGIES_DIR=./my-ontologies docker compose -f deploy/docker-compose.selfhost.yml up
+#   web / API -> http://localhost:8000
+#   MCP       -> http://localhost:8766/mcp   (agent endpoint)
 ```
 
+## How it fits together
+Six services on an internal `aberowl-net` (container-name DNS, no cross-host IP wiring):
+`redis`, `elasticsearch`, `central-server`, one `worker`, and two one-shots —
+`ontology-prepare` (download + write `ontologies.json`, before the worker) and
+`ontology-register` (register each loaded ontology with central + trigger its index,
+after the worker classifies).
+
 ## Implementation checklist
-- [ ] `deploy/docker-compose.selfhost.yml` — one file bringing up redis + ES + central-server
-      + one worker on `aberowl-net`, worker `ONTOLOGY_PATH=/data/ontologies.json`,
-      ontologies bind-mounted read-only.
-- [ ] **Bake in the prod-deploy lessons** so a first-time user does not hit them:
-  - central started with its env loaded (`env_file:` in the compose, not a bare `-f`);
-  - `ONTOLOGIES_HOST_PATH=/data` on central so the reindex `owlPath` matches the worker mount;
-  - auto-generate `ABEROWL_SECRET_KEY` + `ADMIN_PASSWORD` on first run if absent (an entrypoint), so there is no manual `.env` step and no `changeme` default;
-  - build the worker image with BuildKit (the legacy builder drops the Grape cache).
-- [ ] Registration + indexing on `up`: worker registers with central by container-name URL,
-      central indexes each ontology into ES (an init step, or `ABEROWL_REGISTER=true`).
-- [ ] A `docker-compose.selfhost.override.yml` or env for optional nginx + friendly `/mcp` route.
-- [ ] Quickstart in `README.md` (this UX) + a tiny example `ontologies/` (e.g. BFO) to `up` out of the box.
-- [ ] Verify from a clean host: empty machine -> `up` -> DL query + search + all 10 MCP tools work over the example ontology.
+- [x] `deploy/docker-compose.selfhost.yml` — redis + ES + central + one worker + two init one-shots
+      on `aberowl-net`; worker `ONTOLOGY_PATH=/data/ontologies.json`, ontologies bind-mounted.
+- [x] `ONTOLOGIES_HOST_PATH=/data` on central so the reindex `owlPath` matches the worker mount.
+- [x] Registration + indexing on `up` via `ontology-register` (container-name URLs, existing
+      `/register` + `/admin/.../reindex` endpoints).
+- [x] Three input modes (bare files / `sources.txt` URLs / `ontologies.config.json`) in
+      `deploy/selfhost_init.py`, with unit tests.
+- [x] Quickstart + tiny example (`examples/selfhost/`, ships the pizza ontology) to `up` out of the box.
+- [x] Verified on a clean host (2026-07-20): `up` -> worker classifies pizza -> registers -> indexes;
+      DL query returns 8 subclasses of Pizza, search returns hits, and all 10 MCP tools list over
+      `http://localhost:8766/mcp`. The `ontology-register` step waits for the ES index to populate (and
+      re-triggers once if the first async reindex lands empty), so search works the moment `up` settles.
+- [x] MCP endpoint published at `http://localhost:8766/mcp` (central binds `0.0.0.0:8766`).
+- [ ] Auto-generate `ABEROWL_SECRET_KEY` + `ADMIN_PASSWORD` on first run (currently sensible
+      dev defaults; fine for a private single host, but should self-generate).
+- [ ] Bake the SPA into the published central image (`dist/` is gitignored + bind-mounted in prod),
+      so the web UI is served without a local `npm build`.
+- [ ] Optional nginx + friendly `/mcp` route (`docker-compose.selfhost.override.yml`).
+- [ ] Swap `build:` for the published `ferzcam/aberowl-central` + `ferzcam/aberowl-worker` images
+      once they exist, so a user pulls instead of building.
 
 ## Notes
 - Multi-worker packing (`plan_workers.py`) is for large corpora; a self-host with K
