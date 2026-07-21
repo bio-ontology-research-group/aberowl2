@@ -44,6 +44,9 @@ services:
     networks: [aberowl-net]
 
   worker:
+    # Pulls the published image by default; `docker compose build` still rebuilds
+    # it from source (and tags it the same) for development.
+    image: ferzcam/aberowl-worker:2.0
     build:
       context: ..
       dockerfile: Dockerfile.api
@@ -73,6 +76,9 @@ services:
     networks: [aberowl-net]
 
   central-server:
+    # Pulls the published image by default; `docker compose build` still rebuilds
+    # it from source (bakes the SPA) and tags it the same for development.
+    image: ferzcam/aberowl-central:2.0
     build:
       context: ..
       dockerfile: central_server/Dockerfile
