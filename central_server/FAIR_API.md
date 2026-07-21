@@ -20,17 +20,27 @@ through the REST API and the MCP server.
   description, version, class/property counts, license, classification status).
 
 ## What this PR adds (the gap to a formal FAIR API)
-- [ ] **Content negotiation** — return JSON-LD and RDF (Turtle) for class and
-      ontology records based on the `Accept` header, alongside the current JSON.
-- [ ] **Persistent-identifier resolution** — a stable endpoint that resolves any
-      served IRI or CURIE to its record under a documented URL scheme.
-- [ ] **Machine-readable dataset metadata** — a DCAT / schema.org description of
-      the repository and of each ontology (title, version, license, publisher,
-      distribution), so the corpus is discoverable by data catalogues.
-- [ ] **Versioned, dated records** — surface the ontology version and
-      last-updated date in each record.
-- [ ] **Service descriptor** — a `/.well-known` or `/fair` document listing the
-      FAIR endpoints and supported representations.
+- [x] **Machine-readable dataset metadata** — a MOD/DCAT/Hydra JSON-LD
+      semantic-artefact catalogue is live at `/artefacts` (462 artefacts, per-ontology
+      records with distributions, `/records`, `/resources`). OntoPortal-compatible.
+- [x] **Content negotiation** — `/artefacts*`, `/records*`, and `/fair` now serve
+      JSON-LD (default), **Turtle** (`Accept: text/turtle` or `?format=ttl`), and
+      **RDF/XML** (`application/rdf+xml` or `?format=rdfxml`), via rdflib. The
+      `format` params previously accepted `ttl`/`rdfxml` but returned JSON.
+- [x] **Versioned, dated records** — `dcterms:issued`/`modified` now come from real
+      registry metadata (`version_info` for issued, `source_last_modified` /
+      `last_indexed` for modified) instead of a request-time `datetime.utcnow()`
+      stamp; a field is omitted when no real date exists (never fabricated).
+- [x] **Service descriptor** — `GET /fair` lists the FAIR endpoints, RDF
+      representations, and the vocabularies conformed to (MOD/DCAT/Hydra), so a
+      client or a FAIR assessor (O'FAIRe) can discover them from one document.
+- [~] **Persistent-identifier resolution** — each artefact resolves at
+      `/artefacts/{id}` and each class via `/api/resolve`; genuinely persistent IDs
+      still need **HTTPS** (ops) and, ideally, a registered PID scheme.
+
+## Remaining (not code)
+- **HTTPS** on the public host, so the resolvable IDs are `https` and access is secure.
+- Validate the live service with **O'FAIRe** and record the score.
 
 ## Notes
 - Build on the existing FastAPI central server (`app/main.py`) and the registry

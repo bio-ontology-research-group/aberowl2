@@ -1369,8 +1369,128 @@ async def _find_server_by_id(artefact_id: str) -> Optional[Dict[str, Any]]:
         # Match without extension (case-insensitive)
         if os.path.splitext(ontology_key_lower)[0] == artefact_id_lower:
             return server
-            
+
     return None
+
+
+def _norm_date(value) -> Optional[str]:
+    """Normalize a stored date (ISO 8601, bare YYYY-MM-DD, or an HTTP
+    Last-Modified header) to an ISO string. Returns None for missing or
+    unparseable input, so callers omit the field rather than fabricate a date."""
+    if not value or not isinstance(value, str):
+        return None
+    s = value.strip()
+    # A bare calendar date (YYYY-MM-DD) stays a date, not a midnight datetime.
+    if len(s) == 10:
+        try:
+            return datetime.strptime(s, "%Y-%m-%d").date().isoformat()
+        except ValueError:
+            pass
+    # Full ISO 8601 datetime.
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00")).isoformat()
+    except ValueError:
+        pass
+    # HTTP Last-Modified header form.
+    try:
+        from email.utils import parsedate_to_datetime
+        return parsedate_to_datetime(s).isoformat()
+    except (TypeError, ValueError, IndexError):
+        return None
+
+
+def _artefact_dates(server: Dict[str, Any]) -> tuple:
+    """Real (issued, modified) dates for an ontology's catalogue record, from
+    registry metadata. Returns (issued|None, modified|None) and never invents a
+    request-time stamp.
+
+    - modified: the upstream file's Last-Modified, else when AberOWL last
+      (re)indexed or updated the ontology.
+    - issued: the ontology's own version date (owl:versionInfo) when that parses
+      as a date; otherwise omitted rather than guessed.
+    """
+    modified = _norm_date(server.get("source_last_modified")
+                          or server.get("last_indexed")
+                          or server.get("last_updated"))
+    issued = _norm_date(server.get("version_info"))
+    return issued, modified
+
+
+def _date_fields(server: Dict[str, Any]) -> Dict[str, Any]:
+    """JSON-LD dcterms:issued/modified for a record, using real registry dates
+    (typed xsd:date or xsd:dateTime). Omits a field when no real date exists."""
+    issued, modified = _artefact_dates(server)
+    out: Dict[str, Any] = {}
+    for key, val in (("dcterms:issued", issued), ("dcterms:modified", modified)):
+        if val:
+            out[key] = {"@type": "xsd:date" if len(val) <= 10 else "xsd:dateTime",
+                        "@value": val}
+    return out
+
+
+def _negotiate_rdf(request: Request, doc: Dict[str, Any], fmt: Optional[str] = None) -> Response:
+    """Serve a JSON-LD record in the representation the client asks for: JSON-LD
+    (default), Turtle, or RDF/XML, chosen by the ``?format=`` query parameter or,
+    failing that, the ``Accept`` header. This is the FAIR interoperability path:
+    the same record is available as machine-readable RDF, not only JSON.
+    """
+    target = (fmt or "").lower()
+    if target not in ("ttl", "turtle", "rdfxml", "rdf", "xml"):
+        accept = request.headers.get("accept", "").lower()
+        if "text/turtle" in accept:
+            target = "ttl"
+        elif "application/rdf+xml" in accept:
+            target = "rdfxml"
+        else:
+            target = "jsonld"
+    if target in ("jsonld", "json-ld"):
+        return JSONResponse(content=doc, media_type="application/ld+json")
+    # RDF serializations via rdflib (json-ld parsing is built in for rdflib >= 6).
+    import rdflib
+    graph = rdflib.Graph()
+    graph.parse(data=json.dumps(doc), format="json-ld")
+    if target in ("ttl", "turtle"):
+        return Response(graph.serialize(format="turtle"), media_type="text/turtle")
+    return Response(graph.serialize(format="xml"), media_type="application/rdf+xml")
+
+
+@app.get("/fair")
+async def fair_descriptor(request: Request, format: Optional[str] = Query(default=None, enum=["jsonld", "ttl", "rdfxml"])):
+    """FAIR service descriptor: the endpoints and RDF representations AberOWL
+    exposes for FAIR access, so a client (or a FAIR assessor such as O'FAIRe) can
+    discover them from one document. Content-negotiable to Turtle and RDF/XML."""
+    base = f"{request.url.scheme}://{request.url.netloc}"
+    doc = {
+        "@context": {
+            "dcterms": "http://purl.org/dc/terms/",
+            "dcat": "http://www.w3.org/ns/dcat#",
+            "mod": "https://w3id.org/mod#",
+        },
+        "@id": f"{base}/fair",
+        "@type": "dcat:Catalog",
+        "dcterms:title": "AberOWL FAIR access",
+        "dcterms:description": (
+            "Endpoints and RDF representations for FAIR access to the AberOWL "
+            "ontology repository."
+        ),
+        "dcat:landingPage": {"@id": base},
+        "representations": ["application/ld+json", "text/turtle", "application/rdf+xml"],
+        "endpoints": {
+            "semantic_artefact_catalogue": f"{base}/artefacts",
+            "artefact": f"{base}/artefacts/{{id}}",
+            "artefact_distributions": f"{base}/artefacts/{{id}}/distributions",
+            "catalogue_records": f"{base}/records",
+            "class_search": f"{base}/api/search_all",
+            "identifier_resolution": f"{base}/api/resolve",
+            "mcp": f"{base}/mcp/ontology/mcp",
+        },
+        "dcterms:conformsTo": [
+            {"@id": "https://w3id.org/mod"},
+            {"@id": "http://www.w3.org/ns/dcat#"},
+            {"@id": "http://www.w3.org/ns/hydra/core#"},
+        ],
+    }
+    return _negotiate_rdf(request, doc, format)
 
 
 # FAIR API Endpoints
@@ -1422,7 +1542,7 @@ async def get_catalogue_info(
 @app.get("/records")
 async def get_catalogue_records(
     request: Request,
-    format: str = Query(default="jsonld", enum=["html", "jsonld", "ttl", "rdfxml"]),
+    format: Optional[str] = Query(default=None, enum=["html", "jsonld", "ttl", "rdfxml"]),
     page: int = Query(default=1, ge=1),
     pagesize: int = Query(default=50, ge=1, le=200),
     display: List[str] = Query(default=None)
@@ -1446,15 +1566,12 @@ async def get_catalogue_records(
                 "@type": "rdfs:Literal",
                 "@value": server.get("title", server["ontology"])
             },
-            "dcterms:modified": {
-                "@type": "rdfs:Literal",
-                "@value": datetime.utcnow().isoformat()
-            },
             "foaf:primaryTopic": {
                 "@id": f"{request.url.scheme}://{request.url.netloc}/artefacts/{server['ontology']}",
                 "@type": "dcat:Resource"
             }
         }
+        record.update(_date_fields(server))
         records.append(record)
     
     response = {
@@ -1497,14 +1614,14 @@ async def get_catalogue_records(
     if format == "html":
         return HTMLResponse(content="<html><body><h1>Catalog Records</h1></body></html>")
     
-    return JSONResponse(content=response)
+    return _negotiate_rdf(request, response, format)
 
 
 @app.get("/records/{artefact_id}")
 async def get_catalogue_record(
     request: Request,
     artefact_id: str,
-    format: str = Query(default="jsonld", enum=["html", "jsonld", "ttl", "rdfxml"]),
+    format: Optional[str] = Query(default=None, enum=["html", "jsonld", "ttl", "rdfxml"]),
     display: List[str] = Query(default=None)
 ):
     """Get information about a semantic artefact catalog record."""
@@ -1531,30 +1648,24 @@ async def get_catalogue_record(
             "@type": "rdfs:Literal",
             "@value": server.get("description", "")
         },
-        "dcterms:issued": {
-            "@type": "rdfs:Literal",
-            "@value": datetime.utcnow().isoformat()
-        },
-        "dcterms:modified": {
-            "@type": "rdfs:Literal",
-            "@value": datetime.utcnow().isoformat()
-        },
         "foaf:primaryTopic": {
             "@id": f"{request.url.scheme}://{request.url.netloc}/artefacts/{artefact_id}",
             "@type": "dcat:Resource"
         }
     }
-    
+    # Real issued/modified from registry metadata (omitted when unknown).
+    record.update(_date_fields(server))
+
     if format == "html":
         return HTMLResponse(content=f"<html><body><h1>Record: {artefact_id}</h1></body></html>")
     
-    return JSONResponse(content=record)
+    return _negotiate_rdf(request, record, format)
 
 
 @app.get("/artefacts")
 async def get_artefacts(
     request: Request,
-    format: str = Query(default="jsonld", enum=["html", "jsonld", "ttl", "rdfxml"]),
+    format: Optional[str] = Query(default=None, enum=["html", "jsonld", "ttl", "rdfxml"]),
     page: int = Query(default=1, ge=1),
     pagesize: int = Query(default=50, ge=1, le=200),
     display: List[str] = Query(default=None)
@@ -1641,14 +1752,14 @@ async def get_artefacts(
     if format == "html":
         return HTMLResponse(content="<html><body><h1>Semantic Artefacts</h1></body></html>")
     
-    return JSONResponse(content=response)
+    return _negotiate_rdf(request, response, format)
 
 
 @app.get("/artefacts/{artefact_id}")
 async def get_artefact(
     request: Request,
     artefact_id: str,
-    format: str = Query(default="jsonld", enum=["html", "jsonld", "ttl", "rdfxml"]),
+    format: Optional[str] = Query(default=None, enum=["html", "jsonld", "ttl", "rdfxml"]),
     display: List[str] = Query(default=None)
 ):
     """Get information about a semantic artefact."""
@@ -1686,10 +1797,10 @@ async def get_artefact(
             "@id": server.get("home_page", server.get("homepage", "")),
             "@type": "foaf:Document"
         },
-        "dcterms:issued": datetime.utcnow().isoformat(),
-        "dcterms:modified": datetime.utcnow().isoformat()
     }
-    
+    # Real issued/modified from registry metadata (omitted when unknown).
+    artefact.update(_date_fields(server))
+
     # Add metadata from server if available
     if "version_info" in server:
         artefact["owl:versionInfo"] = {
@@ -1712,14 +1823,14 @@ async def get_artefact(
     if format == "html":
         return HTMLResponse(content=f"<html><body><h1>Artefact: {artefact_id}</h1></body></html>")
     
-    return JSONResponse(content=artefact)
+    return _negotiate_rdf(request, artefact, format)
 
 
 @app.get("/artefacts/{artefact_id}/distributions")
 async def get_artefact_distributions(
     request: Request,
     artefact_id: str,
-    format: str = Query(default="jsonld", enum=["html", "jsonld", "ttl", "rdfxml"]),
+    format: Optional[str] = Query(default=None, enum=["html", "jsonld", "ttl", "rdfxml"]),
     page: int = Query(default=1, ge=1),
     pagesize: int = Query(default=50, ge=1, le=200),
     display: List[str] = Query(default=None)
@@ -1744,12 +1855,9 @@ async def get_artefact_distributions(
             "@type": "rdfs:Resource"
         },
         "dcterms:format": "application/rdf+xml",
-        "dcterms:issued": {
-            "@type": "rdfs:Literal",
-            "@value": datetime.utcnow().isoformat()
-        }
+        **_date_fields(server)
     }]
-    
+
     response = {
         "@context": {
             "hydra": "http://www.w3.org/ns/hydra/core#",
@@ -1775,14 +1883,14 @@ async def get_artefact_distributions(
     if format == "html":
         return HTMLResponse(content=f"<html><body><h1>Distributions for {artefact_id}</h1></body></html>")
     
-    return JSONResponse(content=response)
+    return _negotiate_rdf(request, response, format)
 
 
 @app.get("/artefacts/{artefact_id}/distributions/latest")
 async def get_artefact_latest_distribution(
     request: Request,
     artefact_id: str,
-    format: str = Query(default="jsonld", enum=["html", "jsonld", "ttl", "rdfxml"]),
+    format: Optional[str] = Query(default=None, enum=["html", "jsonld", "ttl", "rdfxml"]),
     display: List[str] = Query(default=None)
 ):
     """Get information about a semantic artefact's latest distribution."""
@@ -1811,16 +1919,9 @@ async def get_artefact_latest_distribution(
             "@type": "rdfs:Resource"
         },
         "dcterms:format": "application/rdf+xml",
-        "dcterms:issued": {
-            "@type": "rdfs:Literal",
-            "@value": datetime.utcnow().isoformat()
-        },
-        "dcterms:modified": {
-            "@type": "rdfs:Literal",
-            "@value": datetime.utcnow().isoformat()
-        }
+        **_date_fields(server)
     }
-    
+
     # Add metrics if available
     if "class_count" in server:
         distribution["mod:numberOfClasses"] = {
@@ -1844,7 +1945,7 @@ async def get_artefact_distribution(
     request: Request,
     artefact_id: str,
     distribution_id: str,
-    format: str = Query(default="jsonld", enum=["html", "jsonld", "ttl", "rdfxml"]),
+    format: Optional[str] = Query(default=None, enum=["html", "jsonld", "ttl", "rdfxml"]),
     display: List[str] = Query(default=None)
 ):
     """Get information about a semantic artefact's distribution."""
@@ -1859,7 +1960,7 @@ async def get_artefact_distribution(
 async def get_artefact_record(
     request: Request,
     artefact_id: str,
-    format: str = Query(default="jsonld", enum=["html", "jsonld", "ttl", "rdfxml"]),
+    format: Optional[str] = Query(default=None, enum=["html", "jsonld", "ttl", "rdfxml"]),
     display: List[str] = Query(default=None)
 ):
     """Get information about a semantic artefact catalog record."""
@@ -1871,7 +1972,7 @@ async def get_artefact_record(
 async def get_artefact_resources(
     request: Request,
     artefact_id: str,
-    format: str = Query(default="jsonld", enum=["html", "jsonld", "ttl", "rdfxml"]),
+    format: Optional[str] = Query(default=None, enum=["html", "jsonld", "ttl", "rdfxml"]),
     page: int = Query(default=1, ge=1),
     pagesize: int = Query(default=50, ge=1, le=200)
 ):
@@ -1904,7 +2005,7 @@ async def get_artefact_resources(
     if format == "html":
         return HTMLResponse(content=f"<html><body><h1>Resources in {artefact_id}</h1></body></html>")
     
-    return JSONResponse(content=response)
+    return _negotiate_rdf(request, response, format)
 
 
 @app.get("/artefacts/{artefact_id}/resources/{resource_id}")
@@ -1912,7 +2013,7 @@ async def get_artefact_resource(
     request: Request,
     artefact_id: str,
     resource_id: str,
-    format: str = Query(default="jsonld", enum=["html", "jsonld", "ttl", "rdfxml"])
+    format: Optional[str] = Query(default=None, enum=["html", "jsonld", "ttl", "rdfxml"])
 ):
     """Get a specific resources from within an artefact."""
     # This would need to query the actual ontology server
@@ -1923,7 +2024,7 @@ async def get_artefact_resource(
 async def get_artefact_classes(
     request: Request,
     artefact_id: str,
-    format: str = Query(default="jsonld", enum=["html", "jsonld", "ttl", "rdfxml"]),
+    format: Optional[str] = Query(default=None, enum=["html", "jsonld", "ttl", "rdfxml"]),
     page: int = Query(default=1, ge=1),
     pagesize: int = Query(default=50, ge=1, le=200)
 ):
@@ -1956,14 +2057,14 @@ async def get_artefact_classes(
     if format == "html":
         return HTMLResponse(content=f"<html><body><h1>Classes in {artefact_id}</h1></body></html>")
     
-    return JSONResponse(content=response)
+    return _negotiate_rdf(request, response, format)
 
 
 @app.get("/artefacts/{artefact_id}/resources/concepts")
 async def get_artefact_concepts(
     request: Request,
     artefact_id: str,
-    format: str = Query(default="jsonld", enum=["html", "jsonld", "ttl", "rdfxml"]),
+    format: Optional[str] = Query(default=None, enum=["html", "jsonld", "ttl", "rdfxml"]),
     page: int = Query(default=1, ge=1),
     pagesize: int = Query(default=50, ge=1, le=200)
 ):
@@ -1995,14 +2096,14 @@ async def get_artefact_concepts(
     if format == "html":
         return HTMLResponse(content=f"<html><body><h1>Concepts in {artefact_id}</h1></body></html>")
     
-    return JSONResponse(content=response)
+    return _negotiate_rdf(request, response, format)
 
 
 @app.get("/artefacts/{artefact_id}/resources/properties")
 async def get_artefact_properties(
     request: Request,
     artefact_id: str,
-    format: str = Query(default="jsonld", enum=["html", "jsonld", "ttl", "rdfxml"]),
+    format: Optional[str] = Query(default=None, enum=["html", "jsonld", "ttl", "rdfxml"]),
     page: int = Query(default=1, ge=1),
     pagesize: int = Query(default=50, ge=1, le=200)
 ):
@@ -2034,14 +2135,14 @@ async def get_artefact_properties(
     if format == "html":
         return HTMLResponse(content=f"<html><body><h1>Properties in {artefact_id}</h1></body></html>")
     
-    return JSONResponse(content=response)
+    return _negotiate_rdf(request, response, format)
 
 
 @app.get("/artefacts/{artefact_id}/resources/individuals")
 async def get_artefact_individuals(
     request: Request,
     artefact_id: str,
-    format: str = Query(default="jsonld", enum=["html", "jsonld", "ttl", "rdfxml"]),
+    format: Optional[str] = Query(default=None, enum=["html", "jsonld", "ttl", "rdfxml"]),
     page: int = Query(default=1, ge=1),
     pagesize: int = Query(default=50, ge=1, le=200)
 ):
@@ -2071,14 +2172,14 @@ async def get_artefact_individuals(
     if format == "html":
         return HTMLResponse(content=f"<html><body><h1>Individuals in {artefact_id}</h1></body></html>")
     
-    return JSONResponse(content=response)
+    return _negotiate_rdf(request, response, format)
 
 
 @app.get("/artefacts/{artefact_id}/resources/schemes")
 async def get_artefact_schemes(
     request: Request,
     artefact_id: str,
-    format: str = Query(default="jsonld", enum=["html", "jsonld", "ttl", "rdfxml"]),
+    format: Optional[str] = Query(default=None, enum=["html", "jsonld", "ttl", "rdfxml"]),
     page: int = Query(default=1, ge=1),
     pagesize: int = Query(default=50, ge=1, le=200)
 ):
@@ -2108,14 +2209,14 @@ async def get_artefact_schemes(
     if format == "html":
         return HTMLResponse(content=f"<html><body><h1>Concept Schemes in {artefact_id}</h1></body></html>")
     
-    return JSONResponse(content=response)
+    return _negotiate_rdf(request, response, format)
 
 
 @app.get("/artefacts/{artefact_id}/resources/collections")
 async def get_artefact_collections(
     request: Request,
     artefact_id: str,
-    format: str = Query(default="jsonld", enum=["html", "jsonld", "ttl", "rdfxml"]),
+    format: Optional[str] = Query(default=None, enum=["html", "jsonld", "ttl", "rdfxml"]),
     page: int = Query(default=1, ge=1),
     pagesize: int = Query(default=50, ge=1, le=200)
 ):
@@ -2145,14 +2246,14 @@ async def get_artefact_collections(
     if format == "html":
         return HTMLResponse(content=f"<html><body><h1>Collections in {artefact_id}</h1></body></html>")
     
-    return JSONResponse(content=response)
+    return _negotiate_rdf(request, response, format)
 
 
 @app.get("/artefacts/{artefact_id}/resources/labels")
 async def get_artefact_labels(
     request: Request,
     artefact_id: str,
-    format: str = Query(default="jsonld", enum=["html", "jsonld", "ttl", "rdfxml"]),
+    format: Optional[str] = Query(default=None, enum=["html", "jsonld", "ttl", "rdfxml"]),
     page: int = Query(default=1, ge=1),
     pagesize: int = Query(default=50, ge=1, le=200)
 ):
@@ -2182,14 +2283,14 @@ async def get_artefact_labels(
     if format == "html":
         return HTMLResponse(content=f"<html><body><h1>Labels in {artefact_id}</h1></body></html>")
     
-    return JSONResponse(content=response)
+    return _negotiate_rdf(request, response, format)
 
 
 @app.get("/search")
 async def search_all_fair(
     request: Request,
     q: str = Query(..., description="The search query"),
-    format: str = Query(default="jsonld", enum=["html", "jsonld", "ttl", "rdfxml"]),
+    format: Optional[str] = Query(default=None, enum=["html", "jsonld", "ttl", "rdfxml"]),
     page: int = Query(default=1, ge=1),
     pagesize: int = Query(default=50, ge=1, le=200),
     display: List[str] = Query(default=None)
@@ -2262,14 +2363,14 @@ async def search_all_fair(
     if format == "html":
         return HTMLResponse(content=f"<html><body><h1>Search Results for '{q}'</h1></body></html>")
     
-    return JSONResponse(content=response)
+    return _negotiate_rdf(request, response, format)
 
 
 @app.get("/search/content")
 async def search_content(
     request: Request,
     q: str = Query(..., description="The search query"),
-    format: str = Query(default="jsonld", enum=["html", "jsonld", "ttl", "rdfxml"]),
+    format: Optional[str] = Query(default=None, enum=["html", "jsonld", "ttl", "rdfxml"]),
     page: int = Query(default=1, ge=1),
     pagesize: int = Query(default=50, ge=1, le=200)
 ):
@@ -2323,14 +2424,14 @@ async def search_content(
     if format == "html":
         return HTMLResponse(content=f"<html><body><h1>Content Search Results for '{q}'</h1></body></html>")
     
-    return JSONResponse(content=response)
+    return _negotiate_rdf(request, response, format)
 
 
 @app.get("/search/metadata")
 async def search_metadata(
     request: Request,
     q: str = Query(..., description="The search query"),
-    format: str = Query(default="jsonld", enum=["html", "jsonld", "ttl", "rdfxml"]),
+    format: Optional[str] = Query(default=None, enum=["html", "jsonld", "ttl", "rdfxml"]),
     page: int = Query(default=1, ge=1),
     pagesize: int = Query(default=50, ge=1, le=200),
     display: List[str] = Query(default=None)
