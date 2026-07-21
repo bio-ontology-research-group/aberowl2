@@ -68,8 +68,10 @@ after the worker classifies).
 - [x] MCP endpoint published at `http://localhost:8766/mcp` (central binds `0.0.0.0:8766`).
 - [ ] Auto-generate `ABEROWL_SECRET_KEY` + `ADMIN_PASSWORD` on first run (currently sensible
       dev defaults; fine for a private single host, but should self-generate).
-- [ ] Bake the SPA into the published central image (`dist/` is gitignored + bind-mounted in prod),
-      so the web UI is served without a local `npm build`.
+- [x] Bake the SPA into the central image (multi-stage `central_server/Dockerfile`: a Node stage runs
+      `npm ci && npm run build`, the final stage `COPY --from` the built `dist/`), so the web UI is
+      served with no local `npm build`. Prod is unaffected — it bind-mounts its own `dist/` over it.
+      Verified: `http://localhost:8000` serves the real SPA (title, `#root`, `/assets/*.js` -> 200).
 - [ ] Optional nginx + friendly `/mcp` route (`docker-compose.selfhost.override.yml`).
 - [ ] Swap `build:` for the published `ferzcam/aberowl-central` + `ferzcam/aberowl-worker` images
       once they exist, so a user pulls instead of building.
