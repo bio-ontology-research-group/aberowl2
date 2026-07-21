@@ -639,6 +639,39 @@ async def _migrate_unify_registries() -> None:
     logger.info("Registry unification: folded source fields for %d ontologies into %s", migrated, REGISTRY_KEY)
 
 
+# Fields from a registry entry that are safe to expose to unauthenticated API
+# clients. This is an ALLOW-LIST (not a denylist) so that any new internal or
+# ops field added to a registry entry stays private by default and never leaks.
+# In particular this must never include `secret_key` (authorizes the workers'
+# mutating endpoints), the internal worker `url`, or `server_url`.
+_PUBLIC_ONTOLOGY_FIELDS = frozenset({
+    # identity / naming
+    "id", "ontology", "ontology_id", "title", "name", "description",
+    # provenance / versioning
+    "version_info", "version_iri", "license", "default_namespace",
+    "obo_format_version", "home_page", "homepage", "documentation",
+    "publication", "creators", "keywords",
+    # serving state (safe: coarse status only, no url)
+    "status", "reasoner_type",
+    # class/property/example counts and samples
+    "class_count", "property_count", "object_property_count",
+    "individual_count", "example_classes", "example_class",
+})
+
+
+def _public_ontology_view(entry: dict) -> dict:
+    """Return only the public allow-listed fields of a registry entry.
+
+    Registry entries stored in Redis carry internal/ops fields — notably
+    `secret_key` (authorizes worker mutation), the internal worker `url`, and
+    `server_url` — that must NEVER reach API clients. Client-facing handlers
+    that surface registry entries must pass them through this filter.
+    """
+    if not isinstance(entry, dict):
+        return {}
+    return {k: v for k, v in entry.items() if k in _PUBLIC_ONTOLOGY_FIELDS}
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -988,9 +1021,13 @@ async def dl_query_all(request: Request):
 
 @app.get("/api/servers")
 async def get_servers():
-    """Returns a list of registered servers and their metadata from Redis."""
+    """Returns a list of registered servers and their public metadata.
+
+    Filtered through the public allow-list so internal fields (secret_key,
+    internal worker url, server_url, ops status) are never exposed.
+    """
     server_data_json = await redis_client.hvals("registered_servers")
-    servers = [json.loads(s) for s in server_data_json]
+    servers = [_public_ontology_view(json.loads(s)) for s in server_data_json]
     return servers
 
 
@@ -1012,12 +1049,17 @@ async def list_ontologies_api():
 
 @app.get("/api/getOntology")
 async def get_ontology_api(ontology: str = Query(...)):
-    """Return full metadata for a single ontology."""
+    """Return public metadata for a single ontology.
+
+    The stored registry entry carries internal fields (secret_key, internal
+    worker url, server_url, ops status). We serialize ONLY the public
+    allow-list via _public_ontology_view so those are never leaked.
+    """
     server_data_json = await redis_client.hvals("registered_servers")
     servers = [json.loads(s) for s in server_data_json]
     for s in servers:
         if s.get("ontology", "").lower() == ontology.lower():
-            return s
+            return _public_ontology_view(s)
     raise HTTPException(status_code=404, detail=f"Ontology not found: {ontology}")
 
 
@@ -1545,11 +1587,12 @@ async def get_artefacts(
                 "@value": server.get("description", "")
             },
             "dcat:landingPage": {
-                "@id": server.get("url", ""),
+                # Public home page only — never the internal worker url.
+                "@id": server.get("home_page", server.get("homepage", "")),
                 "@type": "foaf:Document"
             }
         }
-        
+
         # Add optional fields if available
         if "keywords" in server:
             artefact["dcat:keyword"] = server["keywords"]
@@ -1639,7 +1682,8 @@ async def get_artefact(
             "@value": server.get("description", "")
         },
         "dcat:landingPage": {
-            "@id": server.get("url", ""),
+            # Public home page only — never the internal worker url.
+            "@id": server.get("home_page", server.get("homepage", "")),
             "@type": "foaf:Document"
         },
         "dcterms:issued": datetime.utcnow().isoformat(),
@@ -1695,7 +1739,8 @@ async def get_artefact_distributions(
             "@value": f"Latest distribution of {server.get('title', artefact_id)}"
         },
         "dcat:accessURL": {
-            "@id": server.get("url", ""),
+            # Public landing/access point only — never the internal worker url.
+            "@id": server.get("home_page", server.get("homepage", "")),
             "@type": "rdfs:Resource"
         },
         "dcterms:format": "application/rdf+xml",
@@ -1761,7 +1806,8 @@ async def get_artefact_latest_distribution(
             "@value": f"Latest distribution of {server.get('title', artefact_id)}"
         },
         "dcat:accessURL": {
-            "@id": server.get("url", ""),
+            # Public landing/access point only — never the internal worker url.
+            "@id": server.get("home_page", server.get("homepage", "")),
             "@type": "rdfs:Resource"
         },
         "dcterms:format": "application/rdf+xml",
