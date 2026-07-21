@@ -82,6 +82,22 @@ const jsonStdio = `{
   }
 }`
 
+// Self-hosting: a single-host instance publishes MCP directly on port 8766 (no
+// nginx proxy), and uses a distinct server name so it doesn't collide with a
+// connection to the hosted service. See deploy/SELF_HOSTING.md.
+const SELFHOST_MCP_URL = 'http://localhost:8766/mcp'
+
+const selfhostCli = `claude mcp add --transport http aberowl-local ${SELFHOST_MCP_URL}`
+
+const selfhostJsonHttp = `{
+  "mcpServers": {
+    "aberowl-local": {
+      "type": "http",
+      "url": "${SELFHOST_MCP_URL}"
+    }
+  }
+}`
+
 const dlExample = `run_dl_query(
   query="'part of' some cell",
   type="subeq",
@@ -135,22 +151,51 @@ export default function Docs() {
 
       {/* Quick connect */}
       <Section id="connect" title="1. Connect your agent">
-        <div className="space-y-6">
-          <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">Claude Code (CLI)</h3>
-            <CodeBlock code={cliSnippet} lang="bash" />
+        {/* Hosted service */}
+        <div className="mb-8">
+          <h3 className="text-base font-bold text-gray-900 mb-1">Hosted AberOWL</h3>
+          <p className="text-sm text-gray-500 mb-4">
+            The public repository at <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">{MCP_URL}</code>. Nothing to install.
+          </p>
+          <div className="space-y-6">
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">Claude Code (CLI)</h4>
+              <CodeBlock code={cliSnippet} lang="bash" />
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">
+                Claude Desktop / any client with native HTTP MCP
+              </h4>
+              <p className="text-sm text-gray-500 mb-2">Add to your client's MCP config (e.g. <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">claude_desktop_config.json</code>):</p>
+              <CodeBlock code={jsonHttp} lang="json" />
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">stdio-only clients (via mcp-remote)</h4>
+              <p className="text-sm text-gray-500 mb-2">For clients that don't speak HTTP transport yet, bridge with <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">mcp-remote</code>:</p>
+              <CodeBlock code={jsonStdio} lang="json" />
+            </div>
           </div>
-          <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">
-              Claude Desktop / any client with native HTTP MCP
-            </h3>
-            <p className="text-sm text-gray-500 mb-2">Add to your client's MCP config (e.g. <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">claude_desktop_config.json</code>):</p>
-            <CodeBlock code={jsonHttp} lang="json" />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">stdio-only clients (via mcp-remote)</h3>
-            <p className="text-sm text-gray-500 mb-2">For clients that don't speak HTTP transport yet, bridge with <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">mcp-remote</code>:</p>
-            <CodeBlock code={jsonStdio} lang="json" />
+        </div>
+
+        {/* Self-hosting */}
+        <div className="border-t border-gray-200 pt-6">
+          <h3 className="text-base font-bold text-gray-900 mb-1">If you are self-hosting</h3>
+          <p className="text-sm text-gray-500 mb-4">
+            A single-host instance (see <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">deploy/SELF_HOSTING.md</code>)
+            publishes MCP directly at <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">{SELFHOST_MCP_URL}</code> —
+            no proxy, so the path is <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">/mcp</code>, not <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">/mcp/ontology/mcp</code>.
+            It uses the name <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">aberowl-local</code> so it doesn't
+            collide with a connection to the hosted service — keep both, or drop whichever you aren't using.
+          </p>
+          <div className="space-y-6">
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">Claude Code (CLI)</h4>
+              <CodeBlock code={selfhostCli} lang="bash" />
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">Native HTTP MCP config</h4>
+              <CodeBlock code={selfhostJsonHttp} lang="json" />
+            </div>
           </div>
         </div>
       </Section>

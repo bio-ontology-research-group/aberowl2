@@ -186,3 +186,8 @@ PAPER_GUIDELINES.md
 
 # Local, personal Claude notes (writing guidance etc.) — never pushed
 CLAUDE.local.md
+
+# keep the self-host example ontology (overrides the *.owl ignore above)
+!/examples/selfhost/ontologies/pizza.owl
+/examples/selfhost/ontologies/ontologies.json
+/examples/selfhost/ontologies/sources.txt
