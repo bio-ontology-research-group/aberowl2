@@ -74,8 +74,54 @@ Shut it down with:
 For multi-ontology workers and an end-to-end local test (central + worker + a couple
 of ontologies), see `central_server/README.md` → "Local end-to-end testing".
 
-## Developing mode
+## Self-hosting your own instance
 
-Prebuilt images are published on DockerHub. To rebuild a worker image from local
-source instead, toggle the build/`dockerhub-compose.yml` lines in `start_docker.sh`
-(see the comments there).
+Run a private, single-host AberOWL 2 over your own ontologies with one command. Your
+ontologies never leave your machine, and an AI agent can reason over them locally
+through the built-in MCP server.
+
+```bash
+# defaults to a bundled example (the pizza ontology), so this works out of the box:
+docker compose -f deploy/docker-compose.selfhost.yml up
+#   web / API -> http://localhost:8000
+#   MCP       -> http://localhost:8766/mcp
+
+# your own ontologies — point at one folder:
+ONTOLOGIES_DIR=./my-ontologies docker compose -f deploy/docker-compose.selfhost.yml up
+```
+
+You feed ontologies to that one folder in two ways that **work together in the same
+folder** — drop `.owl` **files** in directly, and/or add a `sources.txt` listing **URLs**
+to download on startup (e.g. OBO Foundry PURLs). Both are loaded:
+
+```
+my-ontologies/
+  pizza.owl          # a local file
+  sources.txt        # one line:  bfo  http://purl.obolibrary.org/obo/bfo.owl
+```
+
+The example above loads **both** pizza (from the file) and bfo (downloaded from the URL).
+For per-ontology control instead, add an `ontologies.config.json` (authoritative — it
+replaces the files/`sources.txt` scan). It brings up Elasticsearch, Redis, the central
+server, and one worker on an internal network, then loads, classifies, and indexes each
+ontology for search — no cross-host wiring.
+
+See [`deploy/SELF_HOSTING.md`](deploy/SELF_HOSTING.md) and the ready-to-run
+[`examples/selfhost/`](examples/selfhost/).
+
+## Docker images
+
+The self-hosting stack pulls prebuilt images from Docker Hub —
+[`ferzcam/aberowl-central`](https://hub.docker.com/r/ferzcam/aberowl-central) (FastAPI
+API + web UI + MCP server) and
+[`ferzcam/aberowl-worker`](https://hub.docker.com/r/ferzcam/aberowl-worker)
+(Groovy/OWLAPI + ELK reasoner) — so `deploy/docker-compose.selfhost.yml up` runs with
+no local build. To rebuild them from source instead:
+
+```bash
+docker compose -f deploy/docker-compose.selfhost.yml build
+```
+
+Each service keeps a `build:` stanza pointing at its Dockerfile
+(`central_server/Dockerfile`, `Dockerfile.api`), which are the source of truth;
+production builds from them directly.
