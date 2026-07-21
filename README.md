@@ -86,15 +86,25 @@ docker compose -f deploy/docker-compose.selfhost.yml up
 #   web / API -> http://localhost:8000
 #   MCP       -> http://localhost:8766/mcp
 
-# your own ontologies — point at a folder of .owl files and/or a sources.txt of URLs:
+# your own ontologies — point at one folder:
 ONTOLOGIES_DIR=./my-ontologies docker compose -f deploy/docker-compose.selfhost.yml up
 ```
 
-Ontology input, simplest first: drop `.owl` **files** in the folder; list **URLs** in a
-`sources.txt` (e.g. OBO Foundry PURLs) to download on startup; or give an
-`ontologies.config.json` for full control (id + reasoner per ontology). It brings up
-Elasticsearch, Redis, the central server, and one worker on an internal network,
-loads and classifies each ontology, and indexes it for search — no cross-host wiring.
+You feed ontologies to that one folder in two ways that **work together in the same
+folder** — drop `.owl` **files** in directly, and/or add a `sources.txt` listing **URLs**
+to download on startup (e.g. OBO Foundry PURLs). Both are loaded:
+
+```
+my-ontologies/
+  pizza.owl          # a local file
+  sources.txt        # one line:  bfo  http://purl.obolibrary.org/obo/bfo.owl
+```
+
+The example above loads **both** pizza (from the file) and bfo (downloaded from the URL).
+For per-ontology control instead, add an `ontologies.config.json` (authoritative — it
+replaces the files/`sources.txt` scan). It brings up Elasticsearch, Redis, the central
+server, and one worker on an internal network, then loads, classifies, and indexes each
+ontology for search — no cross-host wiring.
 
 See [`deploy/SELF_HOSTING.md`](deploy/SELF_HOSTING.md) and the ready-to-run
 [`examples/selfhost/`](examples/selfhost/).

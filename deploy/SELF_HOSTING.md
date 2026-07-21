@@ -23,17 +23,33 @@ so docker DNS resolves the names and **none of the cross-host IP wiring the prod
 cluster needed applies here**. That is the whole reason a turnkey single-host path is
 feasible with little new code.
 
-## How you feed in ontologies (simplest first)
+## How you feed in ontologies
 
-Point `ONTOLOGIES_DIR` at a folder (defaults to the bundled example). The folder can hold:
+Point `ONTOLOGIES_DIR` at **one** folder. You supply ontologies to it in two ways that
+work **together in the same folder** — you don't pick one:
 
-1. **Bare files** — drop `myont.owl` in; id becomes `myont`, reasoner ELK. Zero config.
-2. **Web sources** — a `sources.txt`, one `[id] URL [reasoner]` per line, downloaded on startup.
-3. **Full control** — an `ontologies.config.json` (authoritative): `[{"id","path"|"url","reasoner"}]`.
+- **Files** — drop `.owl` files in directly. Each file's id comes from its name
+  (`myont.owl` → `myont`), reasoner defaults to ELK.
+- **URLs** — add a `sources.txt` listing ontologies to download on startup, one
+  `[id] URL [reasoner]` per line (e.g. OBO Foundry PURLs; `#` comments allowed).
 
-The `ontology-prepare` step turns whichever of these it finds into a single canonical
-`ontologies.json` that the worker loads, so the three modes share one code path
-(`deploy/selfhost_init.py`, unit-tested in `tests/test_selfhost_init.py`).
+Both are read. For example, a folder holding `pizza.owl` **and** a `sources.txt` with
+`bfo http://purl.obolibrary.org/obo/bfo.owl` loads **both** — pizza from the file and
+bfo from the URL:
+
+```
+my-ontologies/
+  pizza.owl          # a local file
+  sources.txt        # lists URLs to fetch (one is: bfo  http://purl.obolibrary.org/obo/bfo.owl)
+```
+
+**Advanced, instead of the above:** drop an `ontologies.config.json` — a list of
+`{"id", "path" | "url", "reasoner"}` for per-ontology control. When present it is
+**authoritative and replaces** the files/`sources.txt` scan.
+
+The `ontology-prepare` step turns whatever it finds into a single canonical
+`ontologies.json` that the worker loads (`deploy/selfhost_init.py`, unit-tested in
+`tests/test_selfhost_init.py`).
 
 ## UX
 ```bash
