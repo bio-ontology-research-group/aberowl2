@@ -109,8 +109,19 @@ ontology for search — no cross-host wiring.
 See [`deploy/SELF_HOSTING.md`](deploy/SELF_HOSTING.md) and the ready-to-run
 [`examples/selfhost/`](examples/selfhost/).
 
-## Developing mode
+## Docker images
 
-Prebuilt images are published on DockerHub. To rebuild a worker image from local
-source instead, toggle the build/`dockerhub-compose.yml` lines in `start_docker.sh`
-(see the comments there).
+The self-hosting stack pulls prebuilt images from Docker Hub —
+[`ferzcam/aberowl-central`](https://hub.docker.com/r/ferzcam/aberowl-central) (FastAPI
+API + web UI + MCP server) and
+[`ferzcam/aberowl-worker`](https://hub.docker.com/r/ferzcam/aberowl-worker)
+(Groovy/OWLAPI + ELK reasoner) — so `deploy/docker-compose.selfhost.yml up` runs with
+no local build. To rebuild them from source instead:
+
+```bash
+docker compose -f deploy/docker-compose.selfhost.yml build
+```
+
+Each service keeps a `build:` stanza pointing at its Dockerfile
+(`central_server/Dockerfile`, `Dockerfile.api`), which are the source of truth;
+production builds from them directly.
