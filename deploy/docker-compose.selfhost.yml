@@ -88,6 +88,8 @@ services:
       - "${MCP_PORT:-8766}:8766"
     environment:
       - CENTRAL_ES_URL=http://elasticsearch:9200
+      # the in-container MCP server calls the API here (defaults to :80 otherwise)
+      - CENTRAL_SERVER_URL=http://localhost:8000
       # owlPath central hands the worker must match the worker's /data mount
       - ONTOLOGIES_HOST_PATH=/data
       - ADMIN_USER=${ADMIN_USER:-admin}
