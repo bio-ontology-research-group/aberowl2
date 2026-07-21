@@ -24,17 +24,28 @@ Point `ONTOLOGIES_DIR` at your own folder:
 ONTOLOGIES_DIR=./my-ontologies docker compose -f deploy/docker-compose.selfhost.yml up
 ```
 
-That folder can contain, in increasing order of control:
+You feed ontologies to that folder in two ways that **work together in the same
+folder** — you don't pick one:
 
-1. **Bare files** — drop `myont.owl` in; its id becomes `myont`, reasoner ELK.
-2. **Web sources** — add a `sources.txt` (see `ontologies/sources.txt.example`)
-   listing URLs to download on startup.
-3. **Full control** — add an `ontologies.config.json`:
-   ```json
-   [
-     {"id": "myont", "path": "myont.owl", "reasoner": "elk"},
-     {"id": "go",    "url": "http://purl.obolibrary.org/obo/go.owl"}
-   ]
-   ```
+- **Files** — drop `.owl` files in directly (id from the filename, reasoner ELK).
+- **URLs** — add a `sources.txt` (see `ontologies/sources.txt.example`) listing
+  URLs to download on startup.
+
+Both are loaded. For example, this folder loads **both** pizza (file) and bfo (URL):
+
+```
+my-ontologies/
+  pizza.owl          # a local file
+  sources.txt        # one line:  bfo  http://purl.obolibrary.org/obo/bfo.owl
+```
+
+**Advanced, instead of the above** — for per-ontology control, add an
+`ontologies.config.json` (authoritative; it replaces the files/`sources.txt` scan):
+```json
+[
+  {"id": "myont", "path": "myont.owl", "reasoner": "elk"},
+  {"id": "go",    "url": "http://purl.obolibrary.org/obo/go.owl"}
+]
+```
 
 See [`deploy/SELF_HOSTING.md`](../../deploy/SELF_HOSTING.md) for details.
