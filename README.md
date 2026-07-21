@@ -74,6 +74,31 @@ Shut it down with:
 For multi-ontology workers and an end-to-end local test (central + worker + a couple
 of ontologies), see `central_server/README.md` → "Local end-to-end testing".
 
+## Self-hosting your own instance
+
+Run a private, single-host AberOWL 2 over your own ontologies with one command. Your
+ontologies never leave your machine, and an AI agent can reason over them locally
+through the built-in MCP server.
+
+```bash
+# defaults to a bundled example (the pizza ontology), so this works out of the box:
+docker compose -f deploy/docker-compose.selfhost.yml up
+#   web / API -> http://localhost:8000
+#   MCP       -> http://localhost:8766/mcp
+
+# your own ontologies — point at a folder of .owl files and/or a sources.txt of URLs:
+ONTOLOGIES_DIR=./my-ontologies docker compose -f deploy/docker-compose.selfhost.yml up
+```
+
+Ontology input, simplest first: drop `.owl` **files** in the folder; list **URLs** in a
+`sources.txt` (e.g. OBO Foundry PURLs) to download on startup; or give an
+`ontologies.config.json` for full control (id + reasoner per ontology). It brings up
+Elasticsearch, Redis, the central server, and one worker on an internal network,
+loads and classifies each ontology, and indexes it for search — no cross-host wiring.
+
+See [`deploy/SELF_HOSTING.md`](deploy/SELF_HOSTING.md) and the ready-to-run
+[`examples/selfhost/`](examples/selfhost/).
+
 ## Developing mode
 
 Prebuilt images are published on DockerHub. To rebuild a worker image from local
