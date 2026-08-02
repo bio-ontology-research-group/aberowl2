@@ -134,6 +134,17 @@ class OntologyServerManager:
         env = os.environ.copy()
         # Ensure JAVA_OPTS are set, provide smaller default if needed for testing
         env['JAVA_OPTS'] = os.getenv('JAVA_OPTS', '-Xmx2g -Xms512m')
+
+        # OWLAPI's HPPCSet wraps hppcrt's ObjectHashSet, and every such set
+        # pre-allocates an IteratorPool. When HPPC_ITERATOR_POOLSIZE is unset,
+        # hppcrt sizes that pool to the CPU count, so the cost per set scales
+        # with the host's cores rather than with the ontology. On a 256-core
+        # host this measured 80% of a worker's live heap (1.77e9 pooled
+        # iterators = 155 GB of 191 GB on the NCBITaxon worker).
+        if 'HPPC_ITERATOR_POOLSIZE' not in env['JAVA_OPTS']:
+            pool_size = os.getenv('HPPC_ITERATOR_POOLSIZE', '4')
+            env['JAVA_OPTS'] += f' -DHPPC_ITERATOR_POOLSIZE={pool_size}'
+
         logging.info(f"Using JAVA_OPTS: {env['JAVA_OPTS']}")
 
         # Command arguments - Added '-d' for debug output
