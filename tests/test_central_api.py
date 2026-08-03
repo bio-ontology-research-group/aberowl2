@@ -285,20 +285,12 @@ class TestSparqlEndpoint:
         r = await client.get("/api/sparql")
         assert r.status_code == 400
 
-    @pytest.mark.asyncio
-    async def test_sparql_plain_query(self, client, test_app):
-        """Plain SPARQL (no OWL patterns) should pass through."""
-        with patch("app.main.execute_sparql", new_callable=AsyncMock, return_value={
-            "head": {"vars": ["s"]},
-            "results": {"bindings": [{"s": {"type": "uri", "value": "http://example.org/A"}}]},
-        }):
-            r = await client.get("/api/sparql", params={
-                "query": "SELECT ?s WHERE { ?s a <http://www.w3.org/2002/07/owl#Class> } LIMIT 1"
-            })
-            assert r.status_code == 200
-            body = r.json()
-            assert "results" in body
-            assert body.get("expansions") is None  # No expansions for plain SPARQL
+    # NOTE: there is deliberately no test here for executing a plain SPARQL
+    # query. AberOWL rewrites SPARQL, it never executes it — /api/sparql returns
+    # {rewritten_query, expansions, errors} and the caller runs the result
+    # against whatever endpoint they choose. Passthrough of a query carrying no
+    # OWL frames is covered in tests/test_sparql_expander.py
+    # (test_no_match_on_plain_sparql, test_no_frames_returns_query_unchanged).
 
 
 # ---------------------------------------------------------------------------
