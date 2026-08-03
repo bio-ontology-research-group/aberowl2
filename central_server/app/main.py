@@ -70,6 +70,11 @@ UPDATE_CHECK_INTERVAL = int(os.getenv("UPDATE_CHECK_INTERVAL_SECONDS", "86400"))
 # schedule; otherwise trigger them on demand via /admin/sync_sources and
 # /admin/check_updates.
 ENABLE_AUTO_SYNC = os.getenv("ENABLE_AUTO_SYNC", "false").lower() in ("1", "true", "yes")
+# Worker status polling. The sweep used to run unbounded over every registered
+# ontology, which made browsing slow and eventually exhausted the Redis pool.
+# Interval 0 disables the sweep; refresh explicitly via POST /admin/refresh_status.
+STATUS_POLL_INTERVAL = int(os.getenv("STATUS_POLL_INTERVAL", "300"))
+STATUS_POLL_CONCURRENCY = max(1, int(os.getenv("STATUS_POLL_CONCURRENCY", "16")))
 ONTOLOGIES_BASE_PATH = os.getenv("ONTOLOGIES_HOST_PATH", "/data/ontologies")
 ABEROWL_REPO_PATH = os.getenv("ABEROWL_REPO_PATH", "/opt/aberowl")
 
@@ -308,8 +313,15 @@ async def _load_servers_from_file():
         logger.error(f"Failed to load servers from file: {e}")
 
 
-async def fetch_and_update_server_metadata(server: Dict[str, Any]):
-    """Fetches metadata for a single server and updates Redis."""
+async def fetch_and_update_server_metadata(
+    server: Dict[str, Any],
+    session: Optional[aiohttp.ClientSession] = None,
+):
+    """Fetches metadata for a single server and updates Redis.
+
+    Pass `session` to reuse one connection pool across a sweep; without it a
+    private session is created (fine for the single-server registration path).
+    """
     url = server.get("url")
     ontology = server.get("ontology")
     if not url or not ontology:
@@ -326,24 +338,29 @@ async def fetch_and_update_server_metadata(server: Dict[str, Any]):
     # Pass ontologyId so multi-ontology workers return per-ontology metadata with title
     stats_url = f"{poll_base.rstrip('/')}/api/getStatistics.groovy?ontologyId={ontology}"
 
-    logger.info(f"Fetching metadata for {ontology} from {stats_url} (originally {url})")
+    logger.debug(f"Fetching metadata for {ontology} from {stats_url} (originally {url})")
+    owned_session = session is None
+    if owned_session:
+        session = aiohttp.ClientSession()
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(stats_url, timeout=30) as response:
-                if response.status == 200:
-                    stats = await response.json()
-                    server.update(stats)
-                    server["status"] = "online"
-                    # Backfill any fields the OWL file didn't carry (title,
-                    # description, homepage, license, contact) from OBO Foundry.
-                    _apply_registry_fallbacks(server)
-                    logger.info(f"Successfully updated metadata for {ontology} (title: {server.get('title', '')})")
-                else:
-                    logger.warning(f"Failed to fetch metadata for {ontology}. Status: {response.status}")
-                    server["status"] = "offline"
+        async with session.get(stats_url, timeout=30) as response:
+            if response.status == 200:
+                stats = await response.json()
+                server.update(stats)
+                server["status"] = "online"
+                # Backfill any fields the OWL file didn't carry (title,
+                # description, homepage, license, contact) from OBO Foundry.
+                _apply_registry_fallbacks(server)
+                logger.debug(f"Successfully updated metadata for {ontology} (title: {server.get('title', '')})")
+            else:
+                logger.warning(f"Failed to fetch metadata for {ontology}. Status: {response.status}")
+                server["status"] = "offline"
     except Exception as e:
         logger.error(f"Error fetching metadata for {ontology}: {e}")
         server["status"] = "offline"
+    finally:
+        if owned_session:
+            await session.close()
 
     # Always apply registry fallbacks for any still-empty fields (e.g. when the
     # worker was unreachable above, title can still come from the cache).
@@ -563,35 +580,91 @@ def _apply_registry_fallbacks(server: Dict[str, Any]):
             server[field] = meta[field]
 
 
-async def _fetch_and_update_all_servers():
-    """Helper to fetch metadata for all servers in Redis."""
-    logger.info("Starting metadata fetch for all registered servers.")
-    server_keys = await redis_client.hkeys("registered_servers")
-    if not server_keys:
-        logger.info("No registered servers to fetch metadata for.")
-        return
+async def _fetch_and_update_all_servers(only: Optional[List[str]] = None):
+    """Refresh worker-reported metadata/status for registered ontologies.
 
-    tasks = []
-    for key in server_keys:
-        server_json = await redis_client.hget("registered_servers", key)
-        if server_json:
-            server = json.loads(server_json)
-            tasks.append(fetch_and_update_server_metadata(server))
-    
-    if tasks:
-        await asyncio.gather(*tasks)
+    Concurrency is bounded by STATUS_POLL_CONCURRENCY. Previously every
+    registered ontology was polled at once via a bare `asyncio.gather`; with
+    462 ontologies that opened 462 aiohttp sessions and issued 462 concurrent
+    Redis writes, which exhausted the Redis pool and killed this coroutine with
+    `MaxConnectionsError` (production, 2026-07-20). It was also the source of
+    the periodic browsing slowdown.
+
+    Pass `only` to refresh a subset — e.g. just the ontologies on a worker that
+    was restarted during a deploy.
+    """
+    label = f"{len(only)} requested" if only else "all registered"
+    logger.info(f"Starting metadata fetch for {label} servers.")
+
+    # One HGETALL instead of HKEYS + one HGET per ontology.
+    entries = await redis_client.hgetall("registered_servers")
+    if not entries:
+        logger.info("No registered servers to fetch metadata for.")
+        return 0
+
+    wanted = set(only) if only else None
+    servers = []
+    for key, server_json in entries.items():
+        if wanted is not None and key not in wanted:
+            continue
+        try:
+            servers.append(json.loads(server_json))
+        except (TypeError, ValueError):
+            logger.warning(f"Skipping unparseable registry entry for {key}")
+
+    if not servers:
+        logger.info("No matching registered servers to fetch metadata for.")
+        return 0
+
+    sem = asyncio.Semaphore(STATUS_POLL_CONCURRENCY)
+
+    async def _one(server, session):
+        async with sem:
+            await fetch_and_update_server_metadata(server, session=session)
+
+    connector = aiohttp.TCPConnector(limit=STATUS_POLL_CONCURRENCY)
+    async with aiohttp.ClientSession(connector=connector) as session:
+        # return_exceptions so one bad worker cannot abort the whole sweep.
+        results = await asyncio.gather(
+            *(_one(s, session) for s in servers), return_exceptions=True
+        )
+
+    failed = [r for r in results if isinstance(r, Exception)]
+    if failed:
+        logger.warning(
+            f"Metadata fetch: {len(failed)}/{len(servers)} raised; first: {failed[0]!r}"
+        )
+
     # Persist the registry to the backup file ONCE per cycle, not once per
     # server: the per-server write was O(n^2) and blocked the event loop
     # (synchronous full-list json.dump), causing intermittent query stalls.
     await _write_servers_to_file()
-    logger.info("Finished metadata fetch for all registered servers.")
+    logger.info(f"Finished metadata fetch for {len(servers)} servers.")
+    return len(servers)
 
 
 async def periodic_metadata_fetch_task():
-    """Periodically fetches metadata for all registered servers."""
+    """Periodically refresh worker status.
+
+    Set STATUS_POLL_INTERVAL=0 to disable the sweep entirely and rely on
+    POST /admin/refresh_status instead. Any failure is logged and the loop
+    continues; previously an exception escaped here and killed the task
+    permanently, freezing every ontology's status at its last polled value.
+    """
+    if STATUS_POLL_INTERVAL <= 0:
+        logger.info(
+            "Periodic status polling disabled (STATUS_POLL_INTERVAL=0); "
+            "use POST /admin/refresh_status to refresh on demand."
+        )
+        return
     while True:
-        await asyncio.sleep(60)
-        await _fetch_and_update_all_servers()
+        await asyncio.sleep(STATUS_POLL_INTERVAL)
+        try:
+            await _fetch_and_update_all_servers()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Periodic metadata fetch failed; continuing.")
 
 
 async def _migrate_unify_registries() -> None:
@@ -2498,6 +2571,32 @@ async def admin_sync_sources(
     """
     asyncio.create_task(_sync_sources_once())
     return {"status": "source_sync_triggered"}
+
+
+@app.post("/admin/refresh_status")
+async def admin_refresh_status(
+    ontologies: Optional[str] = None,
+    wait: bool = True,
+    credentials: HTTPBasicCredentials = Depends(_require_admin),
+):
+    """Re-poll workers and refresh ontology status on demand.
+
+    This is the deploy hook: after restarting a worker, refresh just its
+    ontologies instead of waiting for (or relying on) the periodic sweep.
+
+    - `ontologies`: comma-separated ids to refresh. Omit to refresh everything.
+    - `wait`: when true (default) the refresh completes before responding, so
+      the caller can read back an accurate status immediately. Pass false to
+      run it in the background.
+
+    Cheap and safe to call repeatedly; it only re-reads worker metadata.
+    """
+    only = [o.strip() for o in ontologies.split(",") if o.strip()] if ontologies else None
+    if not wait:
+        asyncio.create_task(_fetch_and_update_all_servers(only))
+        return {"status": "refresh_triggered", "requested": only or "all"}
+    refreshed = await _fetch_and_update_all_servers(only)
+    return {"status": "refreshed", "count": refreshed, "requested": only or "all"}
 
 
 @app.post("/admin/check_updates")
