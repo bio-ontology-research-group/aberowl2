@@ -1,11 +1,21 @@
-fastapi
-uvicorn[standard]
-jinja2
-aiohttp
-python-multipart
-redis
-pyyaml
-aiofiles
-mcp
-slowapi
-rdflib
+# NOTE: these were all unpinned, which broke production on 2026-08-10: a rebuild
+# pulled mcp 2.0.0, which moved `mcp.server.fastmcp`, and the MCP server failed to
+# start (nginx returned 502). Only `mcp` is constrained here because that is the
+# break we have evidence for; the versions in the comments are what the working
+# container had at the time, recorded so a future pinning pass has a known-good set.
+
+fastapi                 # working: 0.141.1
+uvicorn[standard]       # working: 0.52.1
+jinja2                  # working: 3.1.6
+aiohttp                 # working: 3.14.3
+python-multipart        # working: 0.0.32
+redis                   # working: 8.1.0
+pyyaml                  # working: 6.0.3
+aiofiles                # working: 25.1.0
+
+# mcp 2.0 removed mcp.server.fastmcp, which mcp_ontology_server.py imports.
+# 1.28.1 is verified working (it is what the pre-2026-08-10 image shipped).
+mcp>=1.28.1,<2.0
+
+slowapi                 # working: 0.1.10
+rdflib                  # working: 7.6.0
