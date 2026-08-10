@@ -8,3 +8,4 @@ pyyaml
 aiofiles
 mcp
 slowapi
+rdflib
