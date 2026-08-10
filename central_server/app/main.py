@@ -313,6 +313,20 @@ async def _load_servers_from_file():
         logger.error(f"Failed to load servers from file: {e}")
 
 
+def _license_node(value: str):
+    """Render a licence for JSON-LD.
+
+    dcterms:license expects a resource, so a URI is emitted as {"@id": ...} and is
+    machine-actionable (FAIR R1.1). Registry licences are usually URIs
+    (creativecommons.org, spdx.org) but not always, so anything that is not a URI
+    falls back to a plain literal rather than minting a bogus IRI.
+    """
+    v = (value or "").strip()
+    if v.startswith("http://") or v.startswith("https://"):
+        return {"@id": v}
+    return {"@type": "rdfs:Literal", "@value": v}
+
+
 async def fetch_and_update_server_metadata(
     server: Dict[str, Any],
     session: Optional[aiohttp.ClientSession] = None,
@@ -1780,8 +1794,8 @@ async def get_artefacts(
         # Add optional fields if available
         if "keywords" in server:
             artefact["dcat:keyword"] = server["keywords"]
-        if "license" in server:
-            artefact["dcterms:license"] = server["license"]
+        if server.get("license"):
+            artefact["dcterms:license"] = _license_node(server["license"])
         
         artefacts.append(artefact)
     
@@ -1880,7 +1894,17 @@ async def get_artefact(
             "@type": "xsd:string",
             "@value": server["version_info"]
         }
-    
+
+    # License and keywords, matching the collection at /artefacts. These were
+    # only emitted by the collection, so the per-artefact record — the document a
+    # persistent identifier actually resolves to, and the one a FAIR assessor
+    # fetches for R1.1 (clear usage licence) — omitted a licence the registry
+    # already held for 317 of 971 ontologies.
+    if server.get("license"):
+        artefact["dcterms:license"] = _license_node(server["license"])
+    if server.get("keywords"):
+        artefact["dcat:keyword"] = server["keywords"]
+
     # Add counts if available
     if "class_count" in server:
         artefact["mod:numberOfClasses"] = {
@@ -1892,7 +1916,7 @@ async def get_artefact(
             "@type": "xsd:nonNegativeInteger",
             "@value": server["property_count"]
         }
-    
+
     if format == "html":
         return HTMLResponse(content=f"<html><body><h1>Artefact: {artefact_id}</h1></body></html>")
     
