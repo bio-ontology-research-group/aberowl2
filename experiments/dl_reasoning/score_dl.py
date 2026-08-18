@@ -104,6 +104,10 @@ def main():
                 "n_gold": len(gset), "n_pred": len(pred),
                 "precision": p, "recall": r, "f1": f,
                 "exact_set": pred == gset,
+                # "NONE" conflates "the answer set is empty" with "I do not know".
+                # No gold item has an empty answer, so it is always wrong -- but it is a
+                # DIFFERENT failure from returning wrong IRIs, and the paper should say so.
+                "asserted_empty": (d.get("answer") or "").strip().upper() == "NONE",
                 "error": d.get("error"), "truncated": bool(d.get("truncated")),
             }
             if universe:
@@ -148,8 +152,13 @@ def main():
              "exact": ph, "exact_lo": lo, "exact_hi": hi,
              "truncated": sum(1 for x in rows if x["truncated"]),
              "errors": sum(1 for x in rows if x["error"])}
+        o["asserted_empty"] = sum(1 for x in rows if x.get("asserted_empty")) / n
+        o["attempted"] = sum(1 for x in rows if x["n_pred"]) / n
         if any("n_fabricated" in x for x in rows):
             o["fabricated_runs"] = sum(1 for x in rows if x.get("n_fabricated"))
+            att = [x for x in rows if x["n_pred"]]
+            if att:
+                o["fab_rate_of_attempts"] = sum(x.get("fabrication_rate", 0) for x in att) / len(att)
         dl = [x for x in rows if "formulation_ok" in x]
         o["adopted"] = sum(1 for x in rows if x.get("adopted")) / n
         if dl:
@@ -161,17 +170,21 @@ def main():
     for s in scored:
         by[(s["model"], s["condition"], s["task"])].append(s)
 
-    print(f"{'model':26s} {'condition':13s} {'task':4s} {'n':>4s} {'F1':>6s} "
-          f"{'exact':>6s} {'95% CI':>14s} {'adopt':>6s} {'form':>6s} {'relay':>6s}")
-    print("-" * 108)
+    print(f"{'model':22s} {'condition':13s} {'task':4s} {'n':>4s} {'F1':>6s} "
+          f"{'exact':>6s} {'95% CI':>13s} {'att':>5s} {'NONE':>5s} {'fab':>5s} "
+          f"{'adopt':>6s} {'form':>6s} {'relay':>6s}")
+    print("-" * 124)
     for k in sorted(by):
         m, c, t = k
         s = agg(by[k])
         ci = f"[{s['exact_lo']*100:.1f},{s['exact_hi']*100:.1f}]"
         form = f"{s['formulation_ok']*100:5.1f}" if "formulation_ok" in s else "    -"
         rel = f"{s['relay_ok']*100:5.1f}" if "relay_ok" in s else "    -"
-        print(f"{m.split('/')[-1]:26s} {c:13s} {t:4s} {s['n']:4d} {s['f1']*100:6.1f} "
-              f"{s['exact']*100:6.1f} {ci:>14s} {s['adopted']*100:5.1f} {form:>6s} {rel:>6s}")
+        fab = f"{s.get('fab_rate_of_attempts', 0)*100:4.1f}"
+        print(f"{m.split('/')[-1]:22s} {c:13s} {t:4s} {s['n']:4d} {s['f1']*100:6.1f} "
+              f"{s['exact']*100:6.1f} {ci:>13s} {s['attempted']*100:5.1f} "
+              f"{s['asserted_empty']*100:5.1f} {fab:>5s} "
+              f"{s['adopted']*100:5.1f} {form:>6s} {rel:>6s}")
 
     if not universe:
         print("\nNOTE: no --classes given, so fabrication was NOT measured.")
