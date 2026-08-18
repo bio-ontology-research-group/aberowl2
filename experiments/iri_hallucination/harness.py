@@ -60,9 +60,12 @@ async def call_openrouter(client, model, messages, tools):
 
 
 async def exec_tool(session, name, args):
+    # Caps are config-driven so a set-valued task can widen them. Defaults keep the
+    # IRI experiment's behaviour byte-for-byte.
+    cap = getattr(C, "TOOL_RESULT_CHARS", 4000)
     try:
         res = await session.call_tool(name, args)
-        return "".join(c.text for c in res.content if getattr(c, "text", None))[:4000]
+        return "".join(c.text for c in res.content if getattr(c, "text", None))[:cap]
     except Exception as e:
         return f"(tool error: {e})"
 
@@ -74,6 +77,11 @@ async def _agent(client, session, tools, model, condition, regime, item):
     ]
     invoked = []          # which tools the model actually chose
     pt = ct = 0           # accumulated prompt/completion tokens (for per-model cost)
+    # The MCP session exposes EVERY tool the server has, so advertising a subset is
+    # not isolation: a model can emit a call for a tool this condition never offered
+    # and it would be executed anyway. Enforce the allow-list here, or the condition
+    # is advisory. (Measured: 21% of a lookup-only arm called run_dl_query.)
+    allowed = set(P.CONDITION_TOOLS.get(condition, []))
     for _ in range(C.MAX_TOOL_TURNS):
         msg = await call_openrouter(client, model, messages, tools)
         u = msg.get("_usage") or {}
@@ -88,8 +96,15 @@ async def _agent(client, session, tools, model, condition, regime, item):
             fn = tc["function"]["name"]
             try: args = json.loads(tc["function"].get("arguments") or "{}")
             except Exception: args = {}
-            out = await exec_tool(session, fn, args)
-            invoked.append({"tool": fn, "args": args, "result": out[:600]})
+            if fn not in allowed:
+                out = (f"(tool '{fn}' is not available; available tools: "
+                       f"{', '.join(sorted(allowed)) or 'none'})")
+                invoked.append({"tool": fn, "args": args, "result": out, "blocked": True})
+            else:
+                out = await exec_tool(session, fn, args)
+                # Recording LESS than the model saw makes relay fidelity unmeasurable.
+                invoked.append({"tool": fn, "args": args,
+                                "result": out[:getattr(C, "TOOL_LOG_CHARS", 600)]})
             messages.append({"role": "tool", "tool_call_id": tc.get("id"), "content": out})
     return _result(item, model, condition, regime, msg.get("content") or "", invoked, truncated=True, pt=pt, ct=ct)
 
@@ -110,7 +125,8 @@ async def run_item(client, model, condition, regime, item):
 def _result(item, model, condition, regime, text, invoked, error=None, truncated=False, pt=0, ct=0):
     return {"term": item["term"], "ontology": item.get("ontology"), "gold_iri": item.get("gold_iri"),
             "difficulty": item.get("difficulty"), "model": model, "condition": condition,
-            "regime": regime, "answer": text.strip(), "tools_invoked": [t["tool"] for t in invoked],
+            "regime": regime, "answer": text.strip(), "tools_invoked": [t["tool"] for t in invoked if not t.get("blocked")],
+            "tools_blocked": [t["tool"] for t in invoked if t.get("blocked")],
             "tool_calls": invoked, "error": error, "truncated": truncated,
             "prompt_tokens": pt, "completion_tokens": ct}
 
