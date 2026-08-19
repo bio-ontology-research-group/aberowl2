@@ -28,12 +28,15 @@ ABEROWL_API = os.getenv("ABEROWL_API", "http://aber-owl.net/api")
 #   qwen3.6-35b-a3b  0.14/1.00         ~$1
 #   deepseek-v3.2    0.23/0.34         ~$0.30
 #   gemini-3.5-flash 1.50/9.00         ~$24  <-- 91% of the IRI budget (thinking on by default)
+# Ordered by OUTPUT price, which dominates: this task's cost is driven by
+# completion tokens, so deepseek (0.34/M out) is cheaper than qwen (1.00/M out)
+# despite a higher input price. Measured on the first two models.
 MODELS = [
-    "openai/gpt-oss-20b",
-    "meta-llama/llama-4-scout",
-    "qwen/qwen3.6-35b-a3b",
-    "deepseek/deepseek-v3.2",
-    "google/gemini-3.5-flash",
+    "openai/gpt-oss-20b",        # measured $0.576 (480 runs, 6,798 out tok/run)
+    "meta-llama/llama-4-scout",  # measured $0.204 (480 runs,   184 out tok/run)
+    "deepseek/deepseek-v3.2",    # est ~$1.4-1.9
+    "qwen/qwen3.6-35b-a3b",      # est ~$3.8-5.3
+    "google/gemini-3.5-flash",   # est ~$35-130  <-- 85-94% of the whole budget
 ]
 # gpt-5.5 stays dropped (~$40+ on the IRI design; worse here).
 
