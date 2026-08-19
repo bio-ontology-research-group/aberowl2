@@ -64,8 +64,9 @@ services:
       - ONTOLOGY_PATH=/data/ontologies.json
     volumes:
       - ${ONTOLOGIES_DIR:-../examples/selfhost/ontologies}:/data:ro
-      - ../aberowlapi:/app/aberowlapi
-      - ../docker/scripts:/scripts
+      # Only the user's ontologies are mounted; application code comes from the
+      # published image, so "the same images run a private instance" holds
+      # literally. For local code, `docker compose ... build` rebuilds and retags.
     command: python3 /app/api_server.py /data/ontologies.json
     healthcheck:
       # groovy image has python3 (not curl); "ok" means >=1 ontology classified

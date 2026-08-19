@@ -2,7 +2,6 @@ import os
 import click
 # Import uvicorn only when needed to avoid dependency issues
 from aberowlapi.server_manager import OntologyServerManager
-from aberowlapi.virtuoso_manager import VirtuosoManager
 from aberowlapi.util import release_port
 @click.group()
 def cli():

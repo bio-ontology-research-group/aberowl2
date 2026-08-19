@@ -44,7 +44,6 @@ The central server does not store triples and does not execute SPARQL. `/api/spa
 - `aberowlapi/src/ReasonerFactory.groovy` — ELK (default), StructuralReasoner, HermiT.
 - `aberowlapi/src/*.groovy` — QueryEngine, QueryParser, ShortFormProviders.
 - `aberowlapi/server_manager.py` — Python process launcher; handles optional self-registration with the central server (single-ontology mode).
-- `aberowlapi/virtuoso_manager.py` — Virtuoso SQL client.
 - `agents/query_parser.py` — LLM query parser (FastAPI).
 - `central_server/app/main.py` — FastAPI app: registry, source-sync, daily update check, server list, MCP launcher.
 - `central_server/app/intake/` — OBO Foundry, BioPortal, and manual-list intake; writes registry metadata only (does not spin up workers).
@@ -123,6 +122,17 @@ deploy with `deploy/deploy.sh` (full procedure + rollback in `deploy/README.md`)
 - **Verify changes are non-breaking before deploying.** Beta is a live service:
   prefer additive/fallback changes, run the tests, and reason through whether the
   change can alter existing behavior — not just the new path.
+
+### Production (aber-owl.net)
+
+Production was migrated to AberOWL 2 on the old prod cluster (central + ES on
+`main` 10.254.147.137; workers split across 10.254.146.227 / 10.254.146.61) and
+went **LIVE 2026-07-13**. It's a memory-limited subset, and unlike beta the
+components are split across hosts and wired by IP (not docker-compose names).
+**Open follow-ups, the recovery/launch tooling, the rollback steps, and the
+deploy gotchas are in [`DEPLOY_FOLLOWUPS.md`](DEPLOY_FOLLOWUPS.md) — read it
+before touching prod** (finishing search indexing, recovering the deferred
+ontologies by re-packing the over-packed workers, MCP re-registration).
 
 ## Key Technical Details
 
