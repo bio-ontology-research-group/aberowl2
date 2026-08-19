@@ -67,12 +67,30 @@ def main():
     rows = [json.loads(l) for l in open(a.runs) if l.strip()]
 
     if a.gold:
-        keep = {(g["term"], g.get("ontology"))
+        # Key on difficulty as well. The duplicated terms were sampled into DIFFERENT
+        # strata, so both copies share a (term, ontology) key and filtering on that
+        # alone keeps both runs and leaves the double-weighting in place.
+        keep = {(g["term"], g.get("ontology"), g.get("difficulty"))
                 for g in (json.loads(l) for l in open(a.gold) if l.strip())}
         before = len(rows)
-        rows = [r for r in rows if (r["term"], r.get("ontology")) in keep]
+        rows = [r for r in rows
+                if (r["term"], r.get("ontology"), r.get("difficulty")) in keep]
+        # Most duplicated gold rows carry the SAME difficulty ("cell fusion" appears
+        # twice, both L3_hard), so no gold-side key separates them. De-duplicate on
+        # the RUNS: one measurement per prompt per cell. The discarded copies are the
+        # identical-prompt replicates dedup_gold.py reports as the determinism check,
+        # so they are not lost, only moved out of the weighting.
+        seen, uniq = set(), []
+        for r in rows:
+            k = (r["model"], r["regime"], r["condition"], r["term"], r.get("ontology"))
+            if k in seen:
+                continue
+            seen.add(k)
+            uniq.append(r)
+        dropped = len(rows) - len(uniq)
+        rows = uniq
         print(f"gold filter {os.path.basename(a.gold)}: {before} -> {len(rows)} runs "
-              f"({len(keep)} gold items)")
+              f"({len(keep)} gold items; {dropped} duplicate-prompt runs collapsed)")
 
     blob = json.load(open(a.map))
     exist = blob.get("map", blob)

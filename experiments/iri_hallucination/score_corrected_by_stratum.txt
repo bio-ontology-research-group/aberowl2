@@ -1,0 +1,44 @@
+gold filter gold_dedup.jsonl: 3450 -> 3231 runs (162 gold items; 199 duplicate-prompt runs collapsed)
+existence map: 898 IRIs resolved 2026-08-19T08:32:58Z (806 exist, 88 absent, 4 unresolved) via http://aber-owl.net/api, https://beta.aber-owl.net/api
+
+model / regime / cond                                |  n   acc%[95% CI]      halluc%[95% CI]   vwrong%  abst%  unk
+deepseek/deepseek-v3.2 / abstain / find_iri / null-gold | 40    0.0[ 0.0, 8.8]    2.5[ 0.4,12.9]     0.0   97.5    0
+deepseek/deepseek-v3.2 / abstain / find_iri / real   | 122  96.7[91.9,98.7]    0.0[ 0.0, 3.1]     2.5    0.8    0
+deepseek/deepseek-v3.2 / abstain / none / null-gold  | 40    0.0[ 0.0, 8.8]   72.5[57.2,83.9]     0.0   27.5    0
+deepseek/deepseek-v3.2 / abstain / none / real       | 122  24.6[17.8,32.9]    2.5[ 0.8, 7.0]    73.0    0.0    0
+deepseek/deepseek-v3.2 / forced / find_iri / null-gold | 40    0.0[ 0.0, 8.8]   52.5[37.5,67.1]     0.0   47.5    0
+deepseek/deepseek-v3.2 / forced / find_iri / real    | 122  96.7[91.9,98.7]    0.0[ 0.0, 3.1]     3.3    0.0    0
+deepseek/deepseek-v3.2 / forced / none / null-gold   | 40    0.0[ 0.0, 8.8]  100.0[91.2,100.0]     0.0    0.0    0
+deepseek/deepseek-v3.2 / forced / none / real        | 122  27.0[20.0,35.5]    1.7[ 0.5, 5.8]    71.1    0.0    1
+google/gemini-3.5-flash / abstain / find_iri / null-gold | 40    0.0[ 0.0, 8.8]    5.0[ 1.4,16.5]     0.0   95.0    0
+google/gemini-3.5-flash / abstain / find_iri / real  | 122  95.9[90.8,98.2]    0.0[ 0.0, 3.1]     0.8    3.3    0
+google/gemini-3.5-flash / abstain / none / null-gold | 40    0.0[ 0.0, 8.8]   47.5[32.9,62.5]     0.0   52.5    0
+google/gemini-3.5-flash / abstain / none / real      | 122  36.1[28.1,44.9]    1.6[ 0.5, 5.8]    57.4    4.9    0
+google/gemini-3.5-flash / forced / find_iri / null-gold | 40    0.0[ 0.0, 8.8]   37.5[24.2,53.0]     0.0   62.5    0
+google/gemini-3.5-flash / forced / find_iri / real   | 122  95.9[90.8,98.2]    0.0[ 0.0, 3.1]     0.8    3.3    0
+google/gemini-3.5-flash / forced / none / null-gold  | 40    0.0[ 0.0, 8.8]   97.5[87.1,99.6]     0.0    2.5    0
+google/gemini-3.5-flash / forced / none / real       | 122  36.1[28.1,44.9]    2.5[ 0.8, 7.0]    61.5    0.0    0
+meta-llama/llama-4-scout / abstain / find_iri / null-gold | 40    0.0[ 0.0, 8.8]   17.5[ 8.7,32.0]     0.0   82.5    0
+meta-llama/llama-4-scout / abstain / find_iri / real | 122  82.8[75.1,88.5]    5.7[ 2.8,11.4]     3.3    8.2    0
+meta-llama/llama-4-scout / abstain / none / null-gold | 40    0.0[ 0.0, 8.8]   85.0[70.9,92.9]     0.0   15.0    0
+meta-llama/llama-4-scout / abstain / none / real     | 122   4.9[ 2.3,10.3]    9.0[ 5.1,15.4]    82.0    4.1    0
+meta-llama/llama-4-scout / forced / find_iri / null-gold | 40    0.0[ 0.0, 8.8]   92.5[80.1,97.4]     0.0    7.5    0
+meta-llama/llama-4-scout / forced / find_iri / real  | 122  92.6[86.6,96.1]    3.3[ 1.3, 8.1]     3.3    0.8    0
+meta-llama/llama-4-scout / forced / none / null-gold | 40    0.0[ 0.0, 8.8]   97.5[87.1,99.6]     0.0    2.5    0
+meta-llama/llama-4-scout / forced / none / real      | 122   6.6[ 3.4,12.4]   12.3[ 7.6,19.3]    80.3    0.8    0
+openai/gpt-oss-20b / abstain / find_iri / null-gold  | 40    0.0[ 0.0, 8.8]   15.0[ 7.1,29.1]     0.0   85.0    0
+openai/gpt-oss-20b / abstain / find_iri / real       | 122  96.7[91.9,98.7]    0.0[ 0.0, 3.1]     2.5    0.8    0
+openai/gpt-oss-20b / abstain / none / null-gold      | 40    0.0[ 0.0, 8.8]    7.5[ 2.6,19.9]     0.0   92.5    0
+openai/gpt-oss-20b / abstain / none / real           | 119   7.6[ 4.0,13.8]    9.2[ 5.2,15.8]    43.7   39.5    0
+openai/gpt-oss-20b / forced / find_iri / null-gold   | 40    0.0[ 0.0, 8.8]   67.5[52.0,79.9]     0.0   32.5    0
+openai/gpt-oss-20b / forced / find_iri / real        | 122  96.7[91.9,98.7]    0.0[ 0.0, 3.1]     3.3    0.0    0
+openai/gpt-oss-20b / forced / none / null-gold       | 39    0.0[ 0.0, 9.0]   79.5[64.5,89.2]     0.0   20.5    0
+openai/gpt-oss-20b / forced / none / real            | 121   6.6[ 3.4,12.5]   21.5[15.1,29.6]    61.2   10.7    0
+qwen/qwen3.6-35b-a3b / abstain / find_iri / null-gold | 40    0.0[ 0.0, 8.8]   10.0[ 4.0,23.1]     0.0   90.0    0
+qwen/qwen3.6-35b-a3b / abstain / find_iri / real     | 122  96.7[91.9,98.7]    0.0[ 0.0, 3.1]     1.6    1.6    0
+qwen/qwen3.6-35b-a3b / abstain / none / null-gold    | 40    0.0[ 0.0, 8.8]   15.0[ 7.1,29.1]     0.0   85.0    0
+qwen/qwen3.6-35b-a3b / abstain / none / real         | 121   8.3[ 4.6,14.5]    3.3[ 1.3, 8.2]    55.4   33.1    0
+qwen/qwen3.6-35b-a3b / forced / find_iri / null-gold | 37    0.0[ 0.0, 9.4]   56.8[40.9,71.3]     0.0   43.2    0
+qwen/qwen3.6-35b-a3b / forced / find_iri / real      | 122  95.9[90.8,98.2]    0.0[ 0.0, 3.1]     1.6    2.5    0
+qwen/qwen3.6-35b-a3b / forced / none / null-gold     | 40    0.0[ 0.0, 8.8]   80.0[65.2,89.5]     0.0   20.0    0
+qwen/qwen3.6-35b-a3b / forced / none / real          | 122   9.0[ 5.1,15.4]    6.6[ 3.4,12.4]    79.5    4.9    0

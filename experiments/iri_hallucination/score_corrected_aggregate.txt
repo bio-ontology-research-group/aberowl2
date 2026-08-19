@@ -1,0 +1,24 @@
+gold filter gold_dedup.jsonl: 3450 -> 3231 runs (162 gold items; 199 duplicate-prompt runs collapsed)
+existence map: 898 IRIs resolved 2026-08-19T08:32:58Z (806 exist, 88 absent, 4 unresolved) via http://aber-owl.net/api, https://beta.aber-owl.net/api
+
+model / regime / cond                                |  n   acc%[95% CI]      halluc%[95% CI]   vwrong%  abst%  unk
+deepseek/deepseek-v3.2 / abstain / find_iri          | 162  72.8[65.5,79.1]    0.6[ 0.1, 3.4]     1.9   24.7    0
+deepseek/deepseek-v3.2 / abstain / none              | 162  18.5[13.3,25.2]   19.8[14.4,26.6]    54.9    6.8    0
+deepseek/deepseek-v3.2 / forced / find_iri           | 162  72.8[65.5,79.1]   13.0[ 8.6,19.0]     2.5   11.7    0
+deepseek/deepseek-v3.2 / forced / none               | 162  20.4[14.9,27.2]   26.1[19.9,33.4]    53.4    0.0    1
+google/gemini-3.5-flash / abstain / find_iri         | 162  72.2[64.9,78.5]    1.2[ 0.3, 4.4]     0.6   25.9    0
+google/gemini-3.5-flash / abstain / none             | 162  27.2[20.9,34.5]   13.0[ 8.6,19.0]    43.2   16.7    0
+google/gemini-3.5-flash / forced / find_iri          | 162  72.2[64.9,78.5]    9.3[ 5.7,14.7]     0.6   17.9    0
+google/gemini-3.5-flash / forced / none              | 162  27.2[20.9,34.5]   25.9[19.8,33.2]    46.3    0.6    0
+meta-llama/llama-4-scout / abstain / find_iri        | 162  62.3[54.7,69.4]    8.6[ 5.2,14.0]     2.5   26.5    0
+meta-llama/llama-4-scout / abstain / none            | 162   3.7[ 1.7, 7.8]   27.8[21.5,35.1]    61.7    6.8    0
+meta-llama/llama-4-scout / forced / find_iri         | 162  69.8[62.3,76.3]   25.3[19.2,32.5]     2.5    2.5    0
+meta-llama/llama-4-scout / forced / none             | 162   4.9[ 2.5, 9.4]   33.3[26.5,40.9]    60.5    1.2    0
+openai/gpt-oss-20b / abstain / find_iri              | 162  72.8[65.5,79.1]    3.7[ 1.7, 7.8]     1.9   21.6    0
+openai/gpt-oss-20b / abstain / none                  | 159   5.7[ 3.0,10.4]    8.8[ 5.3,14.2]    32.7   52.8    0
+openai/gpt-oss-20b / forced / find_iri               | 162  72.8[65.5,79.1]   16.7[11.7,23.2]     2.5    8.0    0
+openai/gpt-oss-20b / forced / none                   | 160   5.0[ 2.6, 9.6]   35.6[28.6,43.3]    46.2   13.1    0
+qwen/qwen3.6-35b-a3b / abstain / find_iri            | 162  72.8[65.5,79.1]    2.5[ 1.0, 6.2]     1.2   23.5    0
+qwen/qwen3.6-35b-a3b / abstain / none                | 161   6.2[ 3.4,11.1]    6.2[ 3.4,11.1]    41.6   46.0    0
+qwen/qwen3.6-35b-a3b / forced / find_iri             | 159  73.6[66.2,79.8]   13.2[ 8.8,19.3]     1.3   11.9    0
+qwen/qwen3.6-35b-a3b / forced / none                 | 162   6.8[ 3.8,11.7]   24.7[18.7,31.9]    59.9    8.6    0
