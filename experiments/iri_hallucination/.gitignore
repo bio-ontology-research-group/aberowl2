@@ -1,0 +1,8 @@
+# scratch / smoke run artifacts
+gold_smoke.jsonl
+gold_tiny.jsonl
+runs_smoke.jsonl
+runs_conc.jsonl
+runs_tiny.jsonl
+*.log
+iri_exists_cache.json

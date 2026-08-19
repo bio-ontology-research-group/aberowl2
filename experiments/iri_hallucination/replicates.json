@@ -1,0 +1,18 @@
+{
+  "identical_prompt_pairs": 239,
+  "exact_iri_agreement": 79.5,
+  "correctness_agreement": 94.1,
+  "by_condition": {
+    "none": {
+      "pairs": 119,
+      "exact_iri_agreement": 60.5,
+      "correctness_agreement": 89.1
+    },
+    "find_iri": {
+      "pairs": 120,
+      "exact_iri_agreement": 98.3,
+      "correctness_agreement": 99.2
+    }
+  },
+  "note": "Temperature 0 is not deterministic in this study's own data. All pairs are WITHIN a single harness invocation, so they bound run-to-run noise but not provider drift over time."
+}
