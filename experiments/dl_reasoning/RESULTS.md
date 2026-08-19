@@ -116,24 +116,31 @@ Decomposition: adoption 100%, formulation 100%, relay 98.3/100%.
 
 ### The two models fail in opposite ways without the tool
 
-Distinct IRIs emitted in the `none` arm, checked against the class universe offline:
+Per-run rates, averaged over runs that attempted an answer. **Use per-run, not pooled
+distinct IRIs**: one gpt-oss run enumerated 2,644 sequential `NCBITaxon_*` IDs and by
+itself supplied ~90% of the distinct IRIs in its arm, which makes any pooled
+fabrication rate an artifact of a single outlier.
 
-| model | distinct | real classes | well-formed but nonexistent | malformed |
+| | gpt-oss `none` | gpt-oss `dlquery` | llama `none` | llama `dlquery` |
 |---|---|---|---|---|
-| gpt-oss-20b | 3,174 | 3,171 (99.9%) | 1 | 2 |
-| llama-4-scout | 2,142 | 1,026 (47.9%) | **1,056 (49.3%)** | 60 (2.8%) |
+| exact set | 0.0 | **95.0** | 0.0 | **99.2** |
+| attempted | 39.2% | 98.3% | 81.7% | 100% |
+| mean fabrication | 2.1% | **0.0** | 37.5% | **0.0** |
+| median IRIs returned | 4 | 5 | 2 | 5 |
+| max IRIs returned | **2,939** | **25** | **860** | **25** |
 
-Two distinct failure modes, and the paper should report both:
+Three results here:
 
-- **gpt-oss-20b almost never fabricates** — 99.9% of what it emits are real ontology
-  classes — yet **none of them are the right answer**. This is the valid-but-wrong
-  result (review point W3) reproduced in set retrieval.
-- **llama-4-scout fabricates about half the time**: 1,056 well-formed OBO-style IRIs
-  that do not exist in the release, plus 60 malformed strings
-  (`http://purl.obol`, `.../obo/CL_0000000_15749`, `.../obo/Biological_Process_0000380`).
-
-Both drop to **0.0% fabrication** in the `dlquery` arms. The tool does not merely
-improve accuracy; it removes identifier fabrication entirely.
+- **Fabrication differs 18x between models unaided** (2.1% vs 37.5%) and goes to
+  **zero for both** with the reasoner. gpt-oss-20b mostly emits real classes that are
+  simply the wrong ones (the valid-but-wrong result, review point W3); llama-4-scout
+  invents well-formed OBO identifiers that do not exist, plus 60 malformed strings
+  (`http://purl.obol`, `.../obo/Biological_Process_0000380`).
+- **Unaided models do not know when to stop.** Maximum answer sizes of 2,939 and 860
+  IRIs against a gold ceiling of 25. With the reasoner the maximum is exactly 25 and
+  the median is 5, matching gold. The tool constrains cardinality, not just content.
+- **Grounding alone does not fix either problem**: the `lookup` arm reaches 4.2% and
+  1.7% exact, with runaway generation still present (max 2,644).
 
 ### Hint anchoring replicates
 
