@@ -191,3 +191,24 @@ CLAUDE.local.md
 !/examples/selfhost/ontologies/pizza.owl
 /examples/selfhost/ontologies/ontologies.json
 /examples/selfhost/ontologies/sources.txt
+
+# --- Secrets: never commit ---
+# .aberowl_secret_key was tracked on a PUBLIC repo from 2026-03-05 and is baked
+# into the published worker image by Dockerfile.api. Treat it as compromised and
+# rotate; removing it from git does not undo the exposure.
+.aberowl_secret_key
+*.secret_key
+*.pem
+*.key
+!*.pub
+
+# --- Local working notes and personal files: never pushed ---
+CLAUDE.local.md*
+*.bak-rename
+TODO.md
+AGENTS.md
+arindam_memory_email.txt*
+*~
+
+# --- Local ops output (host IPs, capacity data, fleet reports) ---
+results/
