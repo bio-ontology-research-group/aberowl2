@@ -118,11 +118,17 @@ def main():
         for c in mine(ont, a.n):
             lbl = c["label"]
             if lbl and lbl.count(" ") >= 2 and len(lbl) <= MAX_TERM_LEN:
-                pool.append((ont, lbl))
+                # Keep the IRI: `ont` is the ontology we QUERIED, but the class
+                # returned may belong to another (querying go can return a CL
+                # class), which would file the recombined term under the wrong
+                # ontology and make it unresolvable for the wrong reason.
+                pool.append((c["iri"], lbl))
     random.shuffle(pool)
     tails = list({lbl.rsplit(" ", 1)[-1] for _, lbl in pool})
     made = 0
-    for ont, lbl in pool:
+    for src_iri, lbl in pool:
+        ont = ont_of_iri(src_iri)
+        if not ont: continue
         if made >= a.n: break
         head, last = lbl.rsplit(" ", 1)
         alts = [t for t in tails if t.lower() != last.lower()]
@@ -134,7 +140,19 @@ def main():
     with open(a.out, "w") as f:
         for it in items: f.write(json.dumps(it) + "\n")
     by = collections.Counter(i["difficulty"] for i in items)
+    # Validation, because both defects below reached the published supplementary:
+    # duplicate rows weighted every reported percentage (W11b), and a per-ontology
+    # breakdown that summed to 173 rather than the real-class count (W11).
+    keys = [(i["term"], i.get("ontology")) for i in items]
+    dupes = [k for k, c in collections.Counter(keys).items() if c > 1]
+    assert not dupes, f"duplicate (term, ontology) keys: {dupes[:5]}"
+    real = [i for i in items if i.get("gold_iri")]
+    per_ont = collections.Counter(i.get("ontology") for i in real)
+    assert sum(per_ont.values()) == len(real), (
+        f"per-ontology breakdown sums to {sum(per_ont.values())}, not {len(real)}")
     print(f"wrote {len(items)} items to {a.out}: {dict(by)}")
+    print(f"  {len(real)} real classes, {len(items) - len(real)} nonexistent")
+    print(f"  per-ontology (real only): {dict(per_ont.most_common())}")
 
 if __name__ == "__main__":
     main()
