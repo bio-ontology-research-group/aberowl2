@@ -125,3 +125,19 @@ docker compose -f deploy/docker-compose.selfhost.yml build
 Each service keeps a `build:` stanza pointing at its Dockerfile
 (`central_server/Dockerfile`, `Dockerfile.api`), which are the source of truth;
 production builds from them directly.
+
+## Paper evaluation
+
+Two evaluations reported in the AberOWL 2.0 paper live under `experiments/`.
+
+[`experiments/iri_hallucination/`](experiments/iri_hallucination/) asks whether the
+`find_iri` MCP tool reduces how often LLM agents hallucinate ontology-class IRIs.
+Key files: `gold_dedup.jsonl` (the graded term set), `harness.py` (runs each model
+over MCP), `runs_full.jsonl` (raw per-run outputs), `build_exists_map.py` and
+`iri_exists_resolved.json` (the committed existence map, so scoring is deterministic
+offline), `score.py`, and `RESULTS.md`.
+
+[`experiments/dl_reasoning/`](experiments/dl_reasoning/) asks whether agents can
+exploit the reasoner itself, comparing no tool, lookup-only tools, and
+`run_dl_query` over DL queries whose gold answers are built outside AberOWL by
+`build_dl_gold.groovy`. See its `README.md` and `RESULTS.md`.

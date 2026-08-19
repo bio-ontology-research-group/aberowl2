@@ -29,8 +29,8 @@ test = [
 asyncio_mode = "auto"
 timeout = 900          # 15 min hard cap per test (GO classification can be slow)
 testpaths = ["tests"]
-# Exclude pre-existing tests that require gevent (aberowlapi/, virtuoso/)
-norecursedirs = ["tests/aberowlapi", "tests/virtuoso"]
+# Exclude pre-existing tests that require gevent (aberowlapi/)
+norecursedirs = ["tests/aberowlapi"]
 markers = [
     "slow: tests that spin up Docker containers and may take several minutes",
     "bioportal: tests that call the live BioPortal API",

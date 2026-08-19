@@ -89,7 +89,7 @@ after the worker classifies).
       served with no local `npm build`. Prod is unaffected — it bind-mounts its own `dist/` over it.
       Verified: `http://localhost:8000` serves the real SPA (title, `#root`, `/assets/*.js` -> 200).
 - [ ] Optional nginx + friendly `/mcp` route (`docker-compose.selfhost.override.yml`).
-- [ ] Swap `build:` for the published `ferzcam/aberowl-central` + `ferzcam/aberowl-worker` images
+- [x] Swap `build:` for the published `ferzcam/aberowl-central` + `ferzcam/aberowl-worker` images
       once they exist, so a user pulls instead of building.
 
 ## Notes

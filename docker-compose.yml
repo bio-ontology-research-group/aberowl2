@@ -8,7 +8,6 @@ services:
       - ABEROWL_REGISTER=${ABEROWL_REGISTER}
       - ABEROWL_CENTRAL_URL=${ABEROWL_CENTRAL_URL}
       # Central infrastructure (provided by the central docker-compose stack)
-      - CENTRAL_VIRTUOSO_URL=${CENTRAL_VIRTUOSO_URL}
       - CENTRAL_ES_URL=${CENTRAL_ES_URL}
       # elastic.groovy reads ELASTICSEARCH_URL; point it at the central instance
       - ELASTICSEARCH_URL=${CENTRAL_ES_URL}

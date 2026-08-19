@@ -2,7 +2,7 @@
 set -e
 
 # Manage a per-ontology AberOWL Docker Compose stack.
-# Central Virtuoso and Elasticsearch are shared; only the ontology-api + nginx
+# Central Elasticsearch is shared; only the ontology-api + nginx
 # run per ontology.
 
 show_help() {
@@ -15,14 +15,13 @@ show_help() {
     echo "  --ontology-id <id>         Lowercase ontology identifier (required)."
     echo "  --source-url <url>         Source URL for the OWL file (informational)."
     echo "  --register <url>           Register with central server at this URL."
-    echo "  --central-virtuoso-url <u> URL of the shared Virtuoso instance."
     echo "  --central-es-url <u>       URL of the shared Elasticsearch instance."
     echo "  --ontologies-host-path <p> Host path of the shared ontologies volume."
     echo "  --stop                     Stop services for the specified port."
     echo "  --help                     Show this help."
     echo ""
     echo "Examples:"
-    echo "  $0 --ontology-id hp --central-virtuoso-url http://central:8890 \\"
+    echo "  $0 --ontology-id hp \\"
     echo "       --central-es-url http://central:9200 -d 8085"
     echo "  $0 --stop 8085"
 }
@@ -34,7 +33,6 @@ STOP_FLAG=""
 REGISTER_URL=""
 ONTOLOGY_ID="${ONTOLOGY_ID:-}"
 SOURCE_URL="${SOURCE_URL:-}"
-CENTRAL_VIRTUOSO_URL="${CENTRAL_VIRTUOSO_URL:-}"
 CENTRAL_ES_URL="${CENTRAL_ES_URL:-}"
 ONTOLOGIES_HOST_PATH="${ONTOLOGIES_HOST_PATH:-/data/ontologies}"
 
@@ -51,8 +49,6 @@ while [[ "$1" == -* ]]; do
             SOURCE_URL="$2";  shift 2 ;;
         --register)
             REGISTER_URL="$2"; shift 2 ;;
-        --central-virtuoso-url)
-            CENTRAL_VIRTUOSO_URL="$2"; shift 2 ;;
         --central-es-url)
             CENTRAL_ES_URL="$2"; shift 2 ;;
         --ontologies-host-path)
@@ -133,7 +129,6 @@ COMPOSE_PROJECT_NAME=${PROJECT_NAME}
 NGINX_PORT=${NGINX_PORT}
 ONTOLOGY_ID=${ONTOLOGY_ID}
 ONTOLOGIES_HOST_PATH=${ONTOLOGIES_HOST_PATH}
-CENTRAL_VIRTUOSO_URL=${CENTRAL_VIRTUOSO_URL}
 CENTRAL_ES_URL=${CENTRAL_ES_URL}
 ABEROWL_PUBLIC_URL=${ABEROWL_PUBLIC_URL}
 ABEROWL_REGISTER=${ABEROWL_REGISTER}

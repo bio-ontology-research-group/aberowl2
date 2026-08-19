@@ -24,8 +24,6 @@ export INDEXER_CONTAINER_NAME="indexer_${NGINX_PORT}"
 echo "Using container names: $ELASTICSEARCH_CONTAINER_NAME, $INDEXER_CONTAINER_NAME"
 
 # Define volume names based on the project name
-VIRTUOSO_DATA_VOLUME="${PROJECT_NAME}_virtuoso_data"
-VIRTUOSO_LOGS_VOLUME="${PROJECT_NAME}_virtuoso_logs"
 ES_DATA_VOLUME="${PROJECT_NAME}_elasticsearch_data"
 
 # --- Stop and Clean Up ---
@@ -46,9 +44,7 @@ docker compose -p "$PROJECT_NAME" down -v --remove-orphans
 # Clean up the temporary override file
 rm docker-compose.override.yml
 
-echo "Attempting to remove existing named volumes ($VIRTUOSO_DATA_VOLUME, $VIRTUOSO_LOGS_VOLUME, $ES_DATA_VOLUME)..."
-docker volume rm "$VIRTUOSO_DATA_VOLUME" 2>/dev/null || true # Ignore error if not found
-docker volume rm "$VIRTUOSO_LOGS_VOLUME" 2>/dev/null || true # Ignore error if not found
+echo "Attempting to remove existing named volumes ($ES_DATA_VOLUME)..."
 docker volume rm "$ES_DATA_VOLUME" 2>/dev/null || true     # Ignore error if not found
 echo "Volume cleanup attempt finished."
 

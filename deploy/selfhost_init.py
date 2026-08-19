@@ -241,7 +241,12 @@ def es_count(es_url, ontology_id):
     return None
 
 
-def wait_for_index(es_url, ontology_id, tries=48, delay=5.0):
+# A first-run reindex of a large ontology routinely outlasts a 2-minute budget;
+# central logged 'Reindex complete' ~50s after the old tries=24 gave up, so the
+# documented single command ended in a red exit 1 despite everything working.
+INDEX_WAIT_TRIES = 90  # 90 x 5s = 7.5 min
+
+def wait_for_index(es_url, ontology_id, tries=INDEX_WAIT_TRIES, delay=5.0):
     """Poll until the class index has documents (reindex is async on central)."""
     for _ in range(tries):
         c = es_count(es_url, ontology_id)
@@ -344,14 +349,14 @@ def cmd_register(args):
             print(f"  {oid}: registered + reindex triggered")
             ok += 1
             continue
-        n = wait_for_index(args.es_url, oid, tries=24)
+        n = wait_for_index(args.es_url, oid, tries=INDEX_WAIT_TRIES)
         if n == 0:
             print(f"  {oid}: index still empty, re-triggering reindex...")
             try:
                 trigger_reindex(oid)
             except urllib.error.HTTPError:
                 pass
-            n = wait_for_index(args.es_url, oid, tries=24)
+            n = wait_for_index(args.es_url, oid, tries=INDEX_WAIT_TRIES)
         if n == 0:
             print(f"  {oid}: registered, but the search index did not populate", file=sys.stderr)
             continue

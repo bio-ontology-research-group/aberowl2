@@ -91,8 +91,6 @@ def startServer(def ontologyArg, def port) {
     context.addServlet(new ServletHolder(new GroovyServlet()), '/api/retrieveRSuccessors.groovy')
     context.addServlet(new ServletHolder(new GroovyServlet()), '/api/retrieveAllLabels.groovy')
     context.addServlet(new ServletHolder(new GroovyServlet()), '/api/getStatistics.groovy')
-    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/sparql.groovy')
-    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/runSparqlQuery.groovy')
     context.addServlet(new ServletHolder(new GroovyServlet()), '/api/getSparqlExamples.groovy')
     context.addServlet(new ServletHolder(new GroovyServlet()), '/api/elastic.groovy')
     context.addServlet(new ServletHolder(new GroovyServlet()), '/api/updateOntology.groovy')
