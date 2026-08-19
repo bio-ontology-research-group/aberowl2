@@ -210,3 +210,8 @@ arindam_memory_email.txt*
 
 # --- Local ops output (host IPs, capacity data, fleet reports) ---
 results/
+
+# Agent instructions: local only. These carry internal deployment details that
+# do not belong in a public repository. AGENTS.md is a symlink to CLAUDE.md.
+CLAUDE.md
+AGENTS.md
