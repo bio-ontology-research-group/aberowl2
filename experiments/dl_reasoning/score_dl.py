@@ -116,8 +116,14 @@ def main():
                 row["fabrication_rate"] = len(off) / len(pred) if pred else 0.0
 
             # ---- decomposition (reasoning arms only) ----
-            calls = [t for t in (d.get("tool_calls") or []) if t.get("tool") == "run_dl_query"]
+            dl = [t for t in (d.get("tool_calls") or []) if t.get("tool") == "run_dl_query"]
+            # A BLOCKED call never reached the reasoner, so its "result" is a refusal
+            # string. Counting it as adoption would credit the lookup arm with reasoning
+            # it was denied, and scoring its refusal text as a formulation failure is
+            # meaningless. Track the attempt separately: it measures demand for the tool.
+            calls = [t for t in dl if not t.get("blocked")]
             row["adopted"] = bool(calls)
+            row["adoption_attempted_blocked"] = bool([t for t in dl if t.get("blocked")])
             if calls:
                 # Best tool result the model actually received.
                 best, best_f = set(), -1.0
@@ -127,11 +133,22 @@ def main():
                     if cf > best_f:
                         best, best_f = s, cf
                 row["tool_f1"] = best_f
-                # Formulation succeeded if the expression the model built returned gold.
-                row["formulation_ok"] = best == gset
-                # Relay succeeded if the final answer preserved what the tool returned.
-                row["relay_ok"] = pred == best
+                # Compare modulo the ANCHOR classes (the queried class / restriction
+                # filler). `subeq` is subclasses-or-equivalent, so it returns the anchor
+                # itself while gold is strict subclasses: measured on gpt-oss-20b, 63 of
+                # 73 T1 tool results were exactly gold+anchor. That is a semantically
+                # correct query with a different type, and the model then dropped the
+                # anchor correctly -- scoring it as a formulation failure understated
+                # formulation as 8.3% when the true rate was ~93%.
+                anchors = set(g.get("anchor_iris") or [])
+                n_best, n_gold, n_pred = best - anchors, gset - anchors, pred - anchors
+                row["formulation_ok"] = n_best == n_gold
+                row["relay_ok"] = n_pred == n_best
+                # Keep the strict values so the normalisation is auditable.
+                row["formulation_ok_strict"] = best == gset
+                row["relay_ok_strict"] = pred == best
                 row["queries"] = [c.get("args", {}).get("query") for c in calls]
+                row["query_types"] = [c.get("args", {}).get("type") for c in calls]
             scored.append(row)
 
     if a.out:
@@ -161,6 +178,7 @@ def main():
                 o["fab_rate_of_attempts"] = sum(x.get("fabrication_rate", 0) for x in att) / len(att)
         dl = [x for x in rows if "formulation_ok" in x]
         o["adopted"] = sum(1 for x in rows if x.get("adopted")) / n
+        o["blocked_attempt"] = sum(1 for x in rows if x.get("adoption_attempted_blocked")) / n
         if dl:
             o["formulation_ok"] = sum(1 for x in dl if x["formulation_ok"]) / len(dl)
             o["relay_ok"] = sum(1 for x in dl if x["relay_ok"]) / len(dl)
@@ -172,7 +190,7 @@ def main():
 
     print(f"{'model':22s} {'condition':13s} {'task':4s} {'n':>4s} {'F1':>6s} "
           f"{'exact':>6s} {'95% CI':>13s} {'att':>5s} {'NONE':>5s} {'fab':>5s} "
-          f"{'adopt':>6s} {'form':>6s} {'relay':>6s}")
+          f"{'adopt':>6s} {'form':>6s} {'relay':>6s} {'wants':>5s}")
     print("-" * 124)
     for k in sorted(by):
         m, c, t = k
@@ -184,7 +202,7 @@ def main():
         print(f"{m.split('/')[-1]:22s} {c:13s} {t:4s} {s['n']:4d} {s['f1']*100:6.1f} "
               f"{s['exact']*100:6.1f} {ci:>13s} {s['attempted']*100:5.1f} "
               f"{s['asserted_empty']*100:5.1f} {fab:>5s} "
-              f"{s['adopted']*100:5.1f} {form:>6s} {rel:>6s}")
+              f"{s['adopted']*100:5.1f} {form:>6s} {rel:>6s} {s['blocked_attempt']*100:5.1f}")
 
     if not universe:
         print("\nNOTE: no --classes given, so fabrication was NOT measured.")
