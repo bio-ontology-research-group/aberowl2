@@ -58,6 +58,15 @@ MAX_TOOL_TURNS = 12
 TOOL_RESULT_CHARS = 6000   # what the model sees per tool result
 TOOL_LOG_CHARS = 6000      # what we RECORD - must match, or relay fidelity is unmeasurable
 
+# --- Provider pinning (reproducibility, not just cost) ---
+# OpenRouter load-balances across endpoints that differ in price AND QUANTIZATION:
+# deepseek-v3.2 alone has 14 endpoints spanning $0.31-$4.50/M output, and the tags
+# show gmicloud/fp8 next to deepinfra/fp4. Unpinned, successive calls to "the same
+# model" can be numerically different systems, which is a reproducibility hazard a
+# reviewer can check. Pin it, and log the provider actually used on every call.
+# Set to None to restore load-balanced routing.
+PROVIDER = {"order": ["gmicloud/fp8"], "allow_fallbacks": False}
+
 TEMPERATURE = 0.0
 REQUEST_TIMEOUT = 180
 CONCURRENCY = 16

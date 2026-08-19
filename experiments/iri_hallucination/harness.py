@@ -32,6 +32,13 @@ def _mcp_to_openai(tool):
 
 async def call_openrouter(client, model, messages, tools):
     body = {"model": model, "messages": messages, "temperature": C.TEMPERATURE}
+    # Pin the serving provider. OpenRouter load-balances across endpoints that differ
+    # in BOTH price (14.5x spread on deepseek-v3.2: $0.31-$4.50/M out) and
+    # QUANTIZATION (gmicloud/fp8 vs deepinfra/fp4), so unpinned routing means
+    # successive calls to "the same model" may be numerically different systems.
+    prov = getattr(C, "PROVIDER", None)
+    if prov:
+        body["provider"] = prov
     if tools:
         body["tools"] = tools
         body["tool_choice"] = "auto"
@@ -49,6 +56,10 @@ async def call_openrouter(client, model, messages, tools):
                 data = r.json()
                 msg = data["choices"][0]["message"]
                 msg["_usage"] = data.get("usage") or {}   # captured for per-model cost
+                # Provenance: which endpoint actually served this call, and the
+                # generation id so cost can be reconciled against OpenRouter later.
+                msg["_provider"] = data.get("provider")
+                msg["_gen_id"] = data.get("id")
                 return msg
             except Exception as e:
                 last = f"parse: {e}: {r.text[:200]}"; break
@@ -77,6 +88,7 @@ async def _agent(client, session, tools, model, condition, regime, item):
     ]
     invoked = []          # which tools the model actually chose
     pt = ct = 0           # accumulated prompt/completion tokens (for per-model cost)
+    providers, gen_ids = [], []
     # The MCP session exposes EVERY tool the server has, so advertising a subset is
     # not isolation: a model can emit a call for a tool this condition never offered
     # and it would be executed anyway. Enforce the allow-list here, or the condition
@@ -86,12 +98,14 @@ async def _agent(client, session, tools, model, condition, regime, item):
         msg = await call_openrouter(client, model, messages, tools)
         u = msg.get("_usage") or {}
         pt += u.get("prompt_tokens") or 0; ct += u.get("completion_tokens") or 0
+        if msg.get("_provider"): providers.append(msg["_provider"])
+        if msg.get("_gen_id"): gen_ids.append(msg["_gen_id"])
         if msg.get("_error"):
-            return _result(item, model, condition, regime, "", invoked, error=msg["_error"], pt=pt, ct=ct)
+            return _result(item, model, condition, regime, "", invoked, error=msg["_error"], pt=pt, ct=ct, providers=providers, gen_ids=gen_ids)
         messages.append({k: msg[k] for k in ("role", "content", "tool_calls") if k in msg and msg[k] is not None})
         tcs = msg.get("tool_calls")
         if not tcs:
-            return _result(item, model, condition, regime, msg.get("content") or "", invoked, pt=pt, ct=ct)
+            return _result(item, model, condition, regime, msg.get("content") or "", invoked, pt=pt, ct=ct, providers=providers, gen_ids=gen_ids)
         for tc in tcs:
             fn = tc["function"]["name"]
             try: args = json.loads(tc["function"].get("arguments") or "{}")
@@ -106,7 +120,7 @@ async def _agent(client, session, tools, model, condition, regime, item):
                 invoked.append({"tool": fn, "args": args,
                                 "result": out[:getattr(C, "TOOL_LOG_CHARS", 600)]})
             messages.append({"role": "tool", "tool_call_id": tc.get("id"), "content": out})
-    return _result(item, model, condition, regime, msg.get("content") or "", invoked, truncated=True, pt=pt, ct=ct)
+    return _result(item, model, condition, regime, msg.get("content") or "", invoked, truncated=True, pt=pt, ct=ct, providers=providers, gen_ids=gen_ids)
 
 
 async def run_item(client, model, condition, regime, item):
@@ -122,13 +136,15 @@ async def run_item(client, model, condition, regime, item):
             return await _agent(client, session, tools, model, condition, regime, item)
 
 
-def _result(item, model, condition, regime, text, invoked, error=None, truncated=False, pt=0, ct=0):
+def _result(item, model, condition, regime, text, invoked, error=None, truncated=False,
+            pt=0, ct=0, providers=None, gen_ids=None):
     return {"term": item["term"], "ontology": item.get("ontology"), "gold_iri": item.get("gold_iri"),
             "difficulty": item.get("difficulty"), "model": model, "condition": condition,
             "regime": regime, "answer": text.strip(), "tools_invoked": [t["tool"] for t in invoked if not t.get("blocked")],
             "tools_blocked": [t["tool"] for t in invoked if t.get("blocked")],
             "tool_calls": invoked, "error": error, "truncated": truncated,
-            "prompt_tokens": pt, "completion_tokens": ct}
+            "prompt_tokens": pt, "completion_tokens": ct,
+            "providers": sorted(set(providers or [])), "gen_ids": gen_ids or []}
 
 
 async def main():
