@@ -13,7 +13,7 @@ Metrics are computed from saved per-run files (`runs_<model>.jsonl`,
 | model | runs | errors | truncated | tokens in/out | spent |
 |---|---|---|---|---|---|
 | `openai/gpt-oss-20b` | 480/480 | 0 | 17 | 3,484,813 / 3,263,037 | $0.5756 |
-| `meta-llama/llama-4-scout` | running | | | | |
+| `meta-llama/llama-4-scout` | 480/480 | 0 | 0 | 1,518,000 / 88,300 | $0.2036 |
 | `qwen/qwen3.6-35b-a3b` | pending (needs key cap raised) | | | | |
 | `deepseek/deepseek-v3.2` | pending | | | | |
 | `google/gemini-3.5-flash` | pending (~$30; needs cap raised) | | | | |
@@ -97,3 +97,54 @@ require changing the existing arms.
   true 95%. Strict values are retained as `*_strict`.
 - **17 runs hit the 12-turn cap** (all in the hint arm); they are counted as failures,
   not excluded.
+
+
+## llama-4-scout — the effect replicates
+
+Exact-set match, n=60 per cell:
+
+| arm | T1 | T2 |
+|---|---|---|
+| `none` | 0.0 [0.0,6.0] | 0.0 [0.0,6.0] |
+| `lookup` | 0.0 [0.0,6.0] | 3.3 [0.9,11.4] |
+| `dlquery` | **98.3** [91.1,99.7] | **100.0** [94.0,100.0] |
+| `dlquery_hint` | 83.3 [72.0,90.7] | 65.0 [52.4,75.8] |
+
+The pattern is identical to gpt-oss-20b: parametric memory scores **zero**, grounding
+alone barely moves it, reasoning solves it. On T2 llama is perfect (60/60).
+Decomposition: adoption 100%, formulation 100%, relay 98.3/100%.
+
+### The two models fail in opposite ways without the tool
+
+Distinct IRIs emitted in the `none` arm, checked against the class universe offline:
+
+| model | distinct | real classes | well-formed but nonexistent | malformed |
+|---|---|---|---|---|
+| gpt-oss-20b | 3,174 | 3,171 (99.9%) | 1 | 2 |
+| llama-4-scout | 2,142 | 1,026 (47.9%) | **1,056 (49.3%)** | 60 (2.8%) |
+
+Two distinct failure modes, and the paper should report both:
+
+- **gpt-oss-20b almost never fabricates** — 99.9% of what it emits are real ontology
+  classes — yet **none of them are the right answer**. This is the valid-but-wrong
+  result (review point W3) reproduced in set retrieval.
+- **llama-4-scout fabricates about half the time**: 1,056 well-formed OBO-style IRIs
+  that do not exist in the release, plus 60 malformed strings
+  (`http://purl.obol`, `.../obo/CL_0000000_15749`, `.../obo/Biological_Process_0000380`).
+
+Both drop to **0.0% fabrication** in the `dlquery` arms. The tool does not merely
+improve accuracy; it removes identifier fabrication entirely.
+
+### Hint anchoring replicates
+
+`dlquery_hint` degraded T2 for both models (gpt-oss 96.7 -> 35.0; llama 100.0 -> 65.0),
+so the effect is not a single-model quirk. It is weaker in llama, whose formulation
+falls to 66.7% rather than 47.2%. A hint carrying concrete IRIs anchors the model on
+them; this needs a placeholder-only cell to separate syntax help from IRI anchoring.
+
+### One model-level difference worth noting
+
+In the `lookup` arm, gpt-oss-20b attempted `run_dl_query` (and was refused) on 30.0%
+of T2 items versus 8.3% of T1 — it recognised when a question needed a reasoner.
+llama-4-scout never attempted it (0.0%). Recognising the need for reasoning is not
+the same capability as using the reasoner well, and only the larger model showed it.
