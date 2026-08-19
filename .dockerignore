@@ -1,0 +1,21 @@
+# Keep secrets and local clutter out of the build context. Dockerfile.api does
+# `COPY aberowlapi/ /app/aberowlapi/`, which previously baked
+# aberowlapi/.aberowl_secret_key into every published worker image.
+**/.aberowl_secret_key
+**/*.secret_key
+**/*.pem
+**/*.key
+.env
+env_files/
+
+.git/
+.github/
+paper/
+results/
+experiments/
+tests/
+**/__pycache__/
+**/*.pyc
+*.bak-rename
+*~
+CLAUDE.local.md*
