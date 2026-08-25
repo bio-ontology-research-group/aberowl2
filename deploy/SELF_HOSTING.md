@@ -10,7 +10,8 @@ public hosted service (aber-owl.net):
   leave your infrastructure** (your LLM agent reasons over them locally via the
   built-in MCP server, with no external calls).
 
-> Status: **design / WIP** (this PR). Implementation lands next; checklist below.
+> Status: **implemented**. Verified on a clean host (2026-07-20); see the checklist below
+> for what is done and what remains optional.
 
 ## Why single-host is simple
 The building blocks already exist:
@@ -56,7 +57,7 @@ The `ontology-prepare` step turns whatever it finds into a single canonical
 # defaults to examples/selfhost/ontologies (the pizza ontology) so `up` just works:
 docker compose -f deploy/docker-compose.selfhost.yml up
 # your own set:
-ONTOLOGIES_DIR=./my-ontologies docker compose -f deploy/docker-compose.selfhost.yml up
+ONTOLOGIES_DIR=$PWD/my-ontologies docker compose -f deploy/docker-compose.selfhost.yml up
 #   web / API -> http://localhost:8000
 #   MCP       -> http://localhost:8766/mcp   (agent endpoint)
 ```
@@ -88,9 +89,28 @@ after the worker classifies).
       `npm ci && npm run build`, the final stage `COPY --from` the built `dist/`), so the web UI is
       served with no local `npm build`. Prod is unaffected — it bind-mounts its own `dist/` over it.
       Verified: `http://localhost:8000` serves the real SPA (title, `#root`, `/assets/*.js` -> 200).
-- [ ] Optional nginx + friendly `/mcp` route (`docker-compose.selfhost.override.yml`).
+- [ ] Optional nginx + friendly `/mcp` route. Not implemented; there is no
+      `docker-compose.selfhost.override.yml` in the repository.
 - [x] Swap `build:` for the published `ferzcam/aberowl-central` + `ferzcam/aberowl-worker` images
       once they exist, so a user pulls instead of building.
+
+## Settings
+
+Every variable has a working default, so `up` needs none of them. Override by
+exporting the variable or putting it in a `.env` file next to the compose file.
+
+| Variable | Default | What it does |
+|---|---|---|
+| `ONTOLOGIES_DIR` | the bundled `examples/selfhost/ontologies` | Absolute path to your ontology folder. Relative paths resolve against `deploy/`, not your shell's directory. |
+| `CENTRAL_PORT` | `8000` | Host port for the central server and web UI. |
+| `MCP_PORT` | `8766` | Host port for the MCP endpoint. |
+| `ADMIN_USER` | `admin` | Admin user for the management endpoints. |
+| `ADMIN_PASSWORD` | `changeme` | Admin password. Change it on any host others can reach. |
+| `ABEROWL_SECRET_KEY` | `selfhost-dev-key` | Shared secret the central server uses to call the worker's mutating endpoints. Change it alongside the password. |
+
+The worker sets no JVM heap limit, so it takes the container default. A large
+ontology set may need one; give the worker a `mem_limit` and set `JAVA_OPTS`
+if you hit an out-of-memory kill.
 
 ## Notes
 - Multi-worker packing (`plan_workers.py`) is for large corpora; a self-host with K

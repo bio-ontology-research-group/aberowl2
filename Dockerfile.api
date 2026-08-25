@@ -55,6 +55,11 @@ RUN mkdir /tmp/grapes_resolve && cd /tmp/grapes_resolve && \
 # Copy the application files AFTER dependencies are resolved to preserve cache
 COPY aberowlapi/ /app/aberowlapi/
 COPY docker/scripts/api_server.py /app/api_server.py
+# triggerIndexing.groovy shells out to /scripts/IndexElastic.groovy. The dev and
+# production compose files bind-mount docker/scripts over /scripts, but a
+# self-hosted stack runs the published image with no such mount, so the script
+# has to be in the image or indexing fails with "file not found".
+COPY docker/scripts/IndexElastic.groovy /scripts/IndexElastic.groovy
 
 
 # Expose the API port
