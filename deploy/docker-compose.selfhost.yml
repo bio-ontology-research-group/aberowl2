@@ -5,10 +5,10 @@
 #
 # Everything talks over the internal `aberowl-net` by container name, so there
 # is no cross-host IP wiring (unlike the production cluster). Point ONTOLOGIES_DIR
-# at an ABSOLUTE path: compose resolves relative host paths against this file's
-# directory, so a bare ./my-ontologies would look inside deploy/ and find nothing.
 # at a folder holding .owl files (and/or a sources.txt of URLs); it defaults to a
-# tiny example (the pizza ontology) so `up` works out of the box.
+# tiny example (the pizza ontology) so `up` works out of the box. Use an ABSOLUTE
+# path: compose resolves relative host paths against this file's directory, so a
+# bare ./my-ontologies would look inside deploy/ and find nothing.
 name: aberowl-selfhost
 
 services:
