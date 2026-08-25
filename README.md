@@ -87,7 +87,7 @@ docker compose -f deploy/docker-compose.selfhost.yml up
 #   MCP       -> http://localhost:8766/mcp
 
 # your own ontologies — point at one folder:
-ONTOLOGIES_DIR=./my-ontologies docker compose -f deploy/docker-compose.selfhost.yml up
+ONTOLOGIES_DIR=$PWD/my-ontologies docker compose -f deploy/docker-compose.selfhost.yml up
 ```
 
 You feed ontologies to that one folder in two ways that **work together in the same

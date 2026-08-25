@@ -1,10 +1,12 @@
 # Single-host AberOWL 2 — run your own instance over your own ontologies with
 # one command. See deploy/SELF_HOSTING.md for the full guide.
 #
-#   ONTOLOGIES_DIR=./my-ontologies docker compose -f deploy/docker-compose.selfhost.yml up
+#   ONTOLOGIES_DIR=$PWD/my-ontologies docker compose -f deploy/docker-compose.selfhost.yml up
 #
 # Everything talks over the internal `aberowl-net` by container name, so there
 # is no cross-host IP wiring (unlike the production cluster). Point ONTOLOGIES_DIR
+# at an ABSOLUTE path: compose resolves relative host paths against this file's
+# directory, so a bare ./my-ontologies would look inside deploy/ and find nothing.
 # at a folder holding .owl files (and/or a sources.txt of URLs); it defaults to a
 # tiny example (the pizza ontology) so `up` works out of the box.
 name: aberowl-selfhost
