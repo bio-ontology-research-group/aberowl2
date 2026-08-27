@@ -203,9 +203,10 @@ CLAUDE.local.md
 !*.pub
 
 # --- Local working notes and personal files: never pushed ---
+*_PLAN.md
 CLAUDE.local.md*
 *.bak-rename
-arindam_memory_email.txt*
+*email.txt*
 *~
 
 # --- Local ops output (host IPs, capacity data, fleet reports) ---
