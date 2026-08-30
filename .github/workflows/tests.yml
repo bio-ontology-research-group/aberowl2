@@ -1,0 +1,38 @@
+name: tests
+
+# Runs the fast test suite on every pull request and on pushes to main.
+#
+# Scope is deliberately narrow: only tests that need no Docker, no
+# Elasticsearch and no network. The `slow` (spins up containers), `live`
+# (talks to beta.aber-owl.net) and `bioportal` (calls the live BioPortal API)
+# markers are excluded, so this workflow never reaches beta or production,
+# needs no secrets, and deploys nothing.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  fast-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.10
+
+      # `uv run --extra test pytest` can pick up a pytest from outside the
+      # project environment; `python -m pytest` always uses the venv's.
+      - name: Run fast tests
+        run: >
+          uv run --extra test python -m pytest tests/
+          -m "not slow and not live and not bioportal"
+          -v --timeout=120

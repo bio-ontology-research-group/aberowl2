@@ -1,0 +1,1159 @@
+[
+ {
+  "acronym": "AEO",
+  "name": "Anatomical Entity Ontology",
+  "status": "Classified",
+  "topics": null,
+  "species": null,
+  "submission": {
+   "id": 965,
+   "download_url": "media/ontologies/AEO/8/aeo.owl",
+   "submission_id": 8,
+   "domain": "anatomy",
+   "description": "AEO is an ontology of anatomical structures that expands CARO, the Common Anatomy Reference Ontology",
+   "documentation": null,
+   "publication": null,
+   "publications": null,
+   "products": [
+    {
+     "id": "aeo.owl",
+     "ontology_purl": "http://purl.obolibrary.org/obo/aeo.owl"
+    }
+   ],
+   "taxon": null,
+   "date_released": "2017-12-12T21:14:44.509563Z",
+   "date_created": "2017-12-12T21:14:44.509585Z",
+   "home_page": "https://github.com/obophenotype/human-developmental-anatomy-ontology/",
+   "version": null,
+   "has_ontology_language": "OWL",
+   "nb_classes": 250,
+   "nb_individuals": 0,
+   "nb_properties": 11,
+   "max_depth": 12,
+   "max_children": 13,
+   "avg_children": 2,
+   "classifiable": true,
+   "nb_inconsistent": 0,
+   "indexed": true,
+   "md5sum": "e70b065253604829b4986a83087a3b1c"
+  }
+ },
+ {
+  "acronym": "BTO",
+  "name": "BRENDA tissue / enzyme source",
+  "status": "Classified",
+  "topics": null,
+  "species": null,
+  "submission": {
+   "id": 4653,
+   "download_url": "media/ontologies/BTO/39/bto.owl",
+   "submission_id": 39,
+   "domain": "anatomy",
+   "description": "A structured controlled vocabulary for the source of an enzyme comprising tissues, cell lines, cell types and cell cultures.",
+   "documentation": null,
+   "publication": null,
+   "publications": [
+    {
+     "id": "https://www.ncbi.nlm.nih.gov/pubmed/21030441",
+     "title": "The BRENDA Tissue Ontology (BTO): the first all-integrating ontology of all organisms for enzyme sources"
+    }
+   ],
+   "products": [
+    {
+     "id": "bto.owl",
+     "ontology_purl": "http://purl.obolibrary.org/obo/bto.owl"
+    },
+    {
+     "id": "bto.obo",
+     "ontology_purl": "http://purl.obolibrary.org/obo/bto.obo"
+    },
+    {
+     "id": "bto.json",
+     "ontology_purl": "http://purl.obolibrary.org/obo/bto.json"
+    }
+   ],
+   "taxon": null,
+   "date_released": "2021-11-01T12:24:47.095037Z",
+   "date_created": "2021-11-01T12:24:47.095060Z",
+   "home_page": "http://www.brenda-enzymes.org",
+   "version": null,
+   "has_ontology_language": "OWL",
+   "nb_classes": 6569,
+   "nb_individuals": 0,
+   "nb_properties": 10,
+   "max_depth": 7,
+   "max_children": 2264,
+   "avg_children": 7,
+   "classifiable": true,
+   "nb_inconsistent": 0,
+   "indexed": true,
+   "md5sum": "bace9597267f0b286b58d4b5c2039f55"
+  }
+ },
+ {
+  "acronym": "CHEBI",
+  "name": "Chemical Entities of Biological Interest",
+  "status": "Classified",
+  "topics": null,
+  "species": null,
+  "submission": {
+   "id": 5473,
+   "download_url": "media/ontologies/CHEBI/176/chebi.owl",
+   "submission_id": 176,
+   "domain": "chemistry and biochemistry",
+   "description": "A structured classification of molecular entities of biological interest focusing on 'small' chemical compounds.",
+   "documentation": null,
+   "publication": null,
+   "publications": [
+    {
+     "id": "https://www.ncbi.nlm.nih.gov/pubmed/26467479",
+     "title": "ChEBI in 2016: Improved services and an expanding collection of metabolites."
+    }
+   ],
+   "products": [
+    {
+     "id": "chebi.owl",
+     "ontology_purl": "http://purl.obolibrary.org/obo/chebi.owl"
+    },
+    {
+     "id": "chebi.obo",
+     "ontology_purl": "http://purl.obolibrary.org/obo/chebi.obo"
+    },
+    {
+     "id": "chebi.owl.gz",
+     "title": "chebi, compressed owl",
+     "ontology_purl": "http://purl.obolibrary.org/obo/chebi.owl.gz"
+    },
+    {
+     "id": "chebi/chebi_lite.obo",
+     "title": "chebi_lite, no syns or xrefs",
+     "ontology_purl": "http://purl.obolibrary.org/obo/chebi/chebi_lite.obo"
+    },
+    {
+     "id": "chebi/chebi_core.obo",
+     "title": "chebi_core, no xrefs",
+     "ontology_purl": "http://purl.obolibrary.org/obo/chebi/chebi_core.obo"
+    }
+   ],
+   "taxon": null,
+   "date_released": "2022-11-14T12:16:04.890103Z",
+   "date_created": "2022-11-14T12:16:04.890121Z",
+   "home_page": "http://www.ebi.ac.uk/chebi",
+   "version": null,
+   "has_ontology_language": "OWL",
+   "nb_classes": 182023,
+   "nb_individuals": 0,
+   "nb_properties": 10,
+   "max_depth": 18,
+   "max_children": 18592,
+   "avg_children": 19,
+   "classifiable": true,
+   "nb_inconsistent": 0,
+   "indexed": true,
+   "md5sum": "306bf47c1ba6b303d336d06794cb92b0"
+  }
+ },
+ {
+  "acronym": "CL",
+  "name": "Cell Ontology",
+  "status": "Classified",
+  "topics": null,
+  "species": null,
+  "submission": {
+   "id": 5446,
+   "download_url": "media/ontologies/CL/89/cl.owl",
+   "submission_id": 89,
+   "domain": "anatomy and development",
+   "description": "The Cell Ontology is a structured controlled vocabulary for cell types in animals.",
+   "documentation": null,
+   "publication": null,
+   "publications": [
+    {
+     "id": "https://www.ncbi.nlm.nih.gov/pubmed/27377652",
+     "title": "The Cell Ontology 2016: enhanced content, modularization, and ontology interoperability."
+    }
+   ],
+   "products": [
+    {
+     "id": "cl.owl",
+     "uses": [
+      "uberon",
+      "chebi",
+      "go",
+      "pr",
+      "pato",
+      "ncbitaxon",
+      "ro"
+     ],
+     "title": "Main CL OWL edition",
+     "format": "owl-rdf/xml",
+     "description": "Complete ontology, plus inter-ontology axioms, and imports modules",
+     "is_canonical": true,
+     "ontology_purl": "http://purl.obolibrary.org/obo/cl.owl"
+    },
+    {
+     "id": "cl.obo",
+     "title": "CL obo format edition",
+     "format": "obo",
+     "description": "Complete ontology, plus inter-ontology axioms, and imports modules merged in",
+     "derived_from": "cl.owl",
+     "ontology_purl": "http://purl.obolibrary.org/obo/cl.obo"
+    },
+    {
+     "id": "cl/cl-basic.obo",
+     "title": "Basic CL",
+     "format": "obo",
+     "description": "Basic version, no inter-ontology axioms",
+     "ontology_purl": "http://purl.obolibrary.org/obo/cl/cl-basic.obo"
+    },
+    {
+     "id": "cl/cl-base.owl",
+     "title": "CL base module",
+     "description": "complete CL but with no imports or external axioms",
+     "ontology_purl": "http://purl.obolibrary.org/obo/cl/cl-base.owl"
+    }
+   ],
+   "taxon": {
+    "id": "NCBITaxon:33208",
+    "label": "Metazoa"
+   },
+   "date_released": "2022-10-31T12:23:05.268277Z",
+   "date_created": "2022-10-31T12:23:05.268296Z",
+   "home_page": "https://obophenotype.github.io/cell-ontology/",
+   "version": null,
+   "has_ontology_language": "OWL",
+   "nb_classes": 17010,
+   "nb_individuals": 0,
+   "nb_properties": 310,
+   "max_depth": 32,
+   "max_children": 435,
+   "avg_children": 3,
+   "classifiable": true,
+   "nb_inconsistent": 0,
+   "indexed": true,
+   "md5sum": "27ebded35d084626ceb1debf900ba849"
+  }
+ },
+ {
+  "acronym": "CSTD",
+  "name": "Clinical smell and taste disorders",
+  "status": "Unknown",
+  "topics": null,
+  "species": null,
+  "submission": null
+ },
+ {
+  "acronym": "DOID",
+  "name": "Human Disease Ontology",
+  "status": "Classified",
+  "topics": null,
+  "species": null,
+  "submission": {
+   "id": 5461,
+   "download_url": "media/ontologies/DOID/663/doid.owl",
+   "submission_id": 663,
+   "domain": "health",
+   "description": "An ontology for describing the classification of human diseases organized by etiology.",
+   "documentation": null,
+   "publication": null,
+   "publications": [
+    {
+     "id": "https://www.ncbi.nlm.nih.gov/pubmed/25348409",
+     "title": "Disease Ontology 2015 update: an expanded and updated database of human diseases for linking biomedical knowledge through disease data"
+    },
+    {
+     "id": "https://www.ncbi.nlm.nih.gov/pubmed/34755882",
+     "title": "The Human Disease Ontology 2022 update"
+    }
+   ],
+   "products": [
+    {
+     "id": "doid.owl",
+     "title": "Disease Ontology, OWL format. This file contains DO's is_a asserted hierarchy plus equivalent axioms to other OBO Foundry ontologies.",
+     "ontology_purl": "http://purl.obolibrary.org/obo/doid.owl"
+    },
+    {
+     "id": "doid.obo",
+     "title": "Disease Ontology, OBO format. This file omits the equivalent axioms.",
+     "ontology_purl": "http://purl.obolibrary.org/obo/doid.obo"
+    }
+   ],
+   "taxon": {
+    "id": "NCBITaxon:9606",
+    "label": "Homo sapiens"
+   },
+   "date_released": "2022-11-07T12:17:38.863883Z",
+   "date_created": "2022-11-07T12:17:38.863898Z",
+   "home_page": "http://www.disease-ontology.org",
+   "version": null,
+   "has_ontology_language": "OWL",
+   "nb_classes": 18055,
+   "nb_individuals": 0,
+   "nb_properties": 46,
+   "max_depth": 34,
+   "max_children": 2482,
+   "avg_children": 4,
+   "classifiable": true,
+   "nb_inconsistent": 0,
+   "indexed": true,
+   "md5sum": "b4f46c92c82ccd9336f6d69e23ca5f90"
+  }
+ },
+ {
+  "acronym": "ENVO",
+  "name": "Environment Ontology",
+  "status": "Classified",
+  "topics": null,
+  "species": null,
+  "submission": {
+   "id": 4487,
+   "download_url": "media/ontologies/ENVO/56/envo.owl",
+   "submission_id": 56,
+   "domain": "environment",
+   "description": "Ontology of environmental features and habitats",
+   "documentation": null,
+   "publication": null,
+   "publications": [
+    {
+     "id": "http://www.dx.doi.org/10.1186/2041-1480-4-43",
+     "title": "The environment ontology: contextualising biological and biomedical entities"
+    },
+    {
+     "id": "https://doi.org/10.1186/s13326-016-0097-6",
+     "title": "The environment ontology in 2016: bridging domains with increased scope, semantic density, and interoperation"
+    }
+   ],
+   "products": [
+    {
+     "id": "envo.owl",
+     "title": "main ENVO OWL release",
+     "ontology_purl": "http://purl.obolibrary.org/obo/envo.owl"
+    },
+    {
+     "id": "envo.json",
+     "title": "ENVO in obographs JSON format",
+     "ontology_purl": "http://purl.obolibrary.org/obo/envo.json"
+    },
+    {
+     "id": "envo.obo",
+     "title": "ENVO in OBO Format. May be lossy",
+     "ontology_purl": "http://purl.obolibrary.org/obo/envo.obo"
+    },
+    {
+     "id": "envo/subsets/envo-basic.obo",
+     "title": "OBO-Basic edition of ENVO",
+     "ontology_purl": "http://purl.obolibrary.org/obo/envo/subsets/envo-basic.obo"
+    },
+    {
+     "id": "envo/subsets/envoEmpo.owl",
+     "title": "Earth Microbiome Project subset",
+     "ontology_purl": "http://purl.obolibrary.org/obo/envo/subsets/envoEmpo.owl"
+    },
+    {
+     "id": "envo/subsets/EnvO-Lite-GSC.obo",
+     "title": "GSC Lite subset of ENVO",
+     "homepage": "http://environmentontology.org/downloads",
+     "ontology_purl": "http://purl.obolibrary.org/obo/envo/subsets/EnvO-Lite-GSC.obo"
+    }
+   ],
+   "taxon": null,
+   "date_released": "2021-05-24T12:20:35.460185Z",
+   "date_created": "2021-05-24T12:20:35.460199Z",
+   "home_page": "http://environmentontology.org/",
+   "version": null,
+   "has_ontology_language": "OWL",
+   "nb_classes": 6566,
+   "nb_individuals": 44,
+   "nb_properties": 135,
+   "max_depth": 35,
+   "max_children": 456,
+   "avg_children": 2,
+   "classifiable": true,
+   "nb_inconsistent": 0,
+   "indexed": true,
+   "md5sum": "0833ce6772f4eff664377409a0a2b632"
+  }
+ },
+ {
+  "acronym": "FMA",
+  "name": "Foundational Model of Anatomy Ontology (subset)",
+  "status": "Classified",
+  "topics": null,
+  "species": null,
+  "submission": {
+   "id": 3540,
+   "download_url": "media/ontologies/FMA/139/fma.owl",
+   "submission_id": 139,
+   "domain": "anatomy",
+   "description": "This is currently a slimmed down version of FMA",
+   "documentation": null,
+   "publication": null,
+   "publications": [
+    {
+     "id": "http://www.ncbi.nlm.nih.gov/pubmed/18688289"
+    },
+    {
+     "id": "http://www.ncbi.nlm.nih.gov/pubmed/18360535"
+    },
+    {
+     "id": "http://www.ncbi.nlm.nih.gov/pubmed/16779026"
+    }
+   ],
+   "products": [
+    {
+     "id": "fma.owl",
+     "ontology_purl": "http://purl.obolibrary.org/obo/fma.owl"
+    }
+   ],
+   "taxon": {
+    "id": "NCBITaxon:9606",
+    "label": "Homo sapiens"
+   },
+   "date_released": "2020-04-20T12:24:04.774597Z",
+   "date_created": "2020-04-20T12:24:04.774617Z",
+   "home_page": "http://si.washington.edu/projects/fma",
+   "version": null,
+   "has_ontology_language": "OWL",
+   "nb_classes": 78977,
+   "nb_individuals": 0,
+   "nb_properties": 7,
+   "max_depth": 20,
+   "max_children": 218,
+   "avg_children": 3,
+   "classifiable": true,
+   "nb_inconsistent": 0,
+   "indexed": true,
+   "md5sum": "0ffa47fce111b6b02a357a1aa59e6539"
+  }
+ },
+ {
+  "acronym": "FRAPO",
+  "name": "Funding, Research Administration and Projects Ontology",
+  "status": "Unknown",
+  "topics": null,
+  "species": null,
+  "submission": null
+ },
+ {
+  "acronym": "GO",
+  "name": "Gene Ontology",
+  "status": "Classified",
+  "topics": null,
+  "species": null,
+  "submission": {
+   "id": 5476,
+   "download_url": "media/ontologies/GO/1774/go.owl",
+   "submission_id": 1774,
+   "domain": "biological systems",
+   "description": "An ontology for describing the function of genes and gene products",
+   "documentation": null,
+   "publication": null,
+   "publications": [
+    {
+     "id": "https://www.ncbi.nlm.nih.gov/pubmed/10802651",
+     "title": "Gene ontology: tool for the unification of biology. The Gene Ontology Consortium"
+    },
+    {
+     "id": "https://www.ncbi.nlm.nih.gov/pubmed/33290552",
+     "title": "The Gene Ontology resource: enriching a GOld mine"
+    }
+   ],
+   "products": [
+    {
+     "id": "go.owl",
+     "page": "http://geneontology.org/page/download-ontology",
+     "title": "GO (OWL edition)",
+     "description": "The main ontology in OWL. This is self contained and does not have connections to other OBO ontologies",
+     "ontology_purl": "http://purl.obolibrary.org/obo/go.owl"
+    },
+    {
+     "id": "go.obo",
+     "page": "http://geneontology.org/page/download-ontology",
+     "title": "GO (OBO Format edition)",
+     "description": "Equivalent to go.owl, in obo format",
+     "ontology_purl": "http://purl.obolibrary.org/obo/go.obo"
+    },
+    {
+     "id": "go.json",
+     "page": "https://github.com/geneontology/obographs/",
+     "title": "GO (JSON edition)",
+     "description": "Equivalent to go.owl, in obograph json format",
+     "ontology_purl": "http://purl.obolibrary.org/obo/go.json"
+    },
+    {
+     "id": "go/extensions/go-plus.owl",
+     "page": "http://geneontology.org/page/download-ontology",
+     "title": "GO-Plus",
+     "description": "The main ontology plus axioms connecting to select external ontologies, with subsets of those ontologies",
+     "ontology_purl": "http://purl.obolibrary.org/obo/go/extensions/go-plus.owl"
+    },
+    {
+     "id": "go/go-base.owl",
+     "page": "http://geneontology.org/page/download-ontology",
+     "title": "GO Base Module",
+     "description": "The main ontology plus axioms connecting to select external ontologies, excluding the external ontologies themselves",
+     "ontology_purl": "http://purl.obolibrary.org/obo/go/go-base.owl"
+    },
+    {
+     "id": "go/extensions/go-plus.json",
+     "page": "https://github.com/geneontology/obographs/",
+     "title": "GO-Plus",
+     "description": "As go-plus.owl, in obographs json format",
+     "ontology_purl": "http://purl.obolibrary.org/obo/go/extensions/go-plus.json"
+    },
+    {
+     "id": "go/go-basic.obo",
+     "page": "http://geneontology.org/page/download-ontology",
+     "title": "GO-Basic, Filtered, for use with legacy tools",
+     "description": "Basic version of the GO, filtered such that the graph is guaranteed to be acyclic and annotations can be propagated up the graph. The relations included are is a, part of, regulates, negatively regulates and positively regulates. This version excludes relationships that cross the 3 GO hierarchies.",
+     "ontology_purl": "http://purl.obolibrary.org/obo/go/go-basic.obo"
+    },
+    {
+     "id": "go/go-basic.json",
+     "page": "http://geneontology.org/page/download-ontology",
+     "title": "GO-Basic, Filtered, for use with legacy tools (JSON)",
+     "description": "As go-basic.obo, in json format",
+     "ontology_purl": "http://purl.obolibrary.org/obo/go/go-basic.json"
+    },
+    {
+     "id": "go/extensions/go-taxon-groupings.owl",
+     "page": "http://geneontology.org/page/download-ontology",
+     "title": "GO Taxon Groupings",
+     "description": "Classes added to ncbitaxon for groupings such as prokaryotes",
+     "ontology_purl": "http://purl.obolibrary.org/obo/go/extensions/go-taxon-groupings.owl"
+    },
+    {
+     "id": "go/snapshot/go.owl",
+     "page": "http://geneontology.org/page/download-ontology",
+     "title": "GO (OWL edition), daily snapshot release",
+     "description": "Equivalent to go.owl, but released daily. Note the snapshot release is not archived.",
+     "ontology_purl": "http://purl.obolibrary.org/obo/go/snapshot/go.owl"
+    },
+    {
+     "id": "go/snapshot/go.obo",
+     "page": "http://geneontology.org/page/download-ontology",
+     "title": "GO (OBO Format edition), daily snapshot release",
+     "description": "Equivalent to go.owl, but released daily. Note the snapshot release is not archived.",
+     "ontology_purl": "http://purl.obolibrary.org/obo/go/snapshot/go.obo"
+    }
+   ],
+   "taxon": {
+    "id": "NCBITaxon:1",
+    "label": "All life"
+   },
+   "date_released": "2022-11-14T12:53:59.372882Z",
+   "date_created": "2022-11-14T12:53:59.372912Z",
+   "home_page": "http://geneontology.org/",
+   "version": null,
+   "has_ontology_language": "OWL",
+   "nb_classes": 51043,
+   "nb_individuals": 0,
+   "nb_properties": 9,
+   "max_depth": 12,
+   "max_children": 7743,
+   "avg_children": 4,
+   "classifiable": true,
+   "nb_inconsistent": 0,
+   "indexed": true,
+   "md5sum": "ed02735f4a8a06ff337f3c8ebc29bfe8"
+  }
+ },
+ {
+  "acronym": "HP",
+  "name": "Human Phenotype Ontology",
+  "status": "Classified",
+  "topics": null,
+  "species": null,
+  "submission": {
+   "id": 5399,
+   "download_url": "media/ontologies/HP/597/hp.owl",
+   "submission_id": 597,
+   "domain": "phenotype",
+   "description": "A structured and controlled vocabulary for the phenotypic features encountered in human hereditary and other disease.",
+   "documentation": null,
+   "publication": null,
+   "publications": [
+    {
+     "id": "https://www.ncbi.nlm.nih.gov/pubmed/18950739",
+     "title": "The Human Phenotype Ontology: a tool for annotating and analyzing human hereditary disease."
+    },
+    {
+     "id": "https://www.ncbi.nlm.nih.gov/pubmed/26119816",
+     "title": "The Human Phenotype Ontology: Semantic Unification of Common and Rare Disease."
+    },
+    {
+     "id": "https://www.ncbi.nlm.nih.gov/pubmed/24217912",
+     "title": "The Human Phenotype Ontology project: linking molecular biology and disease through phenotype data."
+    },
+    {
+     "id": "https://www.ncbi.nlm.nih.gov/pubmed/30476213",
+     "title": "Expansion of the Human Phenotype Ontology (HPO) knowledge base and resources."
+    }
+   ],
+   "products": [
+    {
+     "id": "hp.owl",
+     "ontology_purl": "http://purl.obolibrary.org/obo/hp.owl"
+    },
+    {
+     "id": "hp.obo",
+     "ontology_purl": "http://purl.obolibrary.org/obo/hp.obo"
+    }
+   ],
+   "taxon": {
+    "id": "NCBITaxon:9606",
+    "label": "Homo sapiens"
+   },
+   "date_released": "2022-10-10T12:51:02.954092Z",
+   "date_created": "2022-10-10T12:51:02.954111Z",
+   "home_page": "http://www.human-phenotype-ontology.org/",
+   "version": null,
+   "has_ontology_language": "OWL",
+   "nb_classes": 31343,
+   "nb_individuals": 0,
+   "nb_properties": 299,
+   "max_depth": 38,
+   "max_children": 522,
+   "avg_children": 3,
+   "classifiable": true,
+   "nb_inconsistent": 0,
+   "indexed": true,
+   "md5sum": "c66184b628704eb811128485695e0099"
+  }
+ },
+ {
+  "acronym": "IBO",
+  "name": "Imaging Biomarker Ontology",
+  "status": "Unknown",
+  "topics": null,
+  "species": null,
+  "submission": null
+ },
+ {
+  "acronym": "MONDO",
+  "name": "Mondo Disease Ontology",
+  "status": "Classified",
+  "topics": null,
+  "species": null,
+  "submission": {
+   "id": 5463,
+   "download_url": "media/ontologies/MONDO/73/mondo.owl",
+   "submission_id": 73,
+   "domain": "health",
+   "description": "A global community effort to harmonize multiple disease resources to yield a coherent merged ontology.",
+   "documentation": null,
+   "publication": null,
+   "publications": [
+    {
+     "id": "https://www.medrxiv.org/content/10.1101/2022.04.13.22273750",
+     "title": "Mondo: Unifying diseases for the world, by the world"
+    }
+   ],
+   "products": [
+    {
+     "id": "mondo.owl",
+     "title": "Main OWL edition",
+     "format": "owl-rdf/xml",
+     "description": "Complete ontology. Uses MONDO IDs. Imports merged. The original mondo.owl without merged imports and with equivalence axioms can now be obtained from the release pages and is called mondo-with-equivalents.",
+     "is_canonical": true,
+     "ontology_purl": "http://purl.obolibrary.org/obo/mondo.owl"
+    },
+    {
+     "id": "mondo.obo",
+     "title": "obo-format edition",
+     "format": "obo",
+     "description": "As OWL. xrefs can be used as proxy for equivalence. Uses Mondo IDs.",
+     "derived_from": "mondo.owl",
+     "ontology_purl": "http://purl.obolibrary.org/obo/mondo.obo"
+    },
+    {
+     "id": "mondo.json",
+     "title": "json edition",
+     "format": "obo",
+     "description": "Equivalent to the OWL edition.",
+     "derived_from": "mondo.owl",
+     "ontology_purl": "http://purl.obolibrary.org/obo/mondo.json"
+    },
+    {
+     "id": "mondo/mondo-base.owl",
+     "title": "Mondo Base Module",
+     "format": "owl",
+     "description": "The main ontology plus axioms connecting to select external ontologies, excluding the external ontologies themselves",
+     "ontology_purl": "http://purl.obolibrary.org/obo/mondo/mondo-base.owl"
+    }
+   ],
+   "taxon": {
+    "id": "NCBITaxon:33208",
+    "label": "Metazoa"
+   },
+   "date_released": "2022-11-07T12:27:23.003236Z",
+   "date_created": "2022-11-07T12:27:23.003252Z",
+   "home_page": "https://monarch-initiative.github.io/mondo",
+   "version": null,
+   "has_ontology_language": "OWL",
+   "nb_classes": 44715,
+   "nb_individuals": 18,
+   "nb_properties": 353,
+   "max_depth": 38,
+   "max_children": 3815,
+   "avg_children": 4,
+   "classifiable": true,
+   "nb_inconsistent": 0,
+   "indexed": true,
+   "md5sum": "8448bf1ec7640f20b9f9d9f1b039f653"
+  }
+ },
+ {
+  "acronym": "NCIT",
+  "name": "NCI Thesaurus OBO Edition",
+  "status": "Classified",
+  "topics": null,
+  "species": null,
+  "submission": {
+   "id": 5317,
+   "download_url": "media/ontologies/NCIT/76/ncit.owl",
+   "submission_id": 76,
+   "domain": "health",
+   "description": "NCI Thesaurus (NCIt)is a reference terminology that includes broad coverage of the cancer domain, including cancer related diseases, findings and abnormalities. The NCIt OBO Edition aims to increase integration of the NCIt with OBO Library ontologies. NCIt OBO Edition releases should be considered experimental.",
+   "documentation": null,
+   "publication": null,
+   "publications": null,
+   "products": [
+    {
+     "id": "ncit.owl",
+     "title": "NCIt OBO Edition OWL format",
+     "description": "A direct transformation of the standard NCIt content using OBO-style term and ontology IRIs and annotation properties.",
+     "ontology_purl": "http://purl.obolibrary.org/obo/ncit.owl"
+    },
+    {
+     "id": "ncit.obo",
+     "title": "NCIt OBO Edition OBO format",
+     "ontology_purl": "http://purl.obolibrary.org/obo/ncit.obo"
+    },
+    {
+     "id": "ncit/ncit-plus.owl",
+     "title": "NCIt Plus",
+     "description": "This version replaces NCIt terms with direct references to terms from other domain-specific OBO Library ontologies (e.g. cell types, cellular components, anatomy), supporting cross-ontology reasoning. The current release incorporates CL (cell types) and Uberon (anatomy).",
+     "mireots_from": [
+      "cl",
+      "uberon"
+     ],
+     "ontology_purl": "http://purl.obolibrary.org/obo/ncit/ncit-plus.owl"
+    },
+    {
+     "id": "ncit/neoplasm-core.owl",
+     "title": "NCIt Plus Neoplasm Core",
+     "description": "This is a subset extracted from NCIt Plus, based on the [NCIt Neoplasm Core value set](https://evs.nci.nih.gov/ftp1/NCI_Thesaurus/Neoplasm/About_Core.html) as a starting point.",
+     "ontology_purl": "http://purl.obolibrary.org/obo/ncit/neoplasm-core.owl"
+    }
+   ],
+   "taxon": null,
+   "date_released": "2022-09-05T12:26:04.962393Z",
+   "date_created": "2022-09-05T12:26:04.962404Z",
+   "home_page": "https://github.com/NCI-Thesaurus/thesaurus-obo-edition",
+   "version": null,
+   "has_ontology_language": "OWL",
+   "nb_classes": 174279,
+   "nb_individuals": 0,
+   "nb_properties": 97,
+   "max_depth": 20,
+   "max_children": 3234,
+   "avg_children": 6,
+   "classifiable": true,
+   "nb_inconsistent": 0,
+   "indexed": true,
+   "md5sum": "32ac8f24885f56ff507cc2409b275052"
+  }
+ },
+ {
+  "acronym": "OBI",
+  "name": "Ontology for Biomedical Investigations",
+  "status": "Classified",
+  "topics": null,
+  "species": null,
+  "submission": {
+   "id": 5234,
+   "download_url": "media/ontologies/OBI/48/obi.owl",
+   "submission_id": 48,
+   "domain": "investigations",
+   "description": "An integrated ontology for the description of life-science and clinical investigations",
+   "documentation": null,
+   "publication": null,
+   "publications": [
+    {
+     "id": "https://www.ncbi.nlm.nih.gov/pubmed/27128319",
+     "title": "The Ontology for Biomedical Investigations"
+    }
+   ],
+   "products": [
+    {
+     "id": "obi.owl",
+     "title": "OBI",
+     "description": "The full version of OBI in OWL format",
+     "ontology_purl": "http://purl.obolibrary.org/obo/obi.owl"
+    },
+    {
+     "id": "obi.obo",
+     "title": "OBI in OBO",
+     "description": "The OBO-format version of OBI",
+     "ontology_purl": "http://purl.obolibrary.org/obo/obi.obo"
+    },
+    {
+     "id": "obi/obi_core.owl",
+     "title": "OBI Core",
+     "description": "A collection of important high-level terms and their relations from OBI and other ontologies",
+     "ontology_purl": "http://purl.obolibrary.org/obo/obi/obi_core.owl"
+    },
+    {
+     "id": "obi/obi-base.owl",
+     "title": "OBI Base module",
+     "description": "Base module for OBI",
+     "ontology_purl": "http://purl.obolibrary.org/obo/obi/obi-base.owl"
+    }
+   ],
+   "taxon": null,
+   "date_released": "2022-07-18T12:01:09.536555Z",
+   "date_created": "2022-07-18T12:01:09.536571Z",
+   "home_page": "http://obi-ontology.org",
+   "version": null,
+   "has_ontology_language": "OWL",
+   "nb_classes": 4673,
+   "nb_individuals": 303,
+   "nb_properties": 97,
+   "max_depth": 17,
+   "max_children": 105,
+   "avg_children": 4,
+   "classifiable": true,
+   "nb_inconsistent": 0,
+   "indexed": true,
+   "md5sum": "b9292a5dd83a75543ade316e79856283"
+  }
+ },
+ {
+  "acronym": "PATO",
+  "name": "Phenotype And Trait Ontology",
+  "status": "Classified",
+  "topics": null,
+  "species": null,
+  "submission": {
+   "id": 5480,
+   "download_url": "media/ontologies/PATO/192/pato.owl",
+   "submission_id": 192,
+   "domain": "phenotype",
+   "description": "An ontology of phenotypic qualities (properties, attributes or characteristics)",
+   "documentation": null,
+   "publication": null,
+   "publications": [
+    {
+     "id": "https://www.ncbi.nlm.nih.gov/pubmed/28387809",
+     "title": "The anatomy of phenotype ontologies: principles, properties and applications"
+    },
+    {
+     "id": "https://www.ncbi.nlm.nih.gov/pubmed/15642100",
+     "title": "Using ontologies to describe mouse phenotypes"
+    }
+   ],
+   "products": [
+    {
+     "id": "pato.owl",
+     "ontology_purl": "http://purl.obolibrary.org/obo/pato.owl"
+    },
+    {
+     "id": "pato.obo",
+     "ontology_purl": "http://purl.obolibrary.org/obo/pato.obo"
+    },
+    {
+     "id": "pato.json",
+     "ontology_purl": "http://purl.obolibrary.org/obo/pato.json"
+    },
+    {
+     "id": "pato/pato-base.owl",
+     "description": "Includes axioms linking to other ontologies, but no imports of those ontologies",
+     "ontology_purl": "http://purl.obolibrary.org/obo/pato/pato-base.owl"
+    }
+   ],
+   "taxon": null,
+   "date_released": "2022-11-14T13:39:26.627470Z",
+   "date_created": "2022-11-14T13:39:26.627488Z",
+   "home_page": "https://github.com/pato-ontology/pato/",
+   "version": null,
+   "has_ontology_language": "OWL",
+   "nb_classes": 10786,
+   "nb_individuals": 0,
+   "nb_properties": 305,
+   "max_depth": 33,
+   "max_children": 1006,
+   "avg_children": 3,
+   "classifiable": true,
+   "nb_inconsistent": 0,
+   "indexed": true,
+   "md5sum": "e4ff5d2471cbda738472a0ad382cb48e"
+  }
+ },
+ {
+  "acronym": "PO",
+  "name": "Plant Ontology",
+  "status": "Classified",
+  "topics": null,
+  "species": null,
+  "submission": {
+   "id": 4501,
+   "download_url": "media/ontologies/PO/24/po.owl",
+   "submission_id": 24,
+   "domain": "anatomy and development",
+   "description": "The Plant Ontology is a structured vocabulary and database resource that links plant anatomy, morphology and growth and development to plant genomics data.",
+   "documentation": null,
+   "publication": null,
+   "publications": [
+    {
+     "id": "http://www.ncbi.nlm.nih.gov/pubmed/23220694",
+     "title": "The plant ontology as a tool for comparative plant anatomy and genomic analyses."
+    },
+    {
+     "id": "https://doi.org/10.1093/nar/gkx1152",
+     "title": "The Planteome database: an integrated resource for reference ontologies, plant genomics and phenomics."
+    }
+   ],
+   "products": [
+    {
+     "id": "po.owl",
+     "ontology_purl": "http://purl.obolibrary.org/obo/po.owl"
+    },
+    {
+     "id": "po.obo",
+     "ontology_purl": "http://purl.obolibrary.org/obo/po.obo"
+    }
+   ],
+   "taxon": {
+    "id": "NCBITaxon:33090",
+    "label": "Viridiplantae"
+   },
+   "date_released": "2021-10-25T12:44:58.697058Z",
+   "date_created": "2021-10-25T12:44:58.697075Z",
+   "home_page": "http://browser.planteome.org/amigo",
+   "version": null,
+   "has_ontology_language": "OWL",
+   "nb_classes": 2019,
+   "nb_individuals": 0,
+   "nb_properties": 111,
+   "max_depth": 14,
+   "max_children": 341,
+   "avg_children": 3,
+   "classifiable": true,
+   "nb_inconsistent": 0,
+   "indexed": true,
+   "md5sum": "3102c4a906e2291c5284a277646e1b8b"
+  }
+ },
+ {
+  "acronym": "SO",
+  "name": "Sequence types and features ontology",
+  "status": "Classified",
+  "topics": null,
+  "species": null,
+  "submission": {
+   "id": 5451,
+   "download_url": "media/ontologies/SO/285/so.owl",
+   "submission_id": 285,
+   "domain": "chemistry and biochemistry",
+   "description": "A structured controlled vocabulary for sequence annotation, for the exchange of annotation data and for the description of sequence objects in databases.",
+   "documentation": null,
+   "publication": null,
+   "publications": [
+    {
+     "id": "https://www.ncbi.nlm.nih.gov/pubmed/15892872",
+     "title": "The Sequence Ontology: a tool for the unification of genome annotations."
+    },
+    {
+     "id": "https://www.ncbi.nlm.nih.gov/pubmed/20226267",
+     "title": "Evolution of the Sequence Ontology terms and relationships."
+    }
+   ],
+   "products": [
+    {
+     "id": "so.owl",
+     "title": "Main SO OWL release",
+     "ontology_purl": "http://purl.obolibrary.org/obo/so.owl"
+    },
+    {
+     "id": "so.obo",
+     "title": "Main SO release in OBO Format",
+     "ontology_purl": "http://purl.obolibrary.org/obo/so.obo"
+    },
+    {
+     "id": "so/subsets/SOFA.owl",
+     "title": "Sequence Ontology Feature Annotation (SOFA) subset (OWL)",
+     "description": "This subset includes only locatable sequence features and is designed for use in such outputs as GFF3",
+     "ontology_purl": "http://purl.obolibrary.org/obo/so/subsets/SOFA.owl"
+    },
+    {
+     "id": "so/subsets/SOFA.obo",
+     "title": "Sequence Ontology Feature Annotation (SOFA) subset (OBO Format)",
+     "description": "This subset includes only locatable sequence features and is designed for use in such outputs as GFF3",
+     "ontology_purl": "http://purl.obolibrary.org/obo/so/subsets/SOFA.obo"
+    }
+   ],
+   "taxon": null,
+   "date_released": "2022-10-31T13:03:39.670646Z",
+   "date_created": "2022-10-31T13:03:39.670663Z",
+   "home_page": "http://www.sequenceontology.org/",
+   "version": null,
+   "has_ontology_language": "OWL",
+   "nb_classes": 2729,
+   "nb_individuals": 0,
+   "nb_properties": 50,
+   "max_depth": 14,
+   "max_children": 346,
+   "avg_children": 4,
+   "classifiable": true,
+   "nb_inconsistent": 0,
+   "indexed": true,
+   "md5sum": "c0560f01d597ae96e0590a14c22005d2"
+  }
+ },
+ {
+  "acronym": "TUNIGO-SLIM",
+  "name": "Tunicate GO Slim",
+  "status": "Unknown",
+  "topics": null,
+  "species": null,
+  "submission": null
+ },
+ {
+  "acronym": "UBERON",
+  "name": "Uberon multi-species anatomy ontology",
+  "status": "Classified",
+  "topics": null,
+  "species": null,
+  "submission": {
+   "id": 5388,
+   "download_url": "media/ontologies/UBERON/286/uberon.owl",
+   "submission_id": 286,
+   "domain": "anatomy and development",
+   "description": "An integrated cross-species anatomy ontology covering animals and bridging multiple species-specific ontologies",
+   "documentation": null,
+   "publication": null,
+   "publications": [
+    {
+     "id": "https://www.ncbi.nlm.nih.gov/pubmed/22293552",
+     "title": "Uberon, an integrative multi-species anatomy ontology"
+    },
+    {
+     "id": "https://www.ncbi.nlm.nih.gov/pubmed/25009735",
+     "title": "Unification of multi-species vertebrate anatomy ontologies for comparative biology in Uberon"
+    }
+   ],
+   "products": [
+    {
+     "id": "uberon.owl",
+     "type": "owl:Ontology",
+     "title": "Uberon",
+     "description": "core ontology",
+     "is_canonical": true,
+     "ontology_purl": "http://purl.obolibrary.org/obo/uberon.owl"
+    },
+    {
+     "id": "uberon/uberon-base.owl",
+     "page": "https://github.com/INCATools/ontology-development-kit/issues/50",
+     "title": "Uberon base ontology",
+     "description": "Axioms defined within Uberon and to be used in imports for other ontologies",
+     "ontology_purl": "http://purl.obolibrary.org/obo/uberon/uberon-base.owl"
+    },
+    {
+     "id": "uberon/ext.owl",
+     "type": "owl:Ontology",
+     "title": "Uberon edition that includes subsets of other ontologies and axioms connecting to them",
+     "description": "Uberon extended",
+     "mireots_from": "cl",
+     "ontology_purl": "http://purl.obolibrary.org/obo/uberon/ext.owl"
+    },
+    {
+     "id": "uberon/basic.obo",
+     "type": "obo-basic-ontology",
+     "title": "Uberon basic",
+     "format": "obo",
+     "description": "Uberon edition that excludes external ontologies and most relations",
+     "ontology_purl": "http://purl.obolibrary.org/obo/uberon/basic.obo"
+    },
+    {
+     "id": "uberon/bridge/uberon-bridge-to-zfa.owl",
+     "page": "https://github.com/obophenotype/uberon/wiki/inter-anatomy-ontology-bridge-ontologies",
+     "type": "BridgeOntology",
+     "title": "Uberon bridge to ZFA",
+     "connects": [
+      {
+       "id": "uberon"
+      },
+      {
+       "id": "zfa"
+      }
+     ],
+     "description": "Taxonomic equivalence axioms connecting zebrafish-specific classes to generic uberon counterparts",
+     "ontology_purl": "http://purl.obolibrary.org/obo/uberon/bridge/uberon-bridge-to-zfa.owl"
+    },
+    {
+     "id": "uberon/bridge/uberon-bridge-to-ma.owl",
+     "page": "https://github.com/obophenotype/uberon/wiki/inter-anatomy-ontology-bridge-ontologies",
+     "type": "BridgeOntology",
+     "title": "Uberon bridge to MA",
+     "connects": [
+      {
+       "id": "uberon"
+      },
+      {
+       "id": "ma"
+      }
+     ],
+     "description": "Taxonomic equivalence axioms connecting adult mouse specific classes to generic uberon counterparts",
+     "ontology_purl": "http://purl.obolibrary.org/obo/uberon/bridge/uberon-bridge-to-ma.owl"
+    },
+    {
+     "id": "uberon/composite-metazoan.owl",
+     "page": "https://github.com/obophenotype/uberon/wiki/Multi-species-composite-ontologies",
+     "type": "MergedOntology",
+     "taxon": "Metazoa",
+     "title": "Uberon composite metazoan ontology",
+     "description": "Extended uberon plus all metazoan ontologies",
+     "ontology_purl": "http://purl.obolibrary.org/obo/uberon/composite-metazoan.owl"
+    },
+    {
+     "id": "uberon/composite-vertebrate.owl",
+     "page": "https://github.com/obophenotype/uberon/wiki/Multi-species-composite-ontologies",
+     "type": "MergedOntology",
+     "taxon": "Metazoa",
+     "title": "Uberon composite vertebrate ontology",
+     "mireots_from": [
+      "zfa",
+      "xao",
+      "fbbt",
+      "wbbt",
+      "ma",
+      "fma",
+      "emapa",
+      "ehdaa2"
+     ],
+     "ontology_purl": "http://purl.obolibrary.org/obo/uberon/composite-vertebrate.owl"
+    }
+   ],
+   "taxon": {
+    "id": "NCBITaxon:33208",
+    "label": "Metazoa"
+   },
+   "date_released": "2022-10-03T14:38:58.186649Z",
+   "date_created": "2022-10-03T14:38:58.186671Z",
+   "home_page": "http://uberon.org",
+   "version": null,
+   "has_ontology_language": "OWL",
+   "nb_classes": 21081,
+   "nb_individuals": 0,
+   "nb_properties": 257,
+   "max_depth": 39,
+   "max_children": 1638,
+   "avg_children": 5,
+   "classifiable": true,
+   "nb_inconsistent": 0,
+   "indexed": true,
+   "md5sum": "30e7a0f5ab589703ea0a31fa32155d04"
+  }
+ }
+]
