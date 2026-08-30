@@ -40,6 +40,7 @@ from typing import Any, Dict, List, Optional
 
 import aiohttp
 from fastapi import APIRouter, Body, Query, Request
+from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
@@ -501,3 +502,49 @@ async def v1_service_api(script: str, request: Request):
     if data is None:
         return {"status": "exception", "message": "API server is down!"}
     return data
+
+
+# ---------------------------------------------------------------------------
+# Retired v1 operations
+#
+# These answer 410 Gone with v1's error envelope rather than falling through to
+# the SPA catch-all, which would return HTTP 200 and a web page. A caller that
+# still uses them learns so immediately instead of parsing HTML.
+# ---------------------------------------------------------------------------
+
+@router.get("/api/class/_similar")
+async def v1_similar_retired():
+    """Retired: needs per-class embeddings AberOWL 2 does not compute.
+
+    v1 ranked by cosine similarity over an `embedding_vector` stored on every
+    class document, scored with the `binary_vector_score` kNN plugin. AberOWL 2's
+    class index declares the field but does not populate it, and the plugin is
+    not installed, so the operation cannot be reproduced without restoring the
+    whole embedding pipeline.
+    """
+    return JSONResponse(
+        {
+            "status": "error",
+            "message": (
+                "/api/class/_similar is no longer available. It required per-class "
+                "embedding vectors and an Elasticsearch kNN plugin that AberOWL 2 "
+                "does not use. Use /api/class/_find for text search."
+            ),
+        },
+        status_code=410,
+    )
+
+
+@router.get("/api/dlquery/logs")
+async def v1_dlquery_logs_retired():
+    """Retired: AberOWL 2 has no DL query logger."""
+    return JSONResponse(
+        {
+            "status": "error",
+            "message": (
+                "/api/dlquery/logs is no longer available. AberOWL 2 does not log "
+                "DL queries."
+            ),
+        },
+        status_code=410,
+    )
