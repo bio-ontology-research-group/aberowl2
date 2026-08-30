@@ -149,10 +149,22 @@ class InProcessTransport:
         logging.disable(logging.INFO)
 
         import app.main as main_module  # noqa: E402
-        from unittest.mock import MagicMock  # noqa: E402
 
-        main_module.redis_client = _FakeRedis()
-        main_module.es_mgr = MagicMock()
+        # Seed one hosted ontology so registry-backed operations have something
+        # to return; an empty registry makes the run report "empty list" for
+        # reasons that have nothing to do with the contract.
+        redis = _FakeRedis()
+        redis._data[main_module.REGISTRY_KEY] = {
+            "go": json.dumps({
+                "ontology": "go", "ontology_id": "go", "title": "Gene Ontology",
+                "description": "The Gene Ontology.",
+                "home_page": "http://geneontology.org",
+                "version_info": "in-process", "url": "http://go-worker:80",
+                "status": "online", "class_count": 47000,
+            }),
+        }
+        main_module.redis_client = redis
+        main_module.es_mgr = _StubES()
         self._app = main_module.app
 
     def request(self, method: str, path: str, params=None, body=None):
@@ -167,6 +179,24 @@ class InProcessTransport:
                 return r.status_code, _decode(r.content)
 
         return asyncio.run(go())
+
+
+class _StubES:
+    """Async no-op Elasticsearch stand-in.
+
+    In-process mode has no Elasticsearch, so search returns nothing. That is
+    enough to exercise the response *shape*, which is what this checker asserts;
+    a MagicMock cannot be awaited and would crash the handler instead.
+    """
+
+    async def search_classes(self, term, ontology=None, prefix=False, size=100):
+        return []
+
+    async def search_ontologies(self, term, size=50):
+        return []
+
+    def _alias_name(self, ontology_id):
+        return f"aberowl_{ontology_id}_classes"
 
 
 class _FakeRedis:
