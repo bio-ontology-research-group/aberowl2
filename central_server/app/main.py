@@ -119,13 +119,35 @@ async def _load_manual_ontologies() -> List[Dict[str, Any]]:
 
 
 async def _upsert_registry_from_source(
-    ontology_id: str, fields: Dict[str, Any], overwrite_source: bool = False
-) -> None:
+    ontology_id: str,
+    fields: Dict[str, Any],
+    overwrite_source: bool = False,
+    create_missing: bool = False,
+) -> bool:
     """
-    Upsert a registry entry without clobbering server_url, secret_key, or
-    update status that may have been set by other code paths.
+    Enrich a registry entry from a source catalogue, without clobbering
+    server_url, secret_key, or update status that may have been set by other
+    code paths.
+
+    Unless `create_missing` is set, an ontology we do not already host is
+    skipped rather than created. The source catalogues are far larger than the
+    set we serve — OBO Foundry and BioPortal list roughly 1,500 between them
+    against our ~971 — so creating an entry per catalogue item would fill
+    REGISTRY_KEY with worker-less entries. That hash backs /api/listOntologies
+    and query dispatch, and the periodic status poller fans out over every entry
+    in it, so the junk entries would fail on every cycle.
+    `_migrate_unify_registries` guards against exactly this; see its comment.
+
+    `create_missing=True` is for the manual list, where an operator has named
+    the ontology deliberately.
+
+    Returns True when the entry was written, False when it was skipped.
     """
-    existing = await _get_registry_entry(ontology_id) or {}
+    existing = await _get_registry_entry(ontology_id)
+    if existing is None:
+        if not create_missing:
+            return False
+        existing = {}
 
     # Only overwrite source fields if they come from the canonical source
     if overwrite_source or "source" not in existing:
@@ -145,6 +167,7 @@ async def _upsert_registry_from_source(
 
     existing.setdefault("ontology_id", ontology_id)
     await _save_registry_entry(ontology_id, existing)
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -158,18 +181,28 @@ async def _sync_sources_once() -> None:
     # 1. OBOFoundry
     obo_list = await fetch_obofoundry_ontologies()
     obo_ids: Set[str] = set()
+    obo_enriched = 0
     for entry in obo_list:
         oid = entry["ontology_id"]
         obo_ids.add(oid)
-        await _upsert_registry_from_source(oid, entry)
-    logger.info("Source sync: %d OBOFoundry ontologies upserted", len(obo_list))
+        if await _upsert_registry_from_source(oid, entry):
+            obo_enriched += 1
+    logger.info(
+        "Source sync: %d/%d OBOFoundry ontologies enriched (rest not hosted)",
+        obo_enriched, len(obo_list),
+    )
 
     # 2. BioPortal (skip OBO IDs)
     bp_list = await fetch_bioportal_ontologies(exclude_ids=obo_ids)
+    bp_enriched = 0
     for entry in bp_list:
         oid = entry["ontology_id"]
-        await _upsert_registry_from_source(oid, entry)
-    logger.info("Source sync: %d BioPortal ontologies upserted", len(bp_list))
+        if await _upsert_registry_from_source(oid, entry):
+            bp_enriched += 1
+    logger.info(
+        "Source sync: %d/%d BioPortal ontologies enriched (rest not hosted)",
+        bp_enriched, len(bp_list),
+    )
 
     # 3. Manual (always wins)
     manual_list = await _load_manual_ontologies()
@@ -178,7 +211,11 @@ async def _sync_sources_once() -> None:
         if not oid:
             continue
         entry["source"] = "manual"
-        await _upsert_registry_from_source(oid, entry, overwrite_source=True)
+        # The manual list is operator-curated, so it may introduce an ontology
+        # the registry does not have yet.
+        await _upsert_registry_from_source(
+            oid, entry, overwrite_source=True, create_missing=True
+        )
     logger.info("Source sync: %d manual ontologies upserted", len(manual_list))
 
     logger.info("Source sync complete.")
