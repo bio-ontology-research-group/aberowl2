@@ -1405,11 +1405,40 @@ async def sparql_rewrite_api(request: Request):
 
     rewritten_query, expansions, errors = await expand_sparql_query(query, server_lookup)
 
-    return {
+    # AberOWL 1 EXECUTED SPARQL here and required a `format` parameter. AberOWL 2
+    # only rewrites. Left alone, a v1 caller gets HTTP 200 and its own query
+    # echoed back as `rewritten_query` — a silent no-op, the worst failure mode
+    # available. Fail loudly instead, using v1's own error envelope so an
+    # existing client can surface the message. See #94.
+    if "format" in request.query_params or "result_format" in request.query_params:
+        return JSONResponse(
+            {
+                "status": "error",
+                "message": (
+                    "AberOWL 2 rewrites SPARQL queries containing OWL DL frames but "
+                    "does not execute them. Send `rewritten_query` to a SPARQL "
+                    "endpoint of your choice (Ontobee, UniProt, Wikidata, …)."
+                ),
+                "rewritten_query": rewritten_query,
+                "expansions": expansions,
+                "errors": errors,
+            },
+            status_code=501,
+        )
+
+    response = {
         "rewritten_query": rewritten_query,
         "expansions": expansions,
         "errors": errors,
     }
+    # A query with no OWL frame comes back byte-identical. Say so, rather than
+    # letting a caller believe something was resolved.
+    if not expansions and not errors:
+        response["warning"] = (
+            "No OWL DL frame found; the query was returned unchanged. AberOWL "
+            "rewrites but does not execute SPARQL."
+        )
+    return response
 
 
 @app.api_route("/api/elastic/{path:path}", methods=["GET", "POST"])
