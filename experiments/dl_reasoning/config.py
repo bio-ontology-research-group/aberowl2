@@ -74,4 +74,4 @@ CONCURRENCY = 16
 # --- Gold ---
 # Built OFFLINE by build_dl_gold.groovy from the DEPLOYED release. Never from the
 # service: that circularity is what invalidated the IRI gold set.
-ONTOLOGIES = ["go", "cl", "so"]     # large / medium / small (51,937 / 19,151 / 2,747 classes)
+ONTOLOGIES = ["go", "cl", "so"]     # large / medium / small (51,937 / 19,151 / 2,752 classes)
