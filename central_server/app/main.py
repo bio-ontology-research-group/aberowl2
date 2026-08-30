@@ -75,6 +75,10 @@ ENABLE_AUTO_SYNC = os.getenv("ENABLE_AUTO_SYNC", "false").lower() in ("1", "true
 # Interval 0 disables the sweep; refresh explicitly via POST /admin/refresh_status.
 STATUS_POLL_INTERVAL = int(os.getenv("STATUS_POLL_INTERVAL", "300"))
 STATUS_POLL_CONCURRENCY = max(1, int(os.getenv("STATUS_POLL_CONCURRENCY", "16")))
+# AberOWL 1 API compatibility layer (issue #94). On by default: without it the
+# v1 paths fall through to the SPA catch-all and answer HTTP 200 with an HTML
+# page, which is worse for a client than a 404. Set false to unmount it.
+ENABLE_V1_API = os.getenv("ENABLE_V1_API", "true").lower() in ("1", "true", "yes")
 ONTOLOGIES_BASE_PATH = os.getenv("ONTOLOGIES_HOST_PATH", "/data/ontologies")
 ABEROWL_REPO_PATH = os.getenv("ABEROWL_REPO_PATH", "/opt/aberowl")
 
@@ -849,6 +853,16 @@ async def lifespan(app: FastAPI):
     logger.info("Redis connection closed.")
 
 app = FastAPI(lifespan=lifespan)
+
+# Mounted here, directly after app creation, so the v1 routes are registered
+# BEFORE the SPA catch-all `/{path:path}` further down. FastAPI matches routes in
+# declaration order, and the catch-all would otherwise swallow every /api/ path
+# the v2 API does not define — which is exactly the bug this layer fixes.
+if ENABLE_V1_API:
+    from app.api_v1 import router as _api_v1_router
+
+    app.include_router(_api_v1_router)
+    logger.info("AberOWL 1 API compatibility layer mounted (ENABLE_V1_API=true)")
 
 # Rate limiting via slowapi
 try:
