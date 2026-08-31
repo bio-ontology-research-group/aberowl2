@@ -207,3 +207,21 @@ class TestPathSettingIsTheContainerOne:
 
         assert hasattr(main_module, "ONTOLOGIES_DIR")
         assert hasattr(main_module, "ONTOLOGIES_BASE_PATH")
+
+
+@pytest.mark.unit
+class TestHeadIsAllowed:
+    """A client checking size or type before downloading should not have to
+    fetch the file. Some ontologies are around 2 GB, and HEAD previously
+    answered 405."""
+
+    @pytest.mark.asyncio
+    async def test_head_on_a_served_file(self, client):
+        r = await client.head("/media/ontologies/GO/1/go.owl")
+        assert r.status_code == 200
+        assert r.headers["content-type"].startswith("application/rdf+xml")
+
+    @pytest.mark.asyncio
+    async def test_head_on_a_missing_file_is_404_not_405(self, client):
+        r = await client.head("/media/ontologies/NOFILE/1/nofile.owl")
+        assert r.status_code == 404
