@@ -104,12 +104,26 @@ class Check:
 # Transports: a live URL, or the FastAPI app in-process
 # ---------------------------------------------------------------------------
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Report redirects instead of following them.
+
+    /api/sparql answers a v1 query with a 302 to the endpoint named in the
+    query. urllib follows redirects by default, so without this the checker
+    would report whatever that external endpoint returned rather than the
+    redirect it is meant to observe.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 class HttpTransport:
     """GET/POST against a running deployment."""
 
     def __init__(self, base_url: str, timeout: int = DEFAULT_TIMEOUT):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        self._opener = urllib.request.build_opener(_NoRedirect)
 
     def request(self, method: str, path: str, params=None, body=None):
         url = self.base_url + path
@@ -121,7 +135,7 @@ class HttpTransport:
             headers["Content-Type"] = "application/json"
         req = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+            with self._opener.open(req, timeout=self.timeout) as resp:
                 raw = resp.read()
                 return resp.status, _decode(raw)
         except urllib.error.HTTPError as e:
@@ -456,23 +470,33 @@ def check_match_superclasses(t, ontology: str) -> Check:
 
 
 def check_sparql(t) -> Check:
-    """AberOWL 2 rewrites but does not execute.
+    """AberOWL 1 rewrote the OWL frame and redirected to the endpoint named in
+    the query; it never executed SPARQL itself. A v1 query therefore has to come
+    back as a 302 to that endpoint, carrying the rewritten query.
 
-    A v1-style call (plain SPARQL plus `format`) must fail loudly. Today it
-    returns HTTP 200 with the caller's own query echoed back as
-    `rewritten_query` — a silent no-op, which is the failure this check exists
-    to catch.
+    The failure this catches is the silent one: HTTP 200 with the caller's own
+    query echoed back, which is what a v1 caller receives when the compatibility
+    layer is absent.
     """
     c = Check("GET /api/sparql", "/api/sparql")
-    query = "SELECT ?s WHERE { ?s ?p ?o } LIMIT 1"
+    # A v1 frame carries the target endpoint between the query type and the
+    # ontology, which is what makes the redirect possible.
+    query = (
+        "SELECT ?x WHERE { VALUES ?x { OWL subeq "
+        "<https://sparql.uniprot.org/sparql> <GO> { 'cell death' } } }"
+    )
     status, body = t.request("GET", "/api/sparql",
                              params={"query": query, "format": "json"})
     c.http_status = status
-    if status == 501 and isinstance(body, dict) and "message" in body:
-        return c.ok("501 stating rewrite-only, as planned")
+    if status in (301, 302, 303, 307, 308):
+        return c.ok("redirects to the endpoint named in the query, as v1 did")
     if status == 200 and isinstance(body, dict) and "rewritten_query" in body:
         return c.fail("HTTP 200 echoing the query back — silently does nothing")
-    return c.fail(f"HTTP {status}; expected 501 + an explanatory message")
+    if status == 400 and isinstance(body, dict) and "message" in body:
+        # No worker for the frame's ontology: the layer is present and answering,
+        # but this deployment cannot resolve it.
+        return c.fail(f"HTTP 400: {body['message'][:70]}")
+    return c.fail(_spa_shell(body) or f"HTTP {status}; expected a redirect")
 
 
 # ---------------------------------------------------------------------------

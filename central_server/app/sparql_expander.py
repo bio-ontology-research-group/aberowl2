@@ -32,7 +32,7 @@ structured error is returned alongside the rewritten query.
 import json
 import logging
 import re
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import aiohttp
 
@@ -50,6 +50,47 @@ FILTER_OWL_PATTERN = re.compile(
     rf"""FILTER\s+OWL\(\s*(\?\w+)\s*,\s*({_QUERY_TYPE})\s*,\s*({_ONT_ID})\s*,\s*["'](.+?)["']\s*\)""",
     re.IGNORECASE,
 )
+
+# --- AberOWL 1 frame syntax -------------------------------------------------
+# v1 embedded the target SPARQL endpoint in the frame itself, between the query
+# type and the ontology:
+#
+#     VALUES ?x { OWL subeq <https://sparql.uniprot.org/sparql> <GO> { 'cell death' } }
+#
+# v1 rewrote the frame and then 302-redirected the caller to that endpoint (#102).
+# The two forms cannot collide: v2's ontology group is [\w.\-]+, which never
+# matches a leading "<".
+#
+# `realize` was a v1 query type. It is accepted so the frame is recognised rather
+# than silently ignored; if a worker rejects it, the per-frame error path reports
+# that, which is more useful than not matching at all.
+_QUERY_TYPE_V1 = r"(?:subclass|superclass|equivalent|subeq|supeq|realize)"
+_V1_ENDPOINT = r"[A-Za-z][\w+.\-]*://[^\s>]+"
+
+VALUES_OWL_V1_PATTERN = re.compile(
+    rf"VALUES\s+(\?\w+)\s*\{{\s*OWL\s+({_QUERY_TYPE_V1})\s+<({_V1_ENDPOINT})>\s+<({_ONT_ID})>\s*"
+    rf"\{{\s*(.*?)\s*\}}\s*\}}",
+    re.IGNORECASE | re.DOTALL,
+)
+FILTER_OWL_V1_PATTERN = re.compile(
+    rf"FILTER\s*\(\s*(\?\w+)\s+in\s+\(\s*OWL\s+({_QUERY_TYPE_V1})\s+<({_V1_ENDPOINT})>\s+<({_ONT_ID})>\s*"
+    rf"\{{\s*(.*?)\s*\}}\s*\)\s*\)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def find_v1_service_endpoint(sparql: str) -> Optional[str]:
+    """The SPARQL endpoint named inside an AberOWL 1 frame, if there is one.
+
+    Returns None for a v2-style query, which carries no endpoint. The caller
+    uses this to choose between v1's redirect and v2's JSON response.
+    """
+    for pattern in (VALUES_OWL_V1_PATTERN, FILTER_OWL_V1_PATTERN):
+        m = pattern.search(sparql)
+        if m:
+            return m.group(3)
+    return None
+
 
 
 async def _run_dl_query(
@@ -125,6 +166,39 @@ async def expand_sparql_query(
         if err is not None:
             return None, err
         return iris, None
+
+    # Process AberOWL 1 frames first. They carry an endpoint the v2 patterns do
+    # not, and the caller redirects to it (#102); the rewriting itself is the
+    # same, so the endpoint group is simply not used here.
+    for match in list(VALUES_OWL_V1_PATTERN.finditer(sparql)):
+        variable, query_type, ontology_id, dl_query = (
+            match.group(1), match.group(2), match.group(4), match.group(5).strip())
+        iris, err = await resolve(variable, query_type, ontology_id, dl_query)
+        entry = {"pattern": "VALUES(v1)", "variable": variable, "ontology": ontology_id,
+                 "type": query_type, "dl_query": dl_query, "endpoint": match.group(3)}
+        if err is not None:
+            replacement = f"VALUES {variable} {{ }}"
+            errors.append({**entry, "error": err})
+        else:
+            iri_list = " ".join(f"<{iri}>" for iri in iris)
+            replacement = f"VALUES {variable} {{ {iri_list} }}"
+            expansions.append({**entry, "result_count": len(iris)})
+        expanded = expanded.replace(match.group(0), replacement, 1)
+
+    for match in list(FILTER_OWL_V1_PATTERN.finditer(sparql)):
+        variable, query_type, ontology_id, dl_query = (
+            match.group(1), match.group(2), match.group(4), match.group(5).strip())
+        iris, err = await resolve(variable, query_type, ontology_id, dl_query)
+        entry = {"pattern": "FILTER(v1)", "variable": variable, "ontology": ontology_id,
+                 "type": query_type, "dl_query": dl_query, "endpoint": match.group(3)}
+        if err is not None:
+            replacement = f"FILTER({variable} IN ())"
+            errors.append({**entry, "error": err})
+        else:
+            iri_list = ", ".join(f"<{iri}>" for iri in iris)
+            replacement = f"FILTER({variable} IN ({iri_list}))"
+            expansions.append({**entry, "result_count": len(iris)})
+        expanded = expanded.replace(match.group(0), replacement, 1)
 
     # Process VALUES patterns
     for match in list(VALUES_OWL_PATTERN.finditer(sparql)):
