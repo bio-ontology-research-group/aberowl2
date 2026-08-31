@@ -1,6 +1,7 @@
 # --- Stage 1: build the SPA so the image serves the web UI standalone ---
-# (prod bind-mounts its own dist over this; a self-host has no local npm, so the
-#  image must carry the built frontend itself.)
+# The image is the only source of the built frontend. Deployments used to bind-
+# mount a host copy over it, which shadowed this build with a stale one; that
+# mount was removed (see deploy/docker-compose.central.yml).
 FROM node:22-slim AS frontend
 WORKDIR /fe
 COPY central_server/frontend/package.json central_server/frontend/package-lock.json ./
