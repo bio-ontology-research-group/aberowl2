@@ -114,8 +114,15 @@ def main():
     n_items = sum(1 for l in open(a.gold) if l.strip())
     n_runs = n_items * len(a.conditions) * len(a.regimes)
 
+    # Resolve the PER-MODEL provider pin into the global the harness reads. One
+    # model per invocation is exactly what makes this safe: config.PROVIDER is
+    # None until it is set here, so an unpinned model raises instead of silently
+    # falling back to OpenRouter's load balancer.
+    C.PROVIDER = C.provider_for(a.model) if getattr(C, "PIN_PROVIDER", True) else None
+
     before = credits()
     print(f"model      : {a.model}")
+    print(f"provider   : {C.PROVIDER}")
     print(f"gold       : {a.gold}  ({n_items} items)")
     print(f"conditions : {a.conditions}")
     print(f"planned    : {n_runs} runs")
@@ -135,7 +142,18 @@ def main():
     if isinstance(before.get("remaining"), (int, float)) and isinstance(after.get("remaining"), (int, float)):
         spent = round(before["remaining"] - after["remaining"], 6)
 
+    # Spend computed from the logged tokens x the PINNED endpoint's price, next to
+    # the credit delta. The credit delta is authoritative; the token-based figure is
+    # the independent check that the pin was actually honoured (a mismatch means a
+    # different endpoint served the calls).
+    price = getattr(C, "PROVIDER_PRICES", {}).get(a.model)
+    est = None
+    if price:
+        est = round(stats["prompt_tokens"] / 1e6 * price["in"]
+                    + stats["completion_tokens"] / 1e6 * price["out"], 6)
+
     rec = {"ts": datetime.now(timezone.utc).isoformat(), "model": a.model,
+           "provider": C.PROVIDER, "price_per_M": price, "spent_from_tokens": est,
            "gold": os.path.basename(a.gold), "conditions": a.conditions,
            "out": os.path.basename(out), "credits_before": before,
            "credits_after": after, "spent": spent, **stats}
@@ -146,7 +164,8 @@ def main():
     print(f"runs       : {stats['runs']} (errors {stats['errors']}, truncated {stats['truncated']})")
     print(f"tokens     : {stats['prompt_tokens']:,} in / {stats['completion_tokens']:,} out")
     print(f"tool calls : {stats['tool_calls']}")
-    print(f"SPENT      : {spent if spent is not None else 'unknown'}")
+    print(f"SPENT (key delta)  : {spent if spent is not None else 'unknown'}")
+    print(f"SPENT (from tokens): {est if est is not None else 'unknown'}")
     print(f"REMAINING  : {after.get('remaining')}")
     print(f"logged to  : {CREDITS_LOG}")
     print("\nSTOP. Report credits and wait for confirmation before the next model.")

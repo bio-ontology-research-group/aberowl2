@@ -42,12 +42,24 @@ async def call_openrouter(client, model, messages, tools):
     if tools:
         body["tools"] = tools
         body["tool_choice"] = "auto"
+    # OpenRouter can ACCEPT a request, queue it behind an account-wide concurrency
+    # limit, and hold the connection open while it waits. The socket stays live, so
+    # httpx's read timeout never fires and the request never returns: a run stalls
+    # silently, forever, with no error row to show for it. (Measured 2026-08-30: a
+    # 75s per-request timeout still hung past 90s.) REQUEST_DEADLINE is a ceiling
+    # enforced OUTSIDE httpx, so a queued call is cancelled and retried like any
+    # other transport failure. Leave it unset to keep the original behaviour.
+    deadline = getattr(C, "REQUEST_DEADLINE", None)
     last = "?"
     for attempt in range(6):
         try:
-            r = await client.post(C.OPENROUTER_URL, json=body,
-                                  headers={"Authorization": f"Bearer {C.OPENROUTER_API_KEY}"},
-                                  timeout=C.REQUEST_TIMEOUT)
+            post = client.post(C.OPENROUTER_URL, json=body,
+                               headers={"Authorization": f"Bearer {C.OPENROUTER_API_KEY}"},
+                               timeout=C.REQUEST_TIMEOUT)
+            r = await (asyncio.wait_for(post, timeout=deadline) if deadline else post)
+        except asyncio.TimeoutError:                # deadline hit: queued, never served
+            last = f"deadline: no response within {deadline}s"
+            await asyncio.sleep(2 * (attempt + 1)); continue
         except Exception as e:                      # ReadError/ConnectError/timeouts
             last = f"{type(e).__name__}: {e}"
             await asyncio.sleep(2 * (attempt + 1)); continue
