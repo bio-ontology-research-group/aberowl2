@@ -666,3 +666,19 @@ async def v1_download_ontology(acronym: str, submission: str, filename: str):
         filename=filename,
         headers={"Cache-Control": "public, max-age=3600"},
     )
+
+
+@router.get("/media/{rest:path}")
+async def v1_media_not_found(rest: str):
+    """Anything under /media/ that is not a servable file.
+
+    Declared after the download route, so that one wins; this only catches what
+    it does not. Without it these fall through to the SPA catch-all and answer
+    HTTP 200 with a web page — the silent failure this compatibility work exists
+    to remove, and particularly unhelpful for a path a client expected to be a
+    file download.
+    """
+    return JSONResponse(
+        {"status": "error", "message": f"No file is served at /media/{rest}"},
+        status_code=404,
+    )

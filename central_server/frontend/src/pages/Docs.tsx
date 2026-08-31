@@ -62,6 +62,51 @@ const TOOLS: Array<{ name: string; sig: string; desc: string }> = [
   { name: 'list_sparql_examples', sig: '()', desc: 'Curated SPARQL+OWL example queries to use as templates for the frame syntax.' },
 ]
 
+
+// The REST API. Listed before MCP because this is what most callers use, and
+// because its apparent absence from this page is what made the API look
+// removed (biopragmatics/bioregistry#2030).
+const REST: Array<{ method: string; path: string; desc: string; example: string }> = [
+  { method: 'GET', path: '/api/listOntologies', desc: 'Every ontology served, with status and counts.',
+    example: 'curl "%ORIGIN%/api/listOntologies"' },
+  { method: 'GET', path: '/api/getOntology', desc: 'Metadata for one ontology.',
+    example: 'curl "%ORIGIN%/api/getOntology?ontology=GO"' },
+  { method: 'GET', path: '/api/search_all', desc: 'Full-text class search across the repository.',
+    example: 'curl "%ORIGIN%/api/search_all?query=apoptosis"' },
+  { method: 'GET', path: '/api/queryNames', desc: 'Class search by label, synonym or OBO id.',
+    example: 'curl "%ORIGIN%/api/queryNames?term=cell&ontology=GO"' },
+  { method: 'GET', path: '/api/getClass', desc: 'Full detail for one class.',
+    example: 'curl "%ORIGIN%/api/getClass?ontology=GO&query=http://purl.obolibrary.org/obo/GO_0006915"' },
+  { method: 'GET', path: '/api/dlquery_all', desc: 'Description Logic query across ontologies.',
+    example: 'curl "%ORIGIN%/api/dlquery_all?query=\'part of\' some cell&type=subeq&ontologies=GO"' },
+  { method: 'GET', path: '/api/resolve', desc: 'Resolve a term, CURIE or IRI to its canonical IRI.',
+    example: 'curl "%ORIGIN%/api/resolve?query=apoptosis&ontologies=GO"' },
+  { method: 'GET', path: '/api/sparql', desc: 'Rewrite OWL DL frames in a SPARQL query into concrete IRIs.',
+    example: 'curl "%ORIGIN%/api/sparql?query=SELECT ?x WHERE { VALUES ?x { OWL subeq go-plus { \'cell death\' } } }"' },
+  { method: 'GET', path: '/artefacts/…', desc: 'FAIR semantic-artefact records and distributions.',
+    example: 'curl "%ORIGIN%/artefacts/go"' },
+]
+
+// AberOWL 1 paths are still served. Anything absent from this table works
+// unchanged; these are the ones whose behaviour differs.
+const MIGRATION: Array<{ v1: string; v2: string; note: string }> = [
+  { v1: 'GET /api/ontology/', v2: 'still works', note: 'Also available as /api/listOntologies, with richer fields.' },
+  { v1: 'GET /api/ontology/_find', v2: 'still works', note: 'Also /api/queryOntologies.' },
+  { v1: 'GET /api/class/_find', v2: 'still works', note: 'Also /api/search_all.' },
+  { v1: 'GET /api/class/_startwith', v2: 'still works', note: 'Also /api/queryNames with prefix=true.' },
+  { v1: 'GET /api/dlquery', v2: 'still works', note: 'Also /api/dlquery_all across several ontologies.' },
+  { v1: 'GET /api/ontology/{a}/root/{iri}', v2: 'still works', note: '' },
+  { v1: 'GET /api/ontology/{a}/objectproperty', v2: 'still works', note: '' },
+  { v1: 'POST /api/ontology/{a}/class/_matchsuperclasses', v2: 'still works', note: '' },
+  { v1: 'GET /service/api/{script}', v2: 'still works', note: 'Read-only reasoner servlets only.' },
+  { v1: 'GET /api/sparql', v2: 'still works', note: 'Rewrites the OWL frame and redirects to the endpoint named in the query, as before.' },
+  { v1: 'GET /api/class/_similar', v2: 'removed (410)', note: 'Needed per-class embeddings AberOWL 2 does not compute. Use /api/class/_find.' },
+  { v1: 'GET /api/dlquery/logs', v2: 'removed (410)', note: 'AberOWL 2 does not log DL queries.' },
+]
+
+const OPENAPI_URL = `${typeof window !== 'undefined' ? window.location.origin : ''}/openapi.json`
+const SWAGGER_URL = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/docs`
+
 const cliSnippet = `claude mcp add --transport http aberowl ${MCP_URL}`
 
 const jsonHttp = `{
@@ -122,22 +167,80 @@ function Section({ id, title, children }: { id?: string; title: string; children
 }
 
 export default function Docs() {
-  useDocumentTitle('Docs — MCP for Agents')
+  useDocumentTitle('API Docs — REST and MCP')
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 space-y-12">
       {/* Hero */}
       <div className="text-center">
-        <span className="inline-block text-xs font-semibold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full mb-3">
-          For AI Agents
-        </span>
-        <h1 className="text-3xl font-extrabold text-gray-900 mb-2 tracking-tight">Connect to AberOWL over MCP</h1>
+        <h1 className="text-3xl font-extrabold text-gray-900 mb-2 tracking-tight">AberOWL API</h1>
         <p className="text-gray-500 max-w-2xl mx-auto">
-          AberOWL exposes OWL reasoning over <strong>900+ biomedical ontologies</strong> through the
-          Model Context Protocol. Point your agent at one endpoint and it can search classes, run
-          Description&nbsp;Logic queries, browse hierarchies, and build ontology-aware SPARQL.
+          OWL reasoning over <strong>900+ biomedical ontologies</strong>, available two ways: a
+          <strong> REST API</strong> for programs, and <strong>MCP</strong> for AI agents. The
+          AberOWL&nbsp;1 endpoints are still served, so existing clients keep working.
         </p>
+        <div className="mt-4 flex items-center justify-center gap-3 flex-wrap text-sm">
+          <a href={OPENAPI_URL} className="px-3 py-1.5 rounded-md border border-gray-300 hover:bg-gray-50 text-indigo-700 font-medium">
+            openapi.json
+          </a>
+          <a href={SWAGGER_URL} className="px-3 py-1.5 rounded-md border border-gray-300 hover:bg-gray-50 text-indigo-700 font-medium">
+            Interactive API docs
+          </a>
+        </div>
       </div>
+
+      {/* REST API */}
+      <Section id="rest" title="1. REST API">
+        <p className="text-sm text-gray-500 mb-4">
+          Plain HTTP, JSON responses, no key required. The full machine-readable
+          specification is at{' '}
+          <a href={OPENAPI_URL} className="text-indigo-600 hover:underline">/openapi.json</a>, and{' '}
+          <a href={SWAGGER_URL} className="text-indigo-600 hover:underline">/api/docs</a> is an
+          interactive browser for it.
+        </p>
+        <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100">
+          {REST.map(e => (
+            <div key={e.path} className="p-4 hover:bg-gray-50/60">
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{e.method}</span>
+                <code className="font-mono text-sm text-indigo-700">{e.path}</code>
+              </div>
+              <p className="text-sm text-gray-600 mt-1">{e.desc}</p>
+              <pre className="mt-2 bg-gray-50 border border-gray-200 rounded-md p-2 overflow-x-auto text-[11px] font-mono text-gray-700">
+                <code>{e.example.replace('%ORIGIN%', typeof window !== 'undefined' ? window.location.origin : '')}</code>
+              </pre>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      {/* Migration */}
+      <Section id="migration" title="2. Coming from AberOWL 1">
+        <p className="text-sm text-gray-500 mb-4">
+          The AberOWL&nbsp;1 paths are served at their original URLs, so existing clients need no
+          change. Only the rows below behave differently from v1.
+        </p>
+        <div className="border border-gray-200 rounded-xl overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-gray-50 text-gray-500">
+              <tr>
+                <th className="text-left font-semibold px-4 py-2">AberOWL 1</th>
+                <th className="text-left font-semibold px-4 py-2">In AberOWL 2</th>
+                <th className="text-left font-semibold px-4 py-2">Note</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {MIGRATION.map(m => (
+                <tr key={m.v1} className="align-top">
+                  <td className="px-4 py-2 font-mono text-xs text-gray-700 whitespace-nowrap">{m.v1}</td>
+                  <td className={`px-4 py-2 text-xs whitespace-nowrap ${m.v2.startsWith('removed') ? 'text-amber-700' : 'text-emerald-700'}`}>{m.v2}</td>
+                  <td className="px-4 py-2 text-xs text-gray-500">{m.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Section>
 
       {/* Endpoint card */}
       <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
@@ -150,7 +253,7 @@ export default function Docs() {
       </div>
 
       {/* Quick connect */}
-      <Section id="connect" title="1. Connect your agent">
+      <Section id="connect" title="3. Connect an AI agent (MCP)">
         {/* Hosted service */}
         <div className="mb-8">
           <h3 className="text-base font-bold text-gray-900 mb-1">Hosted AberOWL</h3>
@@ -201,7 +304,7 @@ export default function Docs() {
       </Section>
 
       {/* Tools */}
-      <Section id="tools" title="2. Available tools">
+      <Section id="tools" title="4. MCP tools">
         <p className="text-sm text-gray-500 mb-4">
           Once connected, your agent can call these tools. A typical flow is{' '}
           <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">list_ontologies</span> →{' '}
@@ -223,7 +326,7 @@ export default function Docs() {
       </Section>
 
       {/* DL queries */}
-      <Section id="dl" title="3. Description Logic queries">
+      <Section id="dl" title="5. Description Logic queries">
         <p className="text-sm text-gray-500 mb-3">
           The core capability: query classes by <strong>logical structure</strong> using OWL reasoning,
           expressed in <a className="text-indigo-600 hover:underline" href="https://www.w3.org/TR/owl2-manchester-syntax/" target="_blank" rel="noreferrer">Manchester OWL Syntax</a>.
@@ -257,7 +360,7 @@ export default function Docs() {
       </Section>
 
       {/* SPARQL + OWL */}
-      <Section id="sparql" title="4. Ontology-aware SPARQL">
+      <Section id="sparql" title="6. Ontology-aware SPARQL">
         <p className="text-sm text-gray-500 mb-3">
           Embed OWL DL frames in a SPARQL query; AberOWL resolves them to concrete IRIs and (optionally)
           runs the query against any endpoint — UniProt, Wikidata, Ontobee, and more. AberOWL itself
