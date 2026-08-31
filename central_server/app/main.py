@@ -868,7 +868,23 @@ async def lifespan(app: FastAPI):
     await redis_client.close()
     logger.info("Redis connection closed.")
 
-app = FastAPI(lifespan=lifespan)
+# Swagger moves off /docs so the SPA's documentation page can own it. Until now
+# both claimed that path: a direct request got Swagger, while clicking "Docs" in
+# the site nav routed client-side and rendered the SPA page without a request
+# reaching the server. Same URL, two different pages depending on how you
+# arrived — which is how the REST API came to look like it had been replaced by
+# MCP (#93, biopragmatics/bioregistry#2030).
+app = FastAPI(
+    lifespan=lifespan,
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    title="AberOWL",
+    description=(
+        "Ontology repository and reasoning service. The REST API below is the "
+        "AberOWL 2 surface; the AberOWL 1 paths are also served for "
+        "compatibility. Machine-readable spec: /openapi.json"
+    ),
+)
 
 # Mounted here, directly after app creation, so the v1 routes are registered
 # BEFORE the SPA catch-all `/{path:path}` further down. FastAPI matches routes in

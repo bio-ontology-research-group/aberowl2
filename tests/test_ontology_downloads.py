@@ -140,21 +140,51 @@ class TestDownloadRoute:
 
 @pytest.mark.unit
 class TestTraversalIsRefused:
-    """Both path components come straight from the URL."""
+    """Both path components come straight from the URL.
+
+    Two properties, and the first is the one that matters: the planted file
+    outside the corpus is never returned. The second is that nothing under
+    /media/ answers 200 with an HTML page — a client asking for a file download
+    should get a 404 it can detect, not the web app.
+    """
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("filename", ["../secret.txt", "..%2Fsecret.txt", "a/b.owl"])
     async def test_filename_cannot_escape(self, client, filename):
         r = await client.get(f"/media/ontologies/GO/1/{filename}")
-        assert r.status_code in (400, 404), f"{filename!r} was not refused"
-        assert "do not serve me" not in r.text
+        assert "do not serve me" not in r.text, f"{filename!r} leaked the file"
+        assert not r.headers["content-type"].startswith("application/rdf+xml")
+        assert r.status_code in (400, 404), f"{filename!r} answered {r.status_code}"
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("acronym", ["..", "../..", "GO/.."])
     async def test_acronym_cannot_escape(self, client, acronym):
+        """The property that holds regardless of where the path lands.
+
+        An HTTP client normalises `..` before sending, so these do not all
+        arrive as /media/ paths — `../..` collapses to /1/go.owl, which is not
+        a media path at all and is legitimately served by the SPA. What must be
+        true in every case is that the file planted outside the corpus is never
+        returned.
+        """
         r = await client.get(f"/media/ontologies/{acronym}/1/go.owl")
-        assert r.status_code in (400, 404)
         assert "do not serve me" not in r.text
+        assert not r.headers["content-type"].startswith("application/rdf+xml")
+
+    @pytest.mark.asyncio
+    async def test_an_escaping_path_that_stays_under_media_is_404(self, client):
+        """Where the request does still reach /media/, it must not be the web page."""
+        # Normalises to /media/ontologies/secret.txt — still a media path, so
+        # the media handler owns it rather than the SPA catch-all.
+        r = await client.get("/media/ontologies/GO/../secret.txt")
+        assert r.status_code == 404
+        assert "do not serve me" not in r.text
+
+    @pytest.mark.asyncio
+    async def test_media_never_answers_with_the_web_page(self, client):
+        """The SPA catch-all would otherwise swallow these with HTTP 200."""
+        r = await client.get("/media/ontologies/GO/1/../secret.txt")
+        assert "<!doctype html>" not in r.text.lower()
 
 
 @pytest.mark.unit
