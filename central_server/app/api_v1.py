@@ -46,13 +46,31 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# v1 reported the *reasoner* outcome here (Classified / Incoherent / Unloadable /
-# Unknown), not a serving state. AberOWL 2 tracks the reasoner outcome per
-# ontology inside each worker but never propagates it to the central registry, so
-# we cannot state it yet. "Unknown" is one of v1's own values; inferring
-# "Classified" from a worker being online would be a fabricated claim about
-# reasoning. Plumbing the real value through is a separate step.
+# v1 reported the *reasoner* outcome here, not a serving state, using this
+# vocabulary. The worker records the same thing under different names
+# (RequestManager.loadStati: loading / loaded / classified / incoherent), which
+# central now carries as `reasoner_status`.
 DEFAULT_REASONER_STATUS = "Unknown"
+
+# Worker vocabulary -> v1 vocabulary. `loaded` and `loading` map to Unknown
+# rather than Classified: the ontology is in memory but classification has not
+# finished, so claiming it is classified would be a false statement about
+# reasoning. An unreachable worker gives Unloadable, which is what v1 meant.
+_REASONER_STATUS_MAP = {
+    "classified": "Classified",
+    "incoherent": "Incoherent",
+    "loaded": "Unknown",
+    "loading": "Unknown",
+    "unknown": "Unknown",
+}
+
+
+def _v1_status(entry: Dict[str, Any]) -> str:
+    """The v1 `status` value for a registry entry."""
+    if entry.get("status") == "offline":
+        return "Unloadable"
+    raw = (entry.get("reasoner_status") or "").strip().lower()
+    return _REASONER_STATUS_MAP.get(raw, DEFAULT_REASONER_STATUS)
 
 WORKER_TIMEOUT = 30
 
@@ -201,7 +219,7 @@ def _ontology_record(entry: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "acronym": acronym,
         "name": entry.get("title") or entry.get("name") or acronym,
-        "status": DEFAULT_REASONER_STATUS,
+        "status": _v1_status(entry),
         "topics": None,
         "species": None,
         "submission": _submission(entry),

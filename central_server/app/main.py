@@ -401,7 +401,17 @@ async def fetch_and_update_server_metadata(
         async with session.get(stats_url, timeout=30) as response:
             if response.status == 200:
                 stats = await response.json()
+                # The worker reports the ontology's REASONER outcome in `status`
+                # (classified / incoherent / loaded / loading — see
+                # RequestManager.loadStati). The registry uses `status` for the
+                # SERVING state, so the next line would overwrite it and the
+                # reasoner outcome would be lost, as it silently was until now.
+                # Keep it under its own key; AberOWL 1 reported exactly this to
+                # callers (#94), and #92 needs it recorded.
+                reasoner_status = stats.get("status")
                 server.update(stats)
+                if reasoner_status:
+                    server["reasoner_status"] = reasoner_status
                 server["status"] = "online"
                 # Backfill any fields the OWL file didn't carry (title,
                 # description, homepage, license, contact) from OBO Foundry.
@@ -779,8 +789,8 @@ _PUBLIC_ONTOLOGY_FIELDS = frozenset({
     "version_info", "version_iri", "license", "default_namespace",
     "obo_format_version", "home_page", "homepage", "documentation",
     "publication", "creators", "keywords",
-    # serving state (safe: coarse status only, no url)
-    "status", "reasoner_type",
+    # serving state (safe: coarse status only, no url) and the reasoner outcome
+    "status", "reasoner_type", "reasoner_status",
     # class/property/example counts and samples
     "class_count", "property_count", "object_property_count",
     "individual_count", "example_classes", "example_class",
