@@ -11,19 +11,19 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Set
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 import aiohttp
 import redis.asyncio as redis
 from fastapi import FastAPI, Request, Query, HTTPException, Depends
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, HttpUrl
 
 from app.es_manager import CentralESManager
-from app.sparql_expander import expand_sparql_query
+from app.sparql_expander import expand_sparql_query, find_v1_service_endpoint
 from app.auth import (
     get_rate_limit_key, create_api_key, revoke_api_key, list_api_keys,
     PUBLIC_RATE_LIMIT, API_KEY_RATE_LIMIT,
@@ -1405,25 +1405,67 @@ async def sparql_rewrite_api(request: Request):
 
     rewritten_query, expansions, errors = await expand_sparql_query(query, server_lookup)
 
-    # AberOWL 1 EXECUTED SPARQL here and required a `format` parameter. AberOWL 2
-    # only rewrites. Left alone, a v1 caller gets HTTP 200 and its own query
-    # echoed back as `rewritten_query` — a silent no-op, the worst failure mode
-    # available. Fail loudly instead, using v1's own error envelope so an
-    # existing client can surface the message. See #94.
+    # AberOWL 1 compatibility (#102). v1 did not execute SPARQL either: it
+    # rewrote the frame and 302-redirected the caller to the endpoint named
+    # inside the query. Reproduce that, so a v1 client — which follows redirects
+    # by default — receives the endpoint's results exactly as it used to.
+    v1_endpoint = find_v1_service_endpoint(query)
+    if v1_endpoint:
+        res_format = (request.query_params.get("format")
+                      or request.query_params.get("result_format"))
+        if not res_format:
+            return JSONResponse(
+                {"status": "error", "message": "result format is required"},
+                status_code=400,
+            )
+        # If no frame resolved, the rewritten query carries an empty IRI list and
+        # the endpoint would dutifully return nothing. v1 redirected regardless;
+        # we do not, because a caller cannot distinguish "no matches" from "the
+        # reasoner was unreachable". Redirect when at least one frame resolved.
+        if errors and not expansions:
+            return JSONResponse(
+                {
+                    "status": "exception",
+                    "message": (
+                        "No OWL DL frame could be resolved, so redirecting would send "
+                        "an empty query to the endpoint. See `errors` for why."
+                    ),
+                    "rewritten_query": rewritten_query,
+                    "errors": errors,
+                },
+                status_code=502,
+            )
+
+        target = f"{v1_endpoint.strip()}?" + urlencode(
+            {"query": rewritten_query, "format": res_format,
+             "timeout": 0, "debug": "on", "run": "Run Query"},
+            doseq=True,
+        )
+        # v1 answered a POST with 200 and a Location header rather than a
+        # redirect, because a redirected POST would lose its body.
+        if request.method == "POST":
+            return JSONResponse({"status": "ok", "location": target},
+                                status_code=200, headers={"Location": target})
+        return RedirectResponse(url=target, status_code=302)
+
+    # A v1-style call whose query carries no endpoint cannot be redirected
+    # anywhere. Say so, rather than returning HTTP 200 and the query unchanged.
     if "format" in request.query_params or "result_format" in request.query_params:
         return JSONResponse(
             {
                 "status": "error",
                 "message": (
-                    "AberOWL 2 rewrites SPARQL queries containing OWL DL frames but "
-                    "does not execute them. Send `rewritten_query` to a SPARQL "
-                    "endpoint of your choice (Ontobee, UniProt, Wikidata, …)."
+                    "No SPARQL endpoint found in the query. AberOWL rewrites OWL DL "
+                    "frames and redirects to the endpoint named in the frame "
+                    "(OWL <type> <endpoint> <ontology> { ... }); it does not execute "
+                    "queries itself. Omit `format` to receive the rewritten query as "
+                    "JSON instead."
                 ),
                 "rewritten_query": rewritten_query,
                 "expansions": expansions,
                 "errors": errors,
             },
-            status_code=501,
+            status_code=400,
         )
 
     response = {
