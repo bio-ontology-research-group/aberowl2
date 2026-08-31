@@ -101,6 +101,9 @@ def main():
     ap.add_argument("--out", default=None)
     ap.add_argument("--conditions", nargs="*", default=C.CONDITIONS)
     ap.add_argument("--regimes", nargs="*", default=C.REGIMES)
+    ap.add_argument("--resume", action="store_true",
+                    help="second pass: keep the good rows in the existing output "
+                         "and re-run only the missing and errored cells")
     a = ap.parse_args()
 
     if "," in a.model or " " in a.model.strip():
@@ -133,7 +136,7 @@ def main():
     sys.argv = ["harness.py", "--gold", a.gold, "--out", out,
                 "--models", a.model,
                 "--conditions", *a.conditions,
-                "--regimes", *a.regimes]
+                "--regimes", *a.regimes] + (["--resume"] if a.resume else [])
     asyncio.run(harness.main())
 
     after = credits()

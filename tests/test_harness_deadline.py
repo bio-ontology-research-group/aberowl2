@@ -33,6 +33,9 @@ def harness(monkeypatch):
     cfg.TEMPERATURE = 0.0
     cfg.REQUEST_TIMEOUT = 120
     cfg.CONCURRENCY = 1
+    cfg.MODELS = ["m"]
+    cfg.CONDITIONS = ["none"]
+    cfg.REGIMES = ["forced"]
     sys.modules["config"] = cfg
 
     import harness as h
@@ -97,3 +100,87 @@ def test_iri_config_defines_no_deadline():
     """Guard: adding REQUEST_DEADLINE to the IRI config would change its results."""
     text = (HARNESS_DIR / "config.py").read_text()
     assert "REQUEST_DEADLINE" not in text
+
+
+# --- --resume -------------------------------------------------------------
+# A stalled cell lands as an error row. The second pass must re-run exactly
+# those, keep the good rows, and not duplicate anything -- including for the
+# terms the gold set repeats on purpose.
+
+def _rows(path):
+    return [__import__("json").loads(l) for l in open(path) if l.strip()]
+
+
+def test_resume_reruns_only_failed_and_missing(harness, tmp_path, monkeypatch):
+    import json
+    h, cfg = harness
+
+    gold = tmp_path / "gold.jsonl"
+    gold.write_text("".join(json.dumps(r) + "\n" for r in [
+        {"term": "a", "ontology": "GO"},
+        {"term": "b", "ontology": "GO"},
+        {"term": "a", "ontology": "GO"},        # deliberate duplicate
+    ]))
+
+    out = tmp_path / "runs.jsonl"
+    out.write_text("".join(json.dumps(r) + "\n" for r in [
+        {"term": "a", "ontology": "GO", "model": "m", "regime": "forced",
+         "condition": "none", "answer": "kept-1", "error": None},
+        {"term": "b", "ontology": "GO", "model": "m", "regime": "forced",
+         "condition": "none", "answer": "", "error": "deadline: no response"},
+        # only ONE of the two 'a' rows is present -> the duplicate is still owed
+    ]))
+
+    ran = []
+
+    async def fake_run_item(client, model, condition, regime, item):
+        ran.append(item["term"])
+        return {"term": item["term"], "ontology": item.get("ontology"), "model": model,
+                "condition": condition, "regime": regime, "answer": "fresh", "error": None}
+
+    monkeypatch.setattr(h, "run_item", fake_run_item)
+    monkeypatch.setattr(h.sys, "argv", ["harness.py", "--gold", str(gold), "--out", str(out),
+                                        "--models", "m", "--conditions", "none",
+                                        "--regimes", "forced", "--resume"])
+
+    class _C:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+    monkeypatch.setattr(h.httpx, "AsyncClient", lambda *a, **k: _C())
+
+    __import__("asyncio").run(h.main())
+
+    assert sorted(ran) == ["a", "b"], f"re-ran {ran}"     # failed 'b' + owed dup 'a'
+    rows = _rows(out)
+    assert len(rows) == 3, rows                            # no duplication, none lost
+    assert sum(1 for r in rows if r["answer"] == "kept-1") == 1
+    assert not [r for r in rows if r.get("error")]
+
+
+def test_no_resume_flag_overwrites_as_before(harness, tmp_path, monkeypatch):
+    """Default path must still truncate -- the original behaviour."""
+    import json
+    h, cfg = harness
+    gold = tmp_path / "gold.jsonl"
+    gold.write_text(json.dumps({"term": "a", "ontology": "GO"}) + "\n")
+    out = tmp_path / "runs.jsonl"
+    out.write_text(json.dumps({"term": "stale", "model": "m", "regime": "forced",
+                               "condition": "none", "error": None}) + "\n")
+
+    async def fake_run_item(client, model, condition, regime, item):
+        return {"term": item["term"], "model": model, "condition": condition,
+                "regime": regime, "answer": "fresh", "error": None}
+
+    monkeypatch.setattr(h, "run_item", fake_run_item)
+    monkeypatch.setattr(h.sys, "argv", ["harness.py", "--gold", str(gold), "--out", str(out),
+                                        "--models", "m", "--conditions", "none",
+                                        "--regimes", "forced"])
+
+    class _C:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+    monkeypatch.setattr(h.httpx, "AsyncClient", lambda *a, **k: _C())
+
+    __import__("asyncio").run(h.main())
+    rows = _rows(out)
+    assert len(rows) == 1 and rows[0]["term"] == "a", rows

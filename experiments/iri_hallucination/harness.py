@@ -9,7 +9,7 @@ Run:
         --gold experiments/iri_hallucination/gold.jsonl \
         --out  experiments/iri_hallucination/runs.jsonl
 """
-import argparse, asyncio, json, sys, time
+import argparse, asyncio, json, os, sys, time
 
 import httpx
 from mcp import ClientSession
@@ -166,6 +166,9 @@ async def main():
     ap.add_argument("--models", nargs="*", default=C.MODELS)
     ap.add_argument("--conditions", nargs="*", default=C.CONDITIONS)
     ap.add_argument("--regimes", nargs="*", default=C.REGIMES)
+    ap.add_argument("--resume", action="store_true",
+                    help="keep the successful rows already in --out and re-run only "
+                         "the missing and errored ones (second pass over stalls)")
     a = ap.parse_args()
     if not C.OPENROUTER_API_KEY:
         sys.exit("set OPENROUTER_API_KEY")
@@ -174,8 +177,47 @@ async def main():
     jobs = [(model, regime, condition, item)
             for model in a.models for regime in a.regimes
             for condition in a.conditions for item in gold]
+
+    # --resume: a run can leave error rows behind (a provider stall that outlived
+    # its retries). Re-running the whole grid to recover a handful of cells is
+    # wasteful and re-rolls answers that were already fine, so keep the good rows
+    # and re-run only what is missing or errored.
+    #
+    # Matching is a MULTISET, not a set: the gold file repeats 11 (term, ontology)
+    # keys on purpose, so a key can legitimately need N rows. Counting them keeps
+    # a duplicated term from being treated as already done after one success.
+    kept = []
+    if a.resume and os.path.exists(a.out):
+        from collections import Counter
+        have = Counter()
+        for line in open(a.out):
+            line = line.strip()
+            if not line:
+                continue
+            row = json.loads(line)
+            if row.get("error"):            # a failed cell is work still to do
+                continue
+            kept.append(row)
+            have[(row["model"], row["regime"], row["condition"],
+                  row["term"], row.get("ontology"))] += 1
+        todo = []
+        for j in jobs:
+            model, regime, condition, item = j
+            key = (model, regime, condition, item["term"], item.get("ontology"))
+            if have[key] > 0:
+                have[key] -= 1
+            else:
+                todo.append(j)
+        print(f"resume: {len(kept)} rows kept, {len(todo)} of {len(jobs)} to run")
+        jobs = todo
+
     sem = asyncio.Semaphore(C.CONCURRENCY)
+    # Rewrite from the kept rows so the output stays a complete, single-copy record
+    # -- never append blindly, or a retried cell keeps its old error row too.
     fout = open(a.out, "w"); lock = asyncio.Lock(); done = 0
+    for row in kept:
+        fout.write(json.dumps(row) + "\n")
+    fout.flush()
 
     async with httpx.AsyncClient() as client:
         async def worker(model, regime, condition, item):
