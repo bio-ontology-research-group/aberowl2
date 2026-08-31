@@ -584,9 +584,15 @@ async def v1_dlquery_logs_retired():
 # ---------------------------------------------------------------------------
 
 def _ontologies_dir() -> Path:
+    """The corpus as this process sees it.
+
+    Deliberately ONTOLOGIES_DIR and not ONTOLOGIES_BASE_PATH: the latter holds
+    the HOST path, which does not exist inside the container, so reading it here
+    finds nothing and every download_url comes back null.
+    """
     from app import main as _main
 
-    return Path(_main.ONTOLOGIES_BASE_PATH)
+    return Path(_main.ONTOLOGIES_DIR)
 
 
 def _available_ontology_ids() -> Set[str]:

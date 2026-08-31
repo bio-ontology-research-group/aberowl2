@@ -80,6 +80,12 @@ STATUS_POLL_CONCURRENCY = max(1, int(os.getenv("STATUS_POLL_CONCURRENCY", "16"))
 # page, which is worse for a client than a 404. Set false to unmount it.
 ENABLE_V1_API = os.getenv("ENABLE_V1_API", "true").lower() in ("1", "true", "yes")
 ONTOLOGIES_BASE_PATH = os.getenv("ONTOLOGIES_HOST_PATH", "/data/ontologies")
+# Where the corpus lives *inside this process*. ONTOLOGIES_HOST_PATH is the path
+# on the HOST — it is what compose bind-mounts — and the two are not the same:
+# compose maps ${ONTOLOGIES_PATH}:/data/ontologies, so the host may call it
+# /data/aberowl/ontologies while this process must open /data/ontologies.
+# Reading the host path from inside the container silently finds nothing.
+ONTOLOGIES_DIR = os.getenv("ONTOLOGIES_DIR", "/data/ontologies")
 ABEROWL_REPO_PATH = os.getenv("ABEROWL_REPO_PATH", "/opt/aberowl")
 
 

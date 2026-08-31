@@ -61,7 +61,7 @@ def corpus(tmp_path, monkeypatch):
     # A file that must never be reachable through the route.
     (tmp_path.parent / "secret.txt").write_text("do not serve me")
 
-    monkeypatch.setattr(main_module, "ONTOLOGIES_BASE_PATH", str(tmp_path))
+    monkeypatch.setattr(main_module, "ONTOLOGIES_DIR", str(tmp_path))
     return tmp_path
 
 
@@ -155,3 +155,25 @@ class TestTraversalIsRefused:
         r = await client.get(f"/media/ontologies/{acronym}/1/go.owl")
         assert r.status_code in (400, 404)
         assert "do not serve me" not in r.text
+
+
+@pytest.mark.unit
+class TestPathSettingIsTheContainerOne:
+    """ONTOLOGIES_HOST_PATH is the path on the HOST; compose bind-mounts it at a
+    different location inside the container. Reading the host path from in here
+    finds nothing, and every download_url comes back null — which is what
+    happened on the first deployment of this feature."""
+
+    def test_serving_uses_the_container_path(self, monkeypatch, tmp_path):
+        import app.main as main_module
+        from app.api_v1 import _ontologies_dir
+
+        monkeypatch.setattr(main_module, "ONTOLOGIES_DIR", str(tmp_path))
+        monkeypatch.setattr(main_module, "ONTOLOGIES_BASE_PATH", "/host/path/that/is/not/mounted")
+        assert _ontologies_dir() == tmp_path
+
+    def test_the_two_settings_are_independent(self):
+        import app.main as main_module
+
+        assert hasattr(main_module, "ONTOLOGIES_DIR")
+        assert hasattr(main_module, "ONTOLOGIES_BASE_PATH")
