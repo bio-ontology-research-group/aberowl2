@@ -64,14 +64,125 @@ TOOL_LOG_CHARS = 6000      # what we RECORD - must match, or relay fidelity is u
 # show gmicloud/fp8 next to deepinfra/fp4. Unpinned, successive calls to "the same
 # model" can be numerically different systems, which is a reproducibility hazard a
 # reviewer can check. Pin it, and log the provider actually used on every call.
-# Set to None to restore load-balanced routing.
-PROVIDER = {"order": ["gmicloud/fp8"], "allow_fallbacks": False}
+#
+# The pin is PER MODEL, not global: a single global pin is wrong as soon as the
+# subject list spans vendors. GMICloud serves deepseek-v3.2 but serves NEITHER
+# qwen3.6-35b-a3b NOR gemini-3.5-flash, so the old global `gmicloud/fp8` would have
+# hard-failed both (allow_fallbacks is False by design, so it fails loudly rather
+# than silently swapping the served system).
+#
+# Each choice below was made from /api/v1/models/{id}/endpoints on 2026-08-30,
+# on price AND 30-day uptime, preferring a NAMED quantization over "unknown"
+# (an unnamed quant is exactly the substitution the pin exists to prevent) and
+# requiring tool-call support (every arm but `none` needs function calling).
+PROVIDERS = {
+    # 14 endpoints. Cheapest overall AND fp8: $0.209/$0.310 per M, 99.10% uptime,
+    # tools supported, 147k max completion. Runner-up streamlake/fp8 ($0.215/$0.322,
+    # 99.95%) is 4% dearer for +0.85pt uptime; the harness already retries 6x with
+    # backoff on 429/5xx, so price wins and the deepseek pin is unchanged from the
+    # global one it replaces. Explicitly NOT deepinfra/fp4 (same price as several
+    # fp8 endpoints, but a coarser quantization = a different system).
+    "deepseek/deepseek-v3.2": {"order": ["gmicloud/fp8"], "allow_fallbacks": False},
+
+    # 10 endpoints. Cheapest fp8 endpoint: $0.10/$0.90 per M at 100% uptime, tools
+    # supported, 236k max completion. darkbloom/fp4 is nominally cheaper
+    # ($0.05/$0.70) and is rejected on quantization, not price. deepinfra/fp8 matches
+    # the input price but is dearer on output, has the worst uptime of the fp8 set
+    # (97.95%), and caps completions at 16k.
+    "qwen/qwen3.6-35b-a3b": {"order": ["akashml/fp8"], "allow_fallbacks": False},
+
+    # 7 endpoints, ALL first-party Google and all quantization "unknown" - a closed
+    # model has no quantization choice, so the pin here buys routing stability only.
+    # Google Vertex global at 99.57% uptime vs Google AI Studio at 97.16%; the
+    # /flex tiers halve the price ($0.75/$4.50) but trade scheduling priority, and
+    # this is the one subject where extended thinking makes runs long enough that a
+    # deprioritised request can hit REQUEST_TIMEOUT and land in the table as an
+    # error row. For an $19 subject, buying the standard tier's latency guarantee
+    # is worth more than the $9 saved.
+    "google/gemini-3.5-flash": {"order": ["google-vertex/global"], "allow_fallbacks": False},
+
+    # The two already-completed subjects, which ran UNPINNED. Their `providers` and
+    # `gen_ids` keys are ABSENT from all 480 rows of each file - not empty, absent -
+    # and both keys were introduced by the same commit that introduced the pin
+    # (d1b6c22, "pin OpenRouter provider and log call provenance"). Absent keys
+    # therefore date those runs to the pre-pin harness: they were load-balanced, and
+    # the endpoint that served them is unrecorded and unrecoverable. (This is a
+    # provenance gap to disclose in the methods, NOT a case of OpenRouter ignoring a
+    # pin.) The token totals do identify it
+    # circumstantially: llama's 1,514,656 in / 153,674 out cost $0.2036, which
+    # matches deepinfra/fp8 at $0.10/$0.30 ($0.198) and not groq at $0.11/$0.34
+    # ($0.219). The pins below are what a RE-RUN would use; they are not a claim
+    # about what produced runs_gpt-oss-20b.jsonl / runs_llama-4-scout.jsonl.
+    #   gpt-oss-20b : cheapest tool-capable fp8 endpoint ($0.02/$0.10) but only
+    #                 96.16% uptime; deepinfra/bf16 ($0.03/$0.14, 99.73%) is the
+    #                 price the config header already quotes and the likely original.
+    "openai/gpt-oss-20b": {"order": ["deepinfra/bf16"], "allow_fallbacks": False},
+    #   llama-4-scout : deepinfra/fp8 ($0.10/$0.30, 100% uptime) - the price the
+    #                 config header quotes and the one the measured spend matches.
+    "meta-llama/llama-4-scout": {"order": ["deepinfra/fp8"], "allow_fallbacks": False},
+}
+
+# Per-M USD prices of the PINNED endpoint, for computing spend from the logged
+# token counts. Kept next to the pin so the two cannot drift apart.
+PROVIDER_PRICES = {
+    "deepseek/deepseek-v3.2":   {"in": 0.2088, "out": 0.3096},
+    "qwen/qwen3.6-35b-a3b":     {"in": 0.10,   "out": 0.90},
+    "google/gemini-3.5-flash":  {"in": 1.50,   "out": 9.00},
+}
+
+# --- Pinning is OFF (2026-08-31) ---------------------------------------------
+# Measured, deepseek-v3.2 at CONCURRENCY=2, 90s deadline, 30-request stream:
+#   pinned novita/fp8 ....... 3 of the first 5 requests never returned
+#   unpinned ................ 2 of the first 6 requests never returned
+# So a hard pin makes the stall worse but does NOT cause it: OpenRouter queues
+# requests for this key at very low concurrency and holds the socket open, and
+# forbidding fallbacks (allow_fallbacks=False) removes the only escape route.
+# Pinning at this hang rate makes the remaining models unrunnable, so it is
+# disabled and provenance comes from the LOGGED provider on every call
+# (msg["_provider"] -> the `providers` field) instead of from an asserted pin.
+# That is the weaker guarantee but the honest one: it records what actually
+# served each call rather than what we asked for. The PROVIDERS table above is
+# retained as the documented preference for a future re-run.
+PIN_PROVIDER = False
+
+# The harness reads C.PROVIDER. run_model.py takes exactly one model per
+# invocation, so it resolves the table into PROVIDER before handing off.
+PROVIDER = None
+
+
+def provider_for(model: str):
+    """The pinned endpoint for `model`. Raises rather than returning None: an
+    unpinned model would silently fall back to load-balanced routing, which is the
+    failure the pin exists to prevent."""
+    try:
+        return PROVIDERS[model]
+    except KeyError:
+        raise KeyError(
+            f"no provider pinned for {model!r}. Add one to config.PROVIDERS after "
+            f"checking https://openrouter.ai/api/v1/models/{model}/endpoints - "
+            f"running unpinned would make the served system non-reproducible."
+        )
+
 
 TEMPERATURE = 0.0
 REQUEST_TIMEOUT = 180
-CONCURRENCY = 16
+
+# A ceiling enforced outside httpx (see harness.call_openrouter). OpenRouter
+# queues requests past an account-wide concurrency limit while holding the socket
+# open, so httpx's read timer never fires and the run deadlocks with no error row.
+# Without this a stalled run is indistinguishable from a slow one. Set just ABOVE
+# REQUEST_TIMEOUT (180) on purpose: httpx still owns the normal slow-response case,
+# so this only ever fires on the pathological "socket alive, no bytes" state and
+# cannot turn a legitimately slow reasoning call into a false failure.
+REQUEST_DEADLINE = 200
+
+# Deliberately low. Measured 2026-08-30: this key is served ~2-3 requests at a
+# time; at 16 the first batch returns and every later request queues forever,
+# which is what killed two runs at ~19 of 480 items. Throughput only - the items
+# are independent and TEMPERATURE is 0, so this cannot move a result.
+CONCURRENCY = 2
 
 # --- Gold ---
 # Built OFFLINE by build_dl_gold.groovy from the DEPLOYED release. Never from the
 # service: that circularity is what invalidated the IRI gold set.
-ONTOLOGIES = ["go", "cl", "so"]     # large / medium / small (51,937 / 19,151 / 2,747 classes)
+ONTOLOGIES = ["go", "cl", "so"]     # large / medium / small (51,937 / 19,151 / 2,752 classes)

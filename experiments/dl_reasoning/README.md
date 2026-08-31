@@ -80,7 +80,7 @@ the model. Verified against the registry:
 |---|---|---|---|
 | `go` | large | 51,937 | 2026-03-25 |
 | `cl` | medium | 19,151 | 2026-03-26 |
-| `so` | small | 2,747 | current |
+| `so` | small | 2,752 | current |
 
 Size is **not** the hypothesis; it proxies training-data familiarity. The prediction
 is that the `none` arm does best on GO and worst on SO, so the reasoning gain grows

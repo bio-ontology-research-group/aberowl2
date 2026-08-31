@@ -9,7 +9,7 @@ Run:
         --gold experiments/iri_hallucination/gold.jsonl \
         --out  experiments/iri_hallucination/runs.jsonl
 """
-import argparse, asyncio, json, sys, time
+import argparse, asyncio, json, os, sys, time
 
 import httpx
 from mcp import ClientSession
@@ -42,12 +42,24 @@ async def call_openrouter(client, model, messages, tools):
     if tools:
         body["tools"] = tools
         body["tool_choice"] = "auto"
+    # OpenRouter can ACCEPT a request, queue it behind an account-wide concurrency
+    # limit, and hold the connection open while it waits. The socket stays live, so
+    # httpx's read timeout never fires and the request never returns: a run stalls
+    # silently, forever, with no error row to show for it. (Measured 2026-08-30: a
+    # 75s per-request timeout still hung past 90s.) REQUEST_DEADLINE is a ceiling
+    # enforced OUTSIDE httpx, so a queued call is cancelled and retried like any
+    # other transport failure. Leave it unset to keep the original behaviour.
+    deadline = getattr(C, "REQUEST_DEADLINE", None)
     last = "?"
     for attempt in range(6):
         try:
-            r = await client.post(C.OPENROUTER_URL, json=body,
-                                  headers={"Authorization": f"Bearer {C.OPENROUTER_API_KEY}"},
-                                  timeout=C.REQUEST_TIMEOUT)
+            post = client.post(C.OPENROUTER_URL, json=body,
+                               headers={"Authorization": f"Bearer {C.OPENROUTER_API_KEY}"},
+                               timeout=C.REQUEST_TIMEOUT)
+            r = await (asyncio.wait_for(post, timeout=deadline) if deadline else post)
+        except asyncio.TimeoutError:                # deadline hit: queued, never served
+            last = f"deadline: no response within {deadline}s"
+            await asyncio.sleep(2 * (attempt + 1)); continue
         except Exception as e:                      # ReadError/ConnectError/timeouts
             last = f"{type(e).__name__}: {e}"
             await asyncio.sleep(2 * (attempt + 1)); continue
@@ -154,6 +166,9 @@ async def main():
     ap.add_argument("--models", nargs="*", default=C.MODELS)
     ap.add_argument("--conditions", nargs="*", default=C.CONDITIONS)
     ap.add_argument("--regimes", nargs="*", default=C.REGIMES)
+    ap.add_argument("--resume", action="store_true",
+                    help="keep the successful rows already in --out and re-run only "
+                         "the missing and errored ones (second pass over stalls)")
     a = ap.parse_args()
     if not C.OPENROUTER_API_KEY:
         sys.exit("set OPENROUTER_API_KEY")
@@ -162,8 +177,47 @@ async def main():
     jobs = [(model, regime, condition, item)
             for model in a.models for regime in a.regimes
             for condition in a.conditions for item in gold]
+
+    # --resume: a run can leave error rows behind (a provider stall that outlived
+    # its retries). Re-running the whole grid to recover a handful of cells is
+    # wasteful and re-rolls answers that were already fine, so keep the good rows
+    # and re-run only what is missing or errored.
+    #
+    # Matching is a MULTISET, not a set: the gold file repeats 11 (term, ontology)
+    # keys on purpose, so a key can legitimately need N rows. Counting them keeps
+    # a duplicated term from being treated as already done after one success.
+    kept = []
+    if a.resume and os.path.exists(a.out):
+        from collections import Counter
+        have = Counter()
+        for line in open(a.out):
+            line = line.strip()
+            if not line:
+                continue
+            row = json.loads(line)
+            if row.get("error"):            # a failed cell is work still to do
+                continue
+            kept.append(row)
+            have[(row["model"], row["regime"], row["condition"],
+                  row["term"], row.get("ontology"))] += 1
+        todo = []
+        for j in jobs:
+            model, regime, condition, item = j
+            key = (model, regime, condition, item["term"], item.get("ontology"))
+            if have[key] > 0:
+                have[key] -= 1
+            else:
+                todo.append(j)
+        print(f"resume: {len(kept)} rows kept, {len(todo)} of {len(jobs)} to run")
+        jobs = todo
+
     sem = asyncio.Semaphore(C.CONCURRENCY)
+    # Rewrite from the kept rows so the output stays a complete, single-copy record
+    # -- never append blindly, or a retried cell keeps its old error row too.
     fout = open(a.out, "w"); lock = asyncio.Lock(); done = 0
+    for row in kept:
+        fout.write(json.dumps(row) + "\n")
+    fout.flush()
 
     async with httpx.AsyncClient() as client:
         async def worker(model, regime, condition, item):

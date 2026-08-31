@@ -56,7 +56,7 @@ Demand for reasoning tracks whether the question actually requires it.
 |---|---|---|---|---|
 | GO | 51,937 | 0.0 | 12.5 | 97.5 |
 | CL | 19,151 | 0.0 | 0.0 | 92.5 |
-| SO | 2,747 | 0.0 | 0.0 | 95.0 |
+| SO | 2,752 | 0.0 | 0.0 | 95.0 |
 
 The familiarity hypothesis (larger/more famous ontology → better unaided
 performance) gets **no support in the success metric**: `none` is zero everywhere.
