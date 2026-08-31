@@ -1203,17 +1203,44 @@ async def get_servers():
 
 @app.get("/api/listOntologies")
 async def list_ontologies_api():
-    """Return a list of all registered ontology IDs."""
+    """Every registered ontology, with the metadata a registry needs.
+
+    This used to return only id/title/status, which is what
+    biopragmatics/bioregistry#2030 reported as fields having gone missing: a
+    harvester could no longer get a name, homepage, description, version or
+    download URL without a second request per ontology, across ~971 of them.
+
+    `id`, `title` and `status` keep their names and meanings, so existing
+    callers are unaffected; everything else is additive. Fields we do not hold
+    are null rather than an empty string, so "absent" is distinguishable from
+    "known to be empty".
+    """
+    from app.api_v1 import _available_ontology_ids, _download_url, _v1_status
+
     server_data_json = await redis_client.hvals("registered_servers")
     servers = [json.loads(s) for s in server_data_json]
-    ontologies = [
-        {
-            "id": s.get("ontology"),
+    # One directory listing for the whole corpus rather than a stat per entry.
+    available = _available_ontology_ids()
+
+    ontologies = []
+    for s in servers:
+        oid = s.get("ontology") or s.get("ontology_id")
+        ontologies.append({
+            # unchanged, for existing callers
+            "id": oid,
             "title": s.get("title", ""),
             "status": s.get("status", "unknown"),
-        }
-        for s in servers
-    ]
+            # added
+            "name": s.get("title") or s.get("name") or None,
+            "description": s.get("description") or None,
+            "homepage": s.get("home_page") or s.get("homepage") or None,
+            "version": s.get("version_info") or None,
+            "license": s.get("license") or None,
+            "download_url": _download_url(oid, available),
+            "class_count": s.get("class_count"),
+            # the reasoner outcome, in AberOWL 1's vocabulary
+            "reasoner_status": _v1_status(s),
+        })
     return {"result": ontologies}
 
 
