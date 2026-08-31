@@ -36,11 +36,12 @@ import asyncio
 import json
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set
 
 import aiohttp
 from fastapi import APIRouter, Body, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 logger = logging.getLogger(__name__)
 
@@ -176,18 +177,18 @@ async def _registry_entries() -> List[Dict[str, Any]]:
     return out
 
 
-def _submission(entry: Dict[str, Any]) -> Dict[str, Any]:
+def _submission(entry: Dict[str, Any], available: Optional[Set[str]] = None) -> Dict[str, Any]:
     """The v1 `submission` object, filled from what the v2 registry actually holds.
 
     Fields v2 has no equivalent for are emitted as null rather than invented —
-    v1 emitted nulls for many of these too. `download_url` stays null until the
-    central server serves the corpus (see #95); a wrong URL would be worse than
-    an absent one, since Bioregistry prefixes it with the site root.
+    v1 emitted nulls for many of these too. `download_url` is null unless we
+    actually hold the file: consumers prefix it with the site root, so a path we
+    cannot serve becomes a broken link in their records.
     """
     return {
         "id": None,
         "submission_id": None,
-        "download_url": None,
+        "download_url": _download_url(entry.get("ontology") or entry.get("ontology_id"), available),
         "domain": None,
         "description": entry.get("description") or None,
         "documentation": entry.get("documentation") or None,
@@ -213,7 +214,7 @@ def _submission(entry: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _ontology_record(entry: Dict[str, Any]) -> Dict[str, Any]:
+def _ontology_record(entry: Dict[str, Any], available: Optional[Set[str]] = None) -> Dict[str, Any]:
     """One entry in the v1 `/api/ontology/` list."""
     acronym = (entry.get("ontology") or entry.get("ontology_id") or "").upper()
     return {
@@ -222,7 +223,7 @@ def _ontology_record(entry: Dict[str, Any]) -> Dict[str, Any]:
         "status": _v1_status(entry),
         "topics": None,
         "species": None,
-        "submission": _submission(entry),
+        "submission": _submission(entry, available),
     }
 
 
@@ -235,7 +236,9 @@ def _ontology_record(entry: Dict[str, Any]) -> Dict[str, Any]:
 async def v1_list_ontologies():
     """v1 returned a bare JSON list (DRF ListAPIView), not an envelope."""
     entries = await _registry_entries()
-    records = [_ontology_record(e) for e in entries if e.get("ontology") or e.get("ontology_id")]
+    available = _available_ontology_ids()
+    records = [_ontology_record(e, available) for e in entries
+               if e.get("ontology") or e.get("ontology_id")]
     records.sort(key=lambda r: r["acronym"])
     return records
 
@@ -565,4 +568,95 @@ async def v1_dlquery_logs_retired():
             ),
         },
         status_code=410,
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET /media/ontologies/{acronym}/{submission}/{filename}
+#
+# AberOWL 1 served the OWL files itself and put a RELATIVE path in
+# `submission.download_url`. Consumers prefix it with the site root — Bioregistry
+# does exactly that — so the path has to stay relative and has to resolve.
+#
+# v1 numbered submissions per ontology. AberOWL 2 keeps one current file per
+# ontology, so the segment is accepted and ignored: an archived v1 URL still
+# resolves, and it resolves to what we actually serve today.
+# ---------------------------------------------------------------------------
+
+def _ontologies_dir() -> Path:
+    from app import main as _main
+
+    return Path(_main.ONTOLOGIES_BASE_PATH)
+
+
+def _available_ontology_ids() -> Set[str]:
+    """Lowercased ids whose OWL file is on disk right now.
+
+    A directory is not enough: the corpus contains directories with no file in
+    them (an ontology registered but never downloaded, or a failed update), and
+    advertising those would produce a download_url that 404s.
+
+    Built once per request rather than per ontology, since /api/ontology/ asks
+    about the whole corpus at once.
+    """
+    try:
+        base = _ontologies_dir()
+        return {
+            d.name.lower()
+            for d in base.iterdir()
+            if d.is_dir() and (d / f"{d.name.lower()}.owl").is_file()
+        }
+    except Exception as e:
+        logger.debug("v1: cannot list the ontology directory: %s", e)
+        return set()
+
+
+def _download_url(ontology_id: str, available: Optional[Set[str]] = None) -> Optional[str]:
+    """The v1-style relative path, or None when we hold no file.
+
+    None rather than a guess: the value is prefixed with the site root by
+    consumers, so a path we cannot serve becomes a broken link in *their*
+    records.
+    """
+    oid = (ontology_id or "").lower()
+    if not oid:
+        return None
+    if available is not None:
+        if oid not in available:
+            return None
+    elif not (_ontologies_dir() / oid / f"{oid}.owl").is_file():
+        return None
+    return f"media/ontologies/{oid.upper()}/1/{oid}.owl"
+
+
+@router.get("/media/ontologies/{acronym}/{submission}/{filename}")
+async def v1_download_ontology(acronym: str, submission: str, filename: str):
+    oid = acronym.lower()
+    # Reject anything that could escape the ontology directory. The path
+    # components come straight from a URL, so treat them as hostile: no
+    # separators, no traversal, and the resolved path must stay inside the base.
+    if not re.fullmatch(r"[A-Za-z0-9_.\-]+", acronym) or not re.fullmatch(
+        r"[A-Za-z0-9_.\-]+", filename
+    ):
+        return JSONResponse(_err("invalid ontology or file name"), status_code=400)
+
+    base = _ontologies_dir().resolve()
+    try:
+        path = (base / oid / filename).resolve()
+        path.relative_to(base)
+    except (ValueError, RuntimeError, OSError):
+        return JSONResponse(_err("invalid path"), status_code=400)
+
+    if not path.is_file():
+        return JSONResponse(
+            {"status": "error",
+             "message": f"No file is served for ontology '{acronym}'"},
+            status_code=404,
+        )
+
+    return FileResponse(
+        path,
+        media_type="application/rdf+xml",
+        filename=filename,
+        headers={"Cache-Control": "public, max-age=3600"},
     )
