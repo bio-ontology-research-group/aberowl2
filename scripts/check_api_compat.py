@@ -105,12 +105,11 @@ class Check:
 # ---------------------------------------------------------------------------
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    """Report redirects instead of following them.
+    """Report a redirect instead of following it.
 
-    /api/sparql answers a v1 query with a 302 to the endpoint named in the
-    query. urllib follows redirects by default, so without this the checker
-    would report whatever that external endpoint returned rather than the
-    redirect it is meant to observe.
+    Used only for the /api/sparql check, whose whole point is to observe a 302.
+    urllib follows redirects by default, so without this the checker would report
+    whatever the external endpoint returned.
     """
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
@@ -123,9 +122,11 @@ class HttpTransport:
     def __init__(self, base_url: str, timeout: int = DEFAULT_TIMEOUT):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
-        self._opener = urllib.request.build_opener(_NoRedirect)
+        self._opener = urllib.request.build_opener()
+        self._no_redirect_opener = urllib.request.build_opener(_NoRedirect)
 
-    def request(self, method: str, path: str, params=None, body=None):
+    def request(self, method: str, path: str, params=None, body=None,
+                follow_redirects: bool = True):
         url = self.base_url + path
         if params:
             url += "?" + urllib.parse.urlencode(params)
@@ -135,7 +136,8 @@ class HttpTransport:
             headers["Content-Type"] = "application/json"
         req = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
-            with self._opener.open(req, timeout=self.timeout) as resp:
+            opener = self._opener if follow_redirects else self._no_redirect_opener
+            with opener.open(req, timeout=self.timeout) as resp:
                 raw = resp.read()
                 return resp.status, _decode(raw)
         except urllib.error.HTTPError as e:
@@ -181,14 +183,16 @@ class InProcessTransport:
         main_module.es_mgr = _StubES()
         self._app = main_module.app
 
-    def request(self, method: str, path: str, params=None, body=None):
+    def request(self, method: str, path: str, params=None, body=None,
+                follow_redirects: bool = True):
         import asyncio
 
         from httpx import ASGITransport, AsyncClient
 
         async def go():
             transport = ASGITransport(app=self._app)
-            async with AsyncClient(transport=transport, base_url="http://test") as c:
+            async with AsyncClient(transport=transport, base_url="http://test",
+                                   follow_redirects=follow_redirects) as c:
                 r = await c.request(method, path, params=params, json=body)
                 return r.status_code, _decode(r.content)
 
@@ -485,8 +489,13 @@ def check_sparql(t) -> Check:
         "SELECT ?x WHERE { VALUES ?x { OWL subeq "
         "<https://sparql.uniprot.org/sparql> <GO> { 'cell death' } } }"
     )
+    # The 302 is the thing being checked, so this one call must not follow it.
+    # Everything else follows redirects: a deployment may sit behind an edge that
+    # issues its own (http->https, trailing slash), and refusing those globally
+    # makes every check fail for reasons unrelated to the contract.
     status, body = t.request("GET", "/api/sparql",
-                             params={"query": query, "format": "json"})
+                             params={"query": query, "format": "json"},
+                             follow_redirects=False)
     c.http_status = status
     if status in (301, 302, 303, 307, 308):
         return c.ok("redirects to the endpoint named in the query, as v1 did")
