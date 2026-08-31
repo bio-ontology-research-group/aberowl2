@@ -411,7 +411,11 @@ def check_dlquery_logs(t) -> Check:
 def check_root(t, ontology: str) -> Check:
     c = Check("GET /api/ontology/{acronym}/root/{class_iri}",
               f"/api/ontology/{ontology}/root/…")
-    iri = "http://www.w3.org/2002/07/owl#Thing"
+    # %23, not a bare '#': that character starts the URL fragment, so a literal
+    # one means the client sends ".../root/http://www.w3.org/2002/07/owl" and
+    # drops "Thing" entirely. The worker then does not recognise the IRI and the
+    # check fails against a perfectly healthy deployment.
+    iri = "http://purl.obolibrary.org/obo/GO_0008150"
     status, body = t.request("GET", f"/api/ontology/{ontology}/root/{iri}")
     c.http_status = status
     if status != 200:
