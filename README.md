@@ -112,9 +112,9 @@ See [`deploy/SELF_HOSTING.md`](deploy/SELF_HOSTING.md) and the ready-to-run
 ## Docker images
 
 The self-hosting stack pulls prebuilt images from Docker Hub —
-[`ferzcam/aberowl-central`](https://hub.docker.com/r/ferzcam/aberowl-central) (FastAPI
+[`kaustborg/aberowl-central`](https://hub.docker.com/r/kaustborg/aberowl-central) (FastAPI
 API + web UI + MCP server) and
-[`ferzcam/aberowl-worker`](https://hub.docker.com/r/ferzcam/aberowl-worker)
+[`kaustborg/aberowl-worker`](https://hub.docker.com/r/kaustborg/aberowl-worker)
 (Groovy/OWLAPI + ELK reasoner) — so `deploy/docker-compose.selfhost.yml up` runs with
 no local build. To rebuild them from source instead:
 

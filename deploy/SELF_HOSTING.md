@@ -91,7 +91,7 @@ after the worker classifies).
       Verified: `http://localhost:8000` serves the real SPA (title, `#root`, `/assets/*.js` -> 200).
 - [ ] Optional nginx + friendly `/mcp` route. Not implemented; there is no
       `docker-compose.selfhost.override.yml` in the repository.
-- [x] Swap `build:` for the published `ferzcam/aberowl-central` + `ferzcam/aberowl-worker` images
+- [x] Swap `build:` for the published `kaustborg/aberowl-central` + `kaustborg/aberowl-worker` images
       once they exist, so a user pulls instead of building.
 
 ## Settings
