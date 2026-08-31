@@ -65,8 +65,12 @@ services:
     volumes:
       - ${ONTOLOGIES_PATH:-/data/aberowl/ontologies}:/data/ontologies
       - central_config:/app/config
-      # Mount the built SPA frontend
-      - ../central_server/app/static/dist:/code/app/static/dist:ro
+      # The SPA is NOT bind-mounted. The image builds it (see
+      # central_server/Dockerfile), and mounting a host copy over that shadowed
+      # it with whatever happened to be on disk — on beta, a build from months
+      # earlier, because app/static/dist is gitignored and so no deploy ever
+      # updated it. Every frontend change was invisible until someone rebuilt it
+      # by hand, which nobody did.
     ports:
       - "${CENTRAL_PORT:-8000}:8000"
       # MCP port is NOT published to 0.0.0.0. Default binds to loopback;
