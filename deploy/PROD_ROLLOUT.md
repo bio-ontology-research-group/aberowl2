@@ -64,9 +64,9 @@ lose, and ~90% of what it was failing to allocate was iterator pools.
    scp aberowlapi/server_manager.py a-zhapacfp@10.254.146.61:/opt/aberowl2/aberowlapi/
    ```
 
-   Copying is inert until a worker restarts. Do **not** use `deploy/deploy.sh --sync`:
-   its `rsync --delete` excludes only `data/` and `ontologies/`, so it would delete
-   `backups/`, `env_files/` and `logs/`.
+   Copying is inert until a worker restarts. Never sync with `rsync --delete` against
+   a deploy host: `backups/`, `env_files/` and `logs/` live inside the repo path and
+   would be deleted. Move code forward with git instead.
 
 2. Dry run, then apply:
 

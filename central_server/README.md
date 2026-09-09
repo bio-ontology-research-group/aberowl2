@@ -96,14 +96,16 @@ cd central_server
 docker compose up -d
 ```
 
-For production, a ready-to-use compose file lives at `deploy/docker-compose.central.yml` and is wrapped by `deploy/deploy.sh`, which generates `.env` with random secrets on first run:
+For production, a ready-to-use compose file lives at `deploy/docker-compose.central.yml`:
 
 ```bash
-cd deploy
-./deploy.sh up           # build & start
-./deploy.sh logs         # tail logs
-./deploy.sh down         # stop
+docker compose -f deploy/docker-compose.central.yml --env-file deploy/.env up -d --build
+docker logs deploy-central-server-1 -f
+docker compose -f deploy/docker-compose.central.yml --env-file deploy/.env down
 ```
+
+`deploy/.env` holds the secrets; `deploy/README.md` has the first-run recipe and
+the deploy procedure for the hosted instances.
 
 **Environment variables**
 
