@@ -1641,6 +1641,40 @@ def _artefact_dates(server: Dict[str, Any]) -> tuple:
     return issued, modified
 
 
+def _distribution_file_fields(request: Request, artefact_id: str) -> Dict[str, Any]:
+    """`dcat:downloadURL` and `dcat:byteSize` when this process holds the file.
+
+    The catalogue is the machine-facing entry point, so a consumer harvesting
+    /artefacts should not have to fall back to the v1 API to learn where the
+    file is. Reuses api_v1's helper, which returns None rather than guessing a
+    path we cannot serve (issue #118). Imported here rather than at module
+    scope because api_v1 imports this module.
+    """
+    from app.api_v1 import _download_url, _ontologies_dir
+
+    rel = _download_url(artefact_id)
+    if not rel:
+        return {}
+    fields: Dict[str, Any] = {
+        "dcat:downloadURL": {
+            "@id": f"{request.url.scheme}://{request.url.netloc}/{rel}",
+            "@type": "rdfs:Resource",
+        },
+        "dcat:mediaType": "application/rdf+xml",
+    }
+    oid = artefact_id.lower()
+    try:
+        size = (_ontologies_dir() / oid / f"{oid}.owl").stat().st_size
+    except OSError:
+        size = None
+    if size:
+        fields["dcat:byteSize"] = {
+            "@type": "xsd:nonNegativeInteger",
+            "@value": size,
+        }
+    return fields
+
+
 def _date_fields(server: Dict[str, Any]) -> Dict[str, Any]:
     """JSON-LD dcterms:issued/modified for a record, using real registry dates
     (typed xsd:date or xsd:dateTime). Omits a field when no real date exists."""
@@ -2090,7 +2124,8 @@ async def get_artefact_distributions(
             "@type": "rdfs:Resource"
         },
         "dcterms:format": "application/rdf+xml",
-        **_date_fields(server)
+        **_date_fields(server),
+        **_distribution_file_fields(request, artefact_id)
     }]
 
     response = {
@@ -2154,7 +2189,8 @@ async def get_artefact_latest_distribution(
             "@type": "rdfs:Resource"
         },
         "dcterms:format": "application/rdf+xml",
-        **_date_fields(server)
+        **_date_fields(server),
+        **_distribution_file_fields(request, artefact_id)
     }
 
     # Add metrics if available
