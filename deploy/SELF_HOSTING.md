@@ -115,4 +115,4 @@ if you hit an out-of-memory kill.
 ## Notes
 - Multi-worker packing (`plan_workers.py`) is for large corpora; a self-host with K
   ontologies runs one worker by default, and can scale to a few by copying the worker service.
-- The public deploy path (`deploy/deploy.sh`, cross-host) is unchanged; this is additive.
+- The public deploy path (cross-host, see `deploy/README.md`) is unchanged; this is additive.

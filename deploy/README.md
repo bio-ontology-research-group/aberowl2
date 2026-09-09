@@ -80,7 +80,6 @@ nothing else can. Public access is exclusively via the nginx route
 │   ├── docker-compose.central.yml   # Central stack definition
 │   ├── docker-compose.worker.yml    # Worker template (not used directly)
 │   ├── .env                         # Secrets (ADMIN_PASSWORD, ABEROWL_SECRET_KEY)
-│   ├── deploy.sh                    # Deployment script
 │   ├── download_ontologies.py       # OBO Foundry downloader
 │   ├── download_bioportal.py        # BioPortal downloader
 │   ├── download_extra.py            # Extra ontologies (direct URLs)
@@ -110,7 +109,26 @@ nothing else can. Public access is exclusively via the nginx route
 
 ### Central Stack
 
-The central stack is managed by Docker Compose:
+The central stack is managed by Docker Compose. On a host that has no
+`deploy/.env` yet, create one before the first `up`:
+
+```bash
+cat > deploy/.env <<EOF
+ADMIN_PASSWORD=$(openssl rand -hex 16)
+ABEROWL_SECRET_KEY=$(openssl rand -hex 32)
+ONTOLOGIES_PATH=/data/aberowl/ontologies
+CENTRAL_PORT=8000
+ENABLE_MCP=true
+ENABLE_MCP_ONTOLOGY=true
+MCP_BIND_HOST=127.0.0.1
+EOF
+```
+
+`MCP_BIND_HOST` binds the MCP port on the host; keep it on `127.0.0.1` or the
+host's internal IP, never `0.0.0.0`. On `onto` and the production hosts this
+file already exists — do not regenerate it, the secrets are in use.
+
+Then, on an existing host:
 
 ```bash
 ssh onto
@@ -122,9 +140,10 @@ docker compose -f deploy/docker-compose.central.yml --env-file deploy/.env up --
 # View logs
 docker logs deploy-central-server-1 -f
 
-# Rebuild after code changes
-rsync -avz ... onto:/data/aberowl/   # sync code from dev machine
-docker compose -f deploy/docker-compose.central.yml --env-file deploy/.env up --build -d
+# Rebuild after code changes: fast-forward to a reviewed commit on main,
+# then rebuild only the service whose code changed (see "forward-only" below).
+git fetch origin main && git merge --ff-only <reviewed-commit>
+docker compose -f deploy/docker-compose.central.yml --env-file deploy/.env up -d --build central-server
 ```
 
 The central server image is built from `central_server/Dockerfile`. The SPA frontend
