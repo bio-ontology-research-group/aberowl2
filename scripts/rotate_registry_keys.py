@@ -7,7 +7,7 @@ Deploying #65 stops further leakage; running this invalidates every key that was
 scraped through the old endpoint. Only the ``secret_key`` field is replaced (with
 a fresh uuid4); all other fields are preserved untouched.
 
-Redis is the source of truth for the registry. ``app/servers.json`` is only a
+Redis is the source of truth for the registry. ``/code/state/servers.json`` is only a
 COLD-START seed (``_load_servers_from_file`` loads it *only* when the Redis hash
 is absent). So this also rewrites ``servers.json`` to match — otherwise a Redis
 wipe + restart would resurrect the old, leaked keys.
@@ -38,7 +38,7 @@ Back up Redis first (the registry lives in the ``deploy_redis_data`` volume); th
 rotation is reversible only from that snapshot. See ``deploy/README.md``.
 
 Overrides: ``REDIS_URL`` env (default ``redis://redis``), ``--servers-file``
-(default ``/code/app/servers.json``), ``--no-servers-file`` to skip the seed rewrite.
+(default ``/code/state/servers.json``), ``--no-servers-file`` to skip the seed rewrite.
 """
 import argparse
 import json
@@ -48,7 +48,7 @@ import uuid
 from collections import Counter
 
 REGISTRY_KEY = "registered_servers"
-DEFAULT_SERVERS_FILE = "/code/app/servers.json"
+DEFAULT_SERVERS_FILE = "/code/state/servers.json"
 
 
 def _mask(k):

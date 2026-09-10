@@ -3,6 +3,9 @@
 # aberowlapi/.aberowl_secret_key into every published worker image.
 **/.aberowl_secret_key
 **/*.secret_key
+# The registry seed is runtime state, not source, and is gitignored. Without
+# this, a build on a machine that happens to hold one copies it into the image.
+**/servers.json
 **/*.pem
 **/*.key
 .env

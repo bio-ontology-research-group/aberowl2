@@ -311,7 +311,7 @@ Other gotchas:
   ties up the event loop trying to reach those dead hosts. Clear them and restart:
   ```bash
   docker exec aberowl-central-redis redis-cli DEL registered_servers
-  docker exec aberowl-central-server sh -c 'echo "[]" > /code/app/servers.json'
+  docker exec aberowl-central-server sh -c 'echo "[]" > /code/state/servers.json'
   docker restart aberowl-central-server
   ```
 - **The worker build takes a long time** — the first `start_local_test_worker.sh`
@@ -381,7 +381,9 @@ See the web interface documentation for full API details.
 
 ### Configuration Files
 
-- `app/servers.json`: Persistent storage of registered servers
+- `/code/state/servers.json`: cold-start seed for the registry, reloaded only
+  when the Redis hash is absent. Redis is the source of truth. Volume-backed
+  in the deployed stacks; never part of the image.
 - `app/catalogue_config.json`: Catalogue metadata configuration
 
 ## Development
