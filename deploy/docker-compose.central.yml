@@ -64,7 +64,9 @@ services:
       - API_KEY_RATE_LIMIT=1200
     volumes:
       - ${ONTOLOGIES_PATH:-/data/aberowl/ontologies}:/data/ontologies
-      - central_config:/app/config
+      # /code, not /app: WORKDIR is /code and the image has no /app, so the
+      # previous mount point was never read. Holds the registry seed.
+      - central_config:/code/state
       # The SPA is NOT bind-mounted. The image builds it (see
       # central_server/Dockerfile), and mounting a host copy over that shadowed
       # it with whatever happened to be on disk — on beta, a build from months

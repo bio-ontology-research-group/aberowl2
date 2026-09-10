@@ -25,7 +25,7 @@ COPY ./central_server/config /code/config
 # Bake the built SPA in so the web UI is served without a local `npm run build`.
 COPY --from=frontend /app/static/dist /code/app/static/dist
 
-# Create config directory if not present
-RUN mkdir -p /code/config
+# Create config and runtime-state directories if not present
+RUN mkdir -p /code/config /code/state
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

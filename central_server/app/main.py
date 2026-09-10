@@ -35,7 +35,10 @@ from app.intake import updater as update_pipeline
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-SERVERS_FILE_PATH = "app/servers.json"
+# Runtime state, deliberately outside app/: that directory is COPYed into the
+# image, so a seed written here would be baked in. /code/state is volume-backed
+# in the deployed stacks.
+SERVERS_FILE_PATH = os.getenv("ABEROWL_SERVERS_FILE", "/code/state/servers.json")
 CATALOGUE_CONFIG_PATH = "app/catalogue_config.json"
 MANUAL_ONTOLOGIES_PATH = "config/manual_ontologies.json"
 # Unified registry: one Redis hash holds BOTH the worker/serving fields (url,
