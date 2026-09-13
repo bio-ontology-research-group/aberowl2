@@ -84,7 +84,12 @@ try {
     // before owl:Thing and owl:Nothing are dropped, so a capped answer arrives
     // here at most two classes short of the limit. When this is true the answer
     // is incomplete and its size is a lower bound, not a count (#126).
-    results.put('capped', out.size() >= (manager.getMaxReasonerResults() - 2))
+    // Guarded: a worker that has not been restarted since this field was added runs
+    // the old RequestManager, and a DL query must not fail because of a report field.
+    def maxResults = manager.respondsTo("getMaxReasonerResults") ? manager.getMaxReasonerResults() : null
+    if (maxResults != null) {
+        results.put('capped', out.size() >= (maxResults - 2))
+    }
     print new JsonBuilder(results).toString()
 } catch(java.lang.IllegalArgumentException e) {
     response.setStatus(400)

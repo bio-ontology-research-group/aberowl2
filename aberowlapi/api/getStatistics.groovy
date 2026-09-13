@@ -220,9 +220,11 @@ def result = [
     // shows the structural fallback taken by incoherent ontologies, and
     // imports_* records that no imported ontology is part of any answer (#126).
     "reasoner_configured": manager.reasonerTypes.get(ontologyId) ?: "unknown",
-    "reasoner_active": manager.getActiveReasonerType(ontologyId),
+    // Servlets are bind-mounted and reload hot while RequestManager reloads only on a
+    // worker restart, so a servlet must never call a method the running class may lack.
+    "reasoner_active": manager.respondsTo("getActiveReasonerType") ? manager.getActiveReasonerType(ontologyId) : null,
     "imports_loaded": false,
-    "imports_declared": manager.getImportsDeclaredCount(ontologyId),
+    "imports_declared": manager.respondsTo("getImportsDeclaredCount") ? manager.getImportsDeclaredCount(ontologyId) : null,
     "status": manager.getStatus(ontologyId) ?: "unknown",
     "title": title,
     "description": description,
