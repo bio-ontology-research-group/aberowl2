@@ -99,6 +99,27 @@ class TestMCPOntologyServerSchemas:
         assert "manchester" in desc
         assert "some" in desc  # existential restriction example
 
+    async def test_dl_query_description_does_not_claim_direct_results(self):
+        # The tool forwards no `direct` flag and /api/dlquery_all defaults to
+        # non-direct, so no query type may be described as direct-only (#126).
+        from mcp_ontology_server import mcp
+        tools = await mcp.list_tools()
+        dl = next(t for t in tools if t.name == "run_dl_query")
+        desc = dl.description.lower()
+        assert "direct" not in desc
+        assert "all subclasses" in desc
+        assert "all superclasses" in desc
+
+    async def test_dl_query_description_states_reasoning_contract(self):
+        from mcp_ontology_server import mcp
+        tools = await mcp.list_tools()
+        dl = next(t for t in tools if t.name == "run_dl_query")
+        desc = dl.description.lower()
+        assert "elk" in desc
+        assert "el fragment" in desc
+        assert "imported ontologies" in desc
+        assert "100,000" in desc
+
 
 # ---------------------------------------------------------------------------
 # MCP Ontology Server — tool execution with mocked HTTP
@@ -372,6 +393,62 @@ class TestLookupIRICalls:
         text = _text(result)
         assert '"id": "go"' in text
         assert '"class_count": 50000' in text
+
+    async def test_get_ontology_info_reports_reasoning_contract(self):
+        import mcp_ontology_server as srv
+        payload = {
+            "id": "go", "title": "Gene Ontology",
+            "reasoner_configured": "elk", "reasoner_active": "elk",
+            "reasoner_status": "classified",
+            "imports_loaded": False, "imports_declared": 3,
+        }
+        with patch.object(srv, "_api_get", new=AsyncMock(return_value=payload)):
+            result = await srv.mcp.call_tool("get_ontology_info", {"ontology": "go"})
+        text = _text(result)
+        assert "Reasoning contract:" in text
+        assert "reasoner: elk (active)" in text
+        assert "status: classified" in text
+        assert "imports: not loaded (3 declared)" in text
+
+    async def test_get_ontology_info_reports_structural_fallback(self):
+        # An incoherent ontology is served by the structural reasoner even
+        # though elk was configured; both must be visible (#126).
+        import mcp_ontology_server as srv
+        payload = {
+            "id": "acgt", "reasoner_configured": "elk",
+            "reasoner_active": "structural", "reasoner_status": "incoherent",
+            "imports_loaded": False, "imports_declared": 0,
+        }
+        with patch.object(srv, "_api_get", new=AsyncMock(return_value=payload)):
+            result = await srv.mcp.call_tool("get_ontology_info", {"ontology": "acgt"})
+        text = _text(result)
+        assert "reasoner: structural (active, elk configured)" in text
+        assert "status: incoherent" in text
+        assert "imports: not loaded (0 declared)" in text
+
+    async def test_get_ontology_info_omits_absent_contract_fields(self):
+        # A worker that has not been polled since the fields were added reports
+        # none of them: the JSON must still render and no line is invented.
+        import mcp_ontology_server as srv
+        payload = {"id": "go", "title": "Gene Ontology", "status": "online"}
+        with patch.object(srv, "_api_get", new=AsyncMock(return_value=payload)):
+            result = await srv.mcp.call_tool("get_ontology_info", {"ontology": "go"})
+        text = _text(result)
+        assert '"id": "go"' in text
+        assert "Reasoning contract" not in text
+        # the serving state must never be mistaken for the classification status
+        assert "status: online" not in text
+
+    async def test_get_ontology_info_contract_falls_back_to_reasoner_type(self):
+        # Older registry entries carry only `reasoner_type` (the configured one).
+        import mcp_ontology_server as srv
+        payload = {"id": "go", "reasoner_type": "elk", "reasoner_status": "classified"}
+        with patch.object(srv, "_api_get", new=AsyncMock(return_value=payload)):
+            result = await srv.mcp.call_tool("get_ontology_info", {"ontology": "go"})
+        text = _text(result)
+        assert "reasoner: elk (configured)" in text
+        assert "status: classified" in text
+        assert "imports:" not in text
 
     async def test_browse_hierarchy_translates_owl_thing(self):
         import mcp_ontology_server as srv

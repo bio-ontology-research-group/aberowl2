@@ -80,6 +80,11 @@ try {
     def end = System.currentTimeMillis()
     results.put('time', (end - start))
     results.put('result', out)
+    // The reasoner answer is cut off at RequestManager.MAX_REASONER_RESULTS
+    // before owl:Thing and owl:Nothing are dropped, so a capped answer arrives
+    // here at most two classes short of the limit. When this is true the answer
+    // is incomplete and its size is a lower bound, not a count (#126).
+    results.put('capped', out.size() >= (manager.getMaxReasonerResults() - 2))
     print new JsonBuilder(results).toString()
 } catch(java.lang.IllegalArgumentException e) {
     response.setStatus(400)

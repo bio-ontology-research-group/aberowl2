@@ -483,11 +483,15 @@ async def find_iri(term: str, ontology: str | None = None, limit: int = 10) -> s
         "  - Universal: 'part of' only 'cell'\n"
         "  - Negation: not 'cell'\n\n"
         "Query types:\n"
-        "  - subclass: direct subclasses only\n"
-        "  - subeq: subclasses + equivalent (most common)\n"
-        "  - superclass: direct superclasses only\n"
-        "  - supeq: superclasses + equivalent\n"
+        "  - subclass: all subclasses of the query, at any depth\n"
+        "  - subeq: all subclasses plus the equivalent classes (most common)\n"
+        "  - superclass: all superclasses of the query, at any depth\n"
+        "  - supeq: all superclasses plus the equivalent classes\n"
         "  - equivalent: equivalent classes only\n\n"
+        "Answers are computed by the ELK reasoner over the OWL 2 EL fragment of each "
+        "ontology: axioms outside EL and imported ontologies, which workers do not "
+        "load, take no part in an answer, and a result set is capped at 100,000 "
+        "classes upstream, so at that size the reported count is a lower bound.\n\n"
         "Examples:\n"
         "  - query='cell', type='subclass' -> all subclasses of 'cell'\n"
         "  - query=\"'part of' some 'cell'\", type='subeq' -> classes that are part of a cell\n"
@@ -560,11 +564,49 @@ async def get_class_info(class_iri: str, ontology: str) -> str:
     return json.dumps(data, indent=2)
 
 
+def _reasoning_contract(data: dict) -> str:
+    """One line saying which reasoner answers for this ontology, how it
+    classified, and that its imports were not loaded.
+
+    Every field is optional. A worker registered before these fields existed
+    reports none of them, and the registry only picks them up on its next
+    metadata poll, so each part is emitted only when present and the line is
+    dropped entirely when nothing is known.
+    """
+    parts: list[str] = []
+    active = data.get("reasoner_active")
+    configured = data.get("reasoner_configured") or data.get("reasoner_type")
+    if active and configured and active != configured:
+        parts.append(f"reasoner: {active} (active, {configured} configured)")
+    elif active:
+        parts.append(f"reasoner: {active} (active)")
+    elif configured:
+        parts.append(f"reasoner: {configured} (configured)")
+    # `status` in a registry entry is the SERVING state (online/offline); the
+    # classification outcome is kept separately as `reasoner_status`.
+    status = data.get("reasoner_status")
+    if status:
+        parts.append(f"status: {status}")
+    if data.get("imports_loaded") is False:
+        declared = data.get("imports_declared")
+        if isinstance(declared, int):
+            parts.append(f"imports: not loaded ({declared} declared)")
+        else:
+            parts.append("imports: not loaded")
+    if not parts:
+        return ""
+    return "Reasoning contract: " + ", ".join(parts) + "."
+
+
 @mcp.tool(
     description=(
         "Get metadata about a specific ontology including title, "
         "description, version, class count, property count, license, "
-        "and classification status."
+        "and classification status. The last line states the reasoning "
+        "contract: the reasoner actually answering DL queries for this "
+        "ontology (it falls back to a structural reasoner when the ontology "
+        "is incoherent), its classification status, and how many owl:imports "
+        "it declares, none of which are loaded."
     ),
 )
 async def get_ontology_info(ontology: str) -> str:
@@ -575,7 +617,9 @@ async def get_ontology_info(ontology: str) -> str:
     data = await _api_get("/api/getOntology", {"ontology": ontology})
     if "error" in data or "detail" in data:
         return f"Error: {data.get('error') or data.get('detail')}"
-    return json.dumps(data, indent=2)
+    text = json.dumps(data, indent=2)
+    contract = _reasoning_contract(data)
+    return f"{text}\n\n{contract}" if contract else text
 
 
 @mcp.tool(

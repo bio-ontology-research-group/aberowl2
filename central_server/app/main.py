@@ -800,6 +800,9 @@ _PUBLIC_ONTOLOGY_FIELDS = frozenset({
     "publication", "creators", "keywords",
     # serving state (safe: coarse status only, no url) and the reasoner outcome
     "status", "reasoner_type", "reasoner_status",
+    # the reasoning contract the worker reports (#126): which reasoner is really
+    # answering, and that no imported ontology took part in the classification
+    "reasoner_configured", "reasoner_active", "imports_loaded", "imports_declared",
     # class/property/example counts and samples
     "class_count", "property_count", "object_property_count",
     "individual_count", "example_classes", "example_class",
