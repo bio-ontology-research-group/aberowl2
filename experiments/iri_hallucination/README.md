@@ -52,6 +52,44 @@ python harness.py   --gold gold.jsonl --out runs.jsonl
 python score.py     --runs runs.jsonl [--by-difficulty]
 ```
 
+## Harness constants in force during the released runs
+
+From `config.py` as committed: `MAX_TOOL_TURNS = 6`, `TEMPERATURE = 0.0`. `config.py`
+does **not** set `TOOL_RESULT_CHARS` or `TOOL_LOG_CHARS`; `harness.py` falls back to
+its own defaults via `getattr(C, ..., default)`: `TOOL_RESULT_CHARS` defaults to
+**4000** (what the model receives per tool result, `harness.py` line 88) while
+`TOOL_LOG_CHARS` defaults to **600** (what gets written to `runs*.jsonl`, line 133).
+Because the recorded value is a sixth of what the model saw, **every logged tool
+response in these run files is a prefix**, not the full text the model reasoned
+over. `truncated=True` (line 135, set after the `for _ in range(C.MAX_TOOL_TURNS):`
+loop exits without an earlier return) means the model exhausted its 6-turn budget
+without producing a final answer.
+
+## Which service answered these runs
+
+`config.py` defaults to beta (`MCP_URL` = `https://beta.aber-owl.net/mcp/ontology/mcp`,
+`ABEROWL_API` = `https://beta.aber-owl.net/api`), matching the `## Run` example above.
+None of `runs_full.jsonl` / `runs_pilot.jsonl` / `runs_rest.jsonl` carry a per-row
+timestamp. The closest evidence is `rest.log`, which brackets the "rest" batch
+between `START Thu Jul 2 19:53:14 +03 2026` and `DONE Thu Jul 2 22:58:49 +03 2026`;
+`pilot.log`'s own mtime (2026-07-02) and the fact that `runs_full.jsonl` is the
+pilot+rest merge point to the same day, so these released runs were executed on
+**2026-07-02**. (The three `runs_*.jsonl` files' own mtimes read 2026-08-19; that
+is `retry_errors.py`, which "re-run[s] only the error records in a runs file and
+patch[es] them back in place," rewriting the file it is pointed at; it is a later
+error-retry pass over the same rows, not the original run time.)
+
+**The exact beta service commit on 2026-07-02 is not recorded in the run files**,
+and neither `DEPLOY_FOLLOWUPS.md` nor `CHANGES.md` names a commit deployed to beta
+on that date; the earliest beta-relevant entry in `DEPLOY_FOLLOWUPS.md` is a
+frontend docs fix deployed 2026-07-14 (committed as `eecd6a7`), which postdates
+this run by twelve days and does not describe beta's state on 2026-07-02.
+**`kaustborg/aberowl-central:2.0` and `kaustborg/aberowl-worker:2.0` on Docker Hub
+are the current published release, not necessarily the code that served these
+runs**; see `DEPLOY_FOLLOWUPS.md`'s "Image tags" section, which documents the
+`:2.0` tags being overwritten in place on 2026-08-20, more than a month after this
+run.
+
 ## Open decisions (gold validity — needs review before running for real)
 1. **Contamination** — subjects are recent (2026); L1/L2 famous terms may be
    memorized (tool "won't help"). The effect lives in L3/L4. Need genuinely

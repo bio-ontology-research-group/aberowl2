@@ -8,6 +8,23 @@ Metrics are computed from saved per-run files (`runs_<model>.jsonl`,
 `scored_<model>.jsonl`), never from console output. Re-score at any time with
 `score_dl.py`; no re-run is needed to change a metric.
 
+**Scorer fix (#128).** `score_dl.py`'s tool-result parser previously took every
+IRI in a `run_dl_query` result as an answer class, including the one in the
+result's own header line (`Found N results for subeq query: <IRI>`), which echoes
+the submitted expression rather than reporting an answer; per the fixed
+`parse_tool_result` docstring, this made 130 of 599 no-hint results look like the
+model had dropped a class it had in fact relayed exactly. The fix reads only the
+`  label [ontology] - IRI` result rows. Pooled across all five models' `dlquery`
+arm (`scored_all5.jsonl`, n=599, T2 n=300): strict formulation 538/599 (89.8%),
+strict relay 537/599 (89.6%), normalized formulation 585/599 (97.7%), normalized
+relay 578/599 (96.5%); T2 strict = normalized = 289/300 (96.3%). The anchor
+normalization only ever changes T1 rows (verified across all 300 T2 dlquery rows
+in `scored_all5.jsonl`: `formulation_ok`/`relay_ok` equal their `_strict`
+counterparts in every one), because `subeq` (T1) structurally returns the anchor
+class itself alongside strict subclasses, while a T2 "R some C" query's anchors
+(the property and filler IRIs) essentially never coincide with its returned or
+gold class set.
+
 ## Status
 
 | model | runs | errors | truncated | tokens in/out | spent |
