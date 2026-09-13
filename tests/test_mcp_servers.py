@@ -166,6 +166,33 @@ class TestMCPOntologyServerCalls:
         assert params["ontologies"] == "go"
         assert params["labels"] == "true"
 
+    async def test_run_dl_query_pages_results(self):
+        import mcp_ontology_server as srv
+        payload = {"result": [
+            {"label": f"class {i}", "class": f"http://example.org/C{i}", "ontology": "go"}
+            for i in range(250)
+        ]}
+        with patch.object(srv, "_api_get", new=AsyncMock(return_value=payload)):
+            first = _text(await srv.mcp.call_tool(
+                "run_dl_query", {"query": "'cell'", "type": "subeq", "ontology": "go"}))
+            second = _text(await srv.mcp.call_tool(
+                "run_dl_query", {"query": "'cell'", "type": "subeq", "ontology": "go", "offset": 100}))
+            last = _text(await srv.mcp.call_tool(
+                "run_dl_query", {"query": "'cell'", "type": "subeq", "ontology": "go", "offset": 200}))
+            past = _text(await srv.mcp.call_tool(
+                "run_dl_query", {"query": "'cell'", "type": "subeq", "ontology": "go", "offset": 300}))
+        # default page: the header states the full count, the list holds 100, the tail names the next offset
+        assert "Found 250 results" in first
+        assert "class 0 " in first and "class 99 " in first and "class 100 " not in first
+        assert "Showing 1-100 of 250. Pass offset=100" in first
+        # second page continues where the first stopped
+        assert "class 100 " in second and "class 199 " in second and "class 200 " not in second
+        assert "Pass offset=200" in second
+        # last page is marked as such and offers no further offset
+        assert "class 249 " in last and "(last page)" in last and "Pass offset" not in last
+        # an offset past the end is reported, not silently empty
+        assert "past the end" in past
+
     async def test_get_class_info_returns_json(self):
         import mcp_ontology_server as srv
         payload = {"class": "http://purl.obolibrary.org/obo/GO_0005623", "label": "cell"}
