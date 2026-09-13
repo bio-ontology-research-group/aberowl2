@@ -45,7 +45,10 @@ if (!ontologyId && manager.ontologies.size() == 1) {
 } else if (!ontologyId) {
     // Return stats for all loaded ontologies
     def allStats = manager.listOntologies().collect { info ->
-        [ontologyId: info.ontologyId, status: info.status, classCount: info.classCount, reasonerType: info.reasonerType]
+        [ontologyId: info.ontologyId, status: info.status, classCount: info.classCount,
+         reasonerType: info.reasonerType, reasonerConfigured: info.reasonerConfigured,
+         reasonerActive: info.reasonerActive, importsLoaded: info.importsLoaded,
+         importsDeclared: info.importsDeclared]
     }
     out << JsonOutput.toJson([ontologies: allStats])
     return
@@ -212,6 +215,14 @@ def exampleSubclassExpressionText = manager.exampleSubclassExpressionTexts.get(o
 def result = [
     "ontology_id": ontologyId,
     "reasoner_type": manager.reasonerTypes.get(ontologyId) ?: "unknown",
+    // What the reasoning actually was, as opposed to what was requested:
+    // reasoner_active comes from the reasoner instance answering queries, so it
+    // shows the structural fallback taken by incoherent ontologies, and
+    // imports_* records that no imported ontology is part of any answer (#126).
+    "reasoner_configured": manager.reasonerTypes.get(ontologyId) ?: "unknown",
+    "reasoner_active": manager.getActiveReasonerType(ontologyId),
+    "imports_loaded": false,
+    "imports_declared": manager.getImportsDeclaredCount(ontologyId),
     "status": manager.getStatus(ontologyId) ?: "unknown",
     "title": title,
     "description": description,

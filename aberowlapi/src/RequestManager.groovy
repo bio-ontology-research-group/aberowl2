@@ -57,6 +57,10 @@ public class RequestManager {
     final ConcurrentHashMap<String, String> ontologyPaths = new ConcurrentHashMap<>()
     final ConcurrentHashMap<String, String> reasonerTypes = new ConcurrentHashMap<>()
     final ConcurrentHashMap<String, String> loadStati = new ConcurrentHashMap<>()
+    // Number of owl:imports declarations found in each loaded document. Recorded
+    // at load time because the merged ontology keeps no import declarations, and
+    // because none of those imports are ever resolved (see LocalImportIRIMapper).
+    final ConcurrentHashMap<String, Integer> importsDeclared = new ConcurrentHashMap<>()
     final ConcurrentHashMap<String, String> exampleSuperclassLabels = new ConcurrentHashMap<>()
     final ConcurrentHashMap<String, String> exampleSubclassExpressions = new ConcurrentHashMap<>()
     final ConcurrentHashMap<String, String> exampleSubclassExpressionTexts = new ConcurrentHashMap<>()
@@ -162,11 +166,15 @@ public class RequestManager {
 
         // Stop remote import fetches. owl:imports of dead URLs hang for minutes
         // on network timeouts, and reachable ones can pull huge ontologies into
-        // heap — both observed to stall and OOM workers. The mapper resolves an
-        // import to a local corpus file when we have one (/data/<id>/<id>.owl),
-        // and otherwise to a tiny empty stub, so OWLAPI never touches the
-        // network. SILENT is kept as a backstop for anything not intercepted:
-        // a partial hierarchy online beats a complete ontology offline.
+        // heap, both observed to stall and OOM workers. The mapper performs no
+        // lookup: it maps EVERY import IRI to a non-existent path under
+        // /data/.noimport/, so OWLAPI never touches the network, and the SILENT
+        // strategy then drops the unresolvable import. Every ontology is
+        // therefore classified WITHOUT its imports closure, including imports
+        // that sit in the local corpus (#126). Whether to resolve imports
+        // against the corpus instead is a separate, open decision (it changes
+        // what a worker holds in heap), so the behaviour is unchanged here and
+        // only reported: see importsDeclared and getStatistics.groovy.
         lManager.getIRIMappers().add(new LocalImportIRIMapper())
         OWLOntologyLoaderConfiguration loaderConfig = new OWLOntologyLoaderConfiguration()
             .setMissingImportHandlingStrategy(MissingImportHandlingStrategy.SILENT)
@@ -174,6 +182,9 @@ public class RequestManager {
             new FileDocumentSource(new File(ontIRI)), loaderConfig)
         IRI originalOntologyIRI = originalOntology.getOntologyID().getOntologyIRI().orNull()
         Set<OWLAnnotation> originalAnnotations = originalOntology.getAnnotations().collect()
+        // Count the declared imports before merging: the merged ontology carries
+        // no import declarations, and none of these were loaded (see above).
+        importsDeclared.put(ontId, originalOntology.getImportsDeclarations().size())
 
         // Merge imports closure into a single ontology.
         // The merged ontology must use a SYNTHETIC IRI rather than the
@@ -325,6 +336,7 @@ public class RequestManager {
         ontologyPaths.remove(ontId)
         reasonerTypes.remove(ontId)
         loadStati.remove(ontId)
+        importsDeclared.remove(ontId)
         exampleSuperclassLabels.remove(ontId)
         exampleSubclassExpressions.remove(ontId)
         exampleSubclassExpressionTexts.remove(ontId)
@@ -357,6 +369,10 @@ public class RequestManager {
                 ontologyId: ontId,
                 status: loadStati.get(ontId) ?: "unknown",
                 reasonerType: reasonerTypes.get(ontId) ?: "unknown",
+                reasonerConfigured: reasonerTypes.get(ontId) ?: "unknown",
+                reasonerActive: getActiveReasonerType(ontId),
+                importsLoaded: false,
+                importsDeclared: getImportsDeclaredCount(ontId),
                 path: ontologyPaths.get(ontId) ?: "",
                 classCount: ontologies.get(ontId)?.getClassesInSignature(true)?.size() ?: 0
             ]
@@ -375,6 +391,49 @@ public class RequestManager {
      */
     String getStatus(String ontId) {
         return loadStati.get(ontId)
+    }
+
+    /**
+     * The reasoner that is actually answering queries for this ontology, which
+     * is not always the configured one: createReasoner disposes ELK and keeps
+     * the structural reasoner when an ontology has MAX_UNSATISFIABLE_CLASSES or
+     * more unsatisfiable classes. Derived from the reasoner instance in the map,
+     * never from the requested type, so clients can see the fallback (#126).
+     */
+    String getActiveReasonerType(String ontId) {
+        def oReasoner = reasoners.get(ontId)
+        if (oReasoner == null) {
+            return "none"
+        }
+        def cls = oReasoner.getClass().getName().toLowerCase()
+        if (cls.contains("elk")) {
+            return "elk"
+        }
+        if (cls.contains("structural")) {
+            return "structural"
+        }
+        if (cls.contains("hermit")) {
+            return "hermit"
+        }
+        return oReasoner.getClass().getSimpleName()
+    }
+
+    /**
+     * Number of owl:imports declarations in the loaded document. None of them
+     * are resolved, so this counts the imported ontologies that take no part in
+     * any answer for this ontology.
+     */
+    int getImportsDeclaredCount(String ontId) {
+        return importsDeclared.get(ontId) ?: 0
+    }
+
+    /**
+     * Upper bound on the number of classes one DL query answer can hold. The
+     * limit is applied before owl:Thing and owl:Nothing are dropped, so a
+     * capped answer reaches the caller at most two classes short of it.
+     */
+    static int getMaxReasonerResults() {
+        return MAX_REASONER_RESULTS
     }
 
     /**

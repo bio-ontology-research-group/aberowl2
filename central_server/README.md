@@ -63,13 +63,23 @@ The central server ships with one MCP server that lets LLM agents (Claude Deskto
 **Ontology server (7 tools)**
 - `list_ontologies` — all registered ontologies with status and metadata
 - `search_classes` — search classes by label/synonym/OBO ID (all ontologies or one)
-- `run_dl_query` — Description Logic query in Manchester OWL Syntax (subclass/subeq/superclass/supeq/equivalent); results are paged with `offset`/`limit` (default 100 per call) and the header states the full count
+- `run_dl_query` — Description Logic query in Manchester OWL Syntax. `subclass`/`superclass` return all sub/superclasses at any depth (not direct ones); `subeq`/`supeq` add the equivalent classes; `equivalent` returns those alone. Results are paged with `offset`/`limit` (default 100 per call) and the header states the full count, which is a lower bound once the 100,000-class cap below is reached
 - `get_class_info` — full annotations/axioms for a class
-- `get_ontology_info` — metadata for one ontology
+- `get_ontology_info` — metadata for one ontology, plus a closing "Reasoning contract" line naming the reasoner that actually answers DL queries for it, its classification status, and its unloaded `owl:imports`
 - `browse_hierarchy` — direct subclasses or superclasses of a class
 - `rewrite_sparql` — rewrite a SPARQL query containing `VALUES ?x { OWL subeq GO { ... } }` or `FILTER OWL(?x, subeq, GO, "...")` frames to one with concrete IRIs spliced in. AberOWL only rewrites; the caller runs the result against any SPARQL endpoint (Ontobee, UniProt, …).
 - `list_sparql_examples` — curated SPARQL+OWL example queries to use as templates.
 - `query_sparql` — same rewrite, but also forwards the result to an external SPARQL endpoint (Ontobee by default; pass `endpoint=` for UniProt / Wikidata / DBpedia / etc.) and returns the rows. AberOWL still doesn't host a SPARQL store — this just chains rewrite → POST → format.
+
+### Reasoning contract
+
+What a DL answer covers, for both `/api/dlquery_all` and the `run_dl_query` tool:
+
+- **OWL 2 EL fragment.** Workers classify with ELK, so an answer holds only what the EL fragment of the ontology entails. Axioms that use constructs outside EL contribute nothing, whatever the query asks for.
+- **Imports are not loaded.** The worker maps every `owl:imports` IRI to a path that does not exist and the SILENT missing-import strategy drops it, so each ontology is classified without its imports closure, even when the imported ontology sits in the local corpus. `/api/getOntology` reports this as `imports_loaded: false` with `imports_declared: <n>`.
+- **Structural fallback.** When 500 or more classes are unsatisfiable, the worker disposes the ELK reasoner and answers from the OWLAPI structural reasoner, which returns asserted relationships only. That ontology then has `reasoner_status: incoherent`, `reasoner_active: structural` and `reasoner_configured: elk`.
+- **100,000-class cap.** A single query answer is truncated at `MAX_REASONER_RESULTS` (100,000) inside the worker. The worker's `runQuery.groovy` sets `capped: true` on the response when the limit was reached; the aggregated `/api/dlquery_all` count does not carry the flag, so treat a count at that size as a lower bound rather than a completeness guarantee.
+- **Reading the fields.** `reasoner_active` is derived from the reasoner instance answering queries, not from the requested type, so it is the field to trust; `reasoner_configured` (and the older `reasoner_type`) is only what was asked for. `reasoner_status` is the classification outcome: `classified`, `incoherent`, `loaded`, `loading` or `error`. All of them reach the registry through the periodic worker metadata poll, so they are absent until a worker running this code has been polled once.
 
 ### Deploying with Docker (streamable HTTP)
 
@@ -358,7 +368,7 @@ Returns a secret key for future updates.
 
 - `GET /api/servers` - List all registered servers
 - `GET /api/search_all?query=term` - Search across all ontologies
-- `GET /api/dlquery_all?query=expression&type=subclass` - Run DL queries
+- `GET /api/dlquery_all?query=expression&type=subclass` - Run DL queries (see "Reasoning contract" above for what an answer covers)
 
 ### FAIR API (MOD-API)
 
