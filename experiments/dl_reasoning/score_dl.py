@@ -41,6 +41,25 @@ def parse_iris(text: str) -> set:
     return {m.rstrip(".,;)") for m in IRI_RE.findall(text)}
 
 
+RESULT_ROW_RE = re.compile(r"\[[^\]]+\] - https?://")
+
+
+def parse_tool_result(text: str) -> set:
+    """Class IRIs a `run_dl_query` result actually RETURNED. The tool prints a
+    header (`Found N results for subeq query: <IRI>`) that echoes the submitted
+    expression, then one `  label [ontology] - IRI` row per class, then possibly a
+    paging line. Only the rows are answer classes; the header carries the queried
+    class, the property and the filler, which are not answers. Taking every IRI in
+    the text (as parse_iris does, correctly, for model answers) credited the tool
+    with returning its own query: 130 of 599 no-hint results carried a header-only
+    IRI, which made a strict relay look like the model had dropped a returned
+    class when it had relayed the rows exactly."""
+    if not text:
+        return set()
+    rows = [l for l in text.splitlines() if RESULT_ROW_RE.search(l)]
+    return parse_iris("\n".join(rows))
+
+
 def prf(pred: set, gold: set):
     if not pred and not gold:
         return 1.0, 1.0, 1.0
@@ -128,7 +147,7 @@ def main():
                 # Best tool result the model actually received.
                 best, best_f = set(), -1.0
                 for c in calls:
-                    s = parse_iris(c.get("result", ""))
+                    s = parse_tool_result(c.get("result", ""))
                     _, _, cf = prf(s, gset)
                     if cf > best_f:
                         best, best_f = s, cf
