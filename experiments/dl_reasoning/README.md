@@ -89,6 +89,46 @@ as familiarity falls (the same shape as L1→L4 in the IRI experiment).
 `symp` and `iao` were rejected: SYMP has **1 object property**, so T2 is impossible,
 and IAO has 267 classes, so answer sets are too small to score.
 
+**Pin provenance.** The `release` column above was verified against the central
+registry at gold-build time; no version IRI, release date, or checksum is stamped
+into `gold_go.jsonl` / `gold_cl.jsonl` / `gold_so.jsonl` or into
+`build_dl_gold.groovy` itself (checked by grep; none of the three JSONL files or
+the script carry a `versionIRI` field or a recorded md5/sha256). `build_dl_gold.groovy`
+takes the OWL release as a local `--owl FILE` argument; it has no embedded
+download step or URL, so a reproducer must obtain the same release independently
+(e.g. the dated OBO Foundry release for the pinned date above) and should **record
+its `md5sum` before running the build**; the md5 of the originals used for the
+released gold files was not recorded anywhere in this repo. Each gold file's
+companion `--classes` output (`classes_go.txt`, `classes_cl.txt`, `classes_so.txt`,
+51,937 / 19,151 / 2,752 lines respectively) is the exact class-IRI universe of the
+same loaded release, dumped by the same script in the same run, so it is the
+closest available proxy for "which release" if the md5 is unrecoverable.
+
+## Which service answered these runs
+
+By default `config.py` points at production (`MCP_URL` defaults to
+`http://aber-owl.net/mcp/ontology/mcp`, `ABEROWL_API` to `http://aber-owl.net/api`),
+not beta. Per `credits_log.jsonl`, the four logged per-model runs completed
+2026-08-19T07:06 UTC (`llama-4-scout`) through 2026-09-01T02:44 UTC
+(`gemini-3.5-flash`); `gpt-oss-20b` has no `credits_log.jsonl` entry, and its
+`runs_gpt-oss-20b.jsonl` / `runs_gpt-oss-20b.laptop-partial.jsonl` files are dated
+2026-08-25 and 2026-08-18 respectively, so the released runs span roughly
+2026-08-18 to 2026-09-01.
+
+**The exact deployed service commit for that window is not recorded in the run
+files** (no commit/version field is logged per row or per model). The closest
+documented pin is in `DEPLOY_FOLLOWUPS.md` ("Image tags: prod runs a DIFFERENT
+`:2.0` than Docker Hub now serves"): as verified there on 2026-08-20, production
+was running image manifests `d61961ae…` (worker) / `22dc82e7…` (central), and was
+"deliberately not redeployed" when the `:2.0` tags were later overwritten on Docker
+Hub, so that manifest pin, not a git commit, is the only documented identifier
+for what likely served this window, and `CHANGES.md` has no entries for
+2026-07 through 2026-09 to cross-check it against. **`kaustborg/aberowl-central:2.0`
+and `kaustborg/aberowl-worker:2.0` on Docker Hub are the current published release,
+not necessarily the code that served these runs**; per the same section, Docker
+Hub overwrote those tags in place on 2026-08-20 while production kept running the
+older pulled image.
+
 ## Running
 
 Grapes cannot resolve OWLAPI on the bare workstation (Ivy fails to download
@@ -124,6 +164,26 @@ Scoring:
 python score_dl.py --gold gold_all.jsonl --runs 'runs_*.jsonl' \
     --classes classes_go.txt classes_cl.txt classes_so.txt
 ```
+
+## Harness constants in force during the released runs
+
+From `config.py` as committed:
+
+- `MAX_TOOL_TURNS = 12`
+- `TOOL_RESULT_CHARS = 6000` (what the model sees per tool result)
+- `TOOL_LOG_CHARS = 6000` (what is recorded to the run file; deliberately equal to
+  `TOOL_RESULT_CHARS`, "or relay fidelity is unmeasurable" per the comment beside it)
+- `TEMPERATURE = 0.0`
+- Completion cap: **not fixed by this harness.** `config.py` sets no `max_tokens` and
+  `run_model.py` sends none in the request payload; the "147k/236k max completion"
+  figures in `config.py`'s `PROVIDERS` comments are the OpenRouter *endpoint's* own
+  ceiling, not a cap this harness applies.
+
+`truncated=True` in a run row means the 12-turn budget (`MAX_TOOL_TURNS`) was
+exhausted before the model produced a final answer, see
+`../iri_hallucination/harness.py`, which returns `_result(..., truncated=True, ...)`
+immediately after its `for _ in range(C.MAX_TOOL_TURNS):` loop ends without an
+earlier return; this experiment's own run loop follows the same shared pattern.
 
 ## Known gotchas
 
