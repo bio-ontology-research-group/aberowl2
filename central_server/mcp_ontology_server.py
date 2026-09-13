@@ -491,15 +491,26 @@ async def find_iri(term: str, ontology: str | None = None, limit: int = 10) -> s
         "Examples:\n"
         "  - query='cell', type='subclass' -> all subclasses of 'cell'\n"
         "  - query=\"'part of' some 'cell'\", type='subeq' -> classes that are part of a cell\n"
-        "  - query=\"'has part' some 'nucleus'\", type='subeq' -> things that have a nucleus"
+        "  - query=\"'has part' some 'nucleus'\", type='subeq' -> things that have a nucleus\n\n"
+        "Results are paged: at most `limit` classes (default 100) are listed per call, "
+        "and the header states the full count. When more remain, the last line says "
+        "which `offset` to pass to fetch the next page."
     ),
 )
-async def run_dl_query(query: str, type: str = "subeq", ontology: str | None = None) -> str:
+async def run_dl_query(
+    query: str,
+    type: str = "subeq",
+    ontology: str | None = None,
+    offset: int = 0,
+    limit: int = 100,
+) -> str:
     """
     Args:
         query: DL query in Manchester OWL Syntax
         type: Query type - subclass, subeq, superclass, supeq, or equivalent (default subeq)
         ontology: Optional ontology ID to restrict reasoning
+        offset: Index of the first class to list (default 0)
+        limit: Maximum number of classes to list in this call (default 100, max 1000)
     """
     params: dict[str, Any] = {"query": query, "type": type, "labels": "true"}
     if ontology:
@@ -508,12 +519,24 @@ async def run_dl_query(query: str, type: str = "subeq", ontology: str | None = N
     results = data.get("result", [])
     if not results:
         return f"No results for DL query: {query} (type: {type})"
-    lines = [f"Found {len(results)} results for {type} query: {query}\n"]
-    for r in results[:100]:
+    offset = max(0, offset)
+    limit = max(1, min(limit, 1000))
+    total = len(results)
+    page = results[offset:offset + limit]
+    lines = [f"Found {total} results for {type} query: {query}\n"]
+    if not page:
+        lines.append(f"  (offset {offset} is past the end; the answer set has {total} classes)")
+        return "\n".join(lines)
+    for r in page:
         label = r.get("label", r.get("owlClass", "?"))
         ont = r.get("ontology", "?")
         iri = r.get("class", "")
         lines.append(f"  {label} [{ont}] - {iri}")
+    end = offset + len(page)
+    if end < total:
+        lines.append(f"\nShowing {offset + 1}-{end} of {total}. Pass offset={end} for the next page.")
+    elif offset > 0:
+        lines.append(f"\nShowing {offset + 1}-{end} of {total} (last page).")
     return "\n".join(lines)
 
 

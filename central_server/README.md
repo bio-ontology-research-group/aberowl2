@@ -63,7 +63,7 @@ The central server ships with one MCP server that lets LLM agents (Claude Deskto
 **Ontology server (7 tools)**
 - `list_ontologies` — all registered ontologies with status and metadata
 - `search_classes` — search classes by label/synonym/OBO ID (all ontologies or one)
-- `run_dl_query` — Description Logic query in Manchester OWL Syntax (subclass/subeq/superclass/supeq/equivalent)
+- `run_dl_query` — Description Logic query in Manchester OWL Syntax (subclass/subeq/superclass/supeq/equivalent); results are paged with `offset`/`limit` (default 100 per call) and the header states the full count
 - `get_class_info` — full annotations/axioms for a class
 - `get_ontology_info` — metadata for one ontology
 - `browse_hierarchy` — direct subclasses or superclasses of a class
