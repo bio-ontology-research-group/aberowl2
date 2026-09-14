@@ -39,3 +39,16 @@ ontology (FMA: `reasoner_active: structural`, `reasoner_configured: elk`, status
 a failed one (cu-vo: `reasoner_active: none`, status error) are in
 `2026-09-14-reasoning-contract-evidence.json`. Registry at that time: 971 online, 958
 classified, 6 incoherent, 7 error.
+
+## Published images (14 September 2026)
+
+Built from `main` at `2addd92` and pushed to Docker Hub as `2.0` and `latest`:
+
+| image | digest |
+|---|---|
+| `kaustborg/aberowl-central:2.0` | `sha256:3163da734d84db84d7776764bead805d5e2e43190d10f63b09c05a0422a7e3b2` |
+| `kaustborg/aberowl-worker:2.0` | `sha256:9759dc16b8b561e513e0d38e2375bbe22f25f3f3d99e743c32f817c5c41d2d6b` |
+
+The central image carries the reasoning-contract fields, the result-cap propagation and the
+direct-neighbour browsing (#129, #130, #133) and no registry seed file. Production central runs
+the same commit; the workers run the same `aberowlapi/` sources bind-mounted from that commit.
