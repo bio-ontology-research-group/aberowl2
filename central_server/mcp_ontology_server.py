@@ -491,14 +491,18 @@ async def find_iri(term: str, ontology: str | None = None, limit: int = 10) -> s
         "Answers are computed by the ELK reasoner over the OWL 2 EL fragment of each "
         "ontology: axioms outside EL and imported ontologies, which workers do not "
         "load, take no part in an answer, and a result set is capped at 100,000 "
-        "classes upstream, so at that size the reported count is a lower bound.\n\n"
+        "classes upstream, so at that size the reported count is a lower bound. "
+        "An ontology with 500 or more unsatisfiable classes is answered by a "
+        "structural reasoner instead; get_ontology_info reports which reasoner "
+        "answers for an ontology.\n\n"
         "Examples:\n"
         "  - query='cell', type='subclass' -> all subclasses of 'cell'\n"
         "  - query=\"'part of' some 'cell'\", type='subeq' -> classes that are part of a cell\n"
         "  - query=\"'has part' some 'nucleus'\", type='subeq' -> things that have a nucleus\n\n"
         "Results are paged: at most `limit` classes (default 100) are listed per call, "
-        "and the header states the full count. When more remain, the last line says "
-        "which `offset` to pass to fetch the next page."
+        "and the header states the full count, or \"at least N\" when the answer hit "
+        "the cap. When more remain, the last line says which `offset` to pass to fetch "
+        "the next page."
     ),
 )
 async def run_dl_query(
@@ -526,10 +530,21 @@ async def run_dl_query(
     offset = max(0, offset)
     limit = max(1, min(limit, 1000))
     total = len(results)
+    # A worker cuts its answer at the reasoner result limit and the central API
+    # reports that as `capped` (#126). The count is then a lower bound, so say so
+    # rather than presenting a truncated answer as a complete one.
+    capped = bool(data.get("capped"))
+    cut = [o for o in (data.get("capped_ontologies") or []) if o]
+    counted = f"at least {total}" if capped else f"{total}"
     page = results[offset:offset + limit]
-    lines = [f"Found {total} results for {type} query: {query}\n"]
+    header = f"Found {counted} results for {type} query: {query}"
+    if capped:
+        where = f" in {', '.join(cut)}" if cut else ""
+        header += (f"\n  (the answer was cut at the reasoner result limit{where}, "
+                   f"so it is incomplete and the count is a lower bound)")
+    lines = [header + "\n"]
     if not page:
-        lines.append(f"  (offset {offset} is past the end; the answer set has {total} classes)")
+        lines.append(f"  (offset {offset} is past the end; the answer set has {counted} classes)")
         return "\n".join(lines)
     for r in page:
         label = r.get("label", r.get("owlClass", "?"))
@@ -538,9 +553,10 @@ async def run_dl_query(
         lines.append(f"  {label} [{ont}] - {iri}")
     end = offset + len(page)
     if end < total:
-        lines.append(f"\nShowing {offset + 1}-{end} of {total}. Pass offset={end} for the next page.")
+        lines.append(f"\nShowing {offset + 1}-{end} of {counted}. Pass offset={end} for the next page.")
     elif offset > 0:
-        lines.append(f"\nShowing {offset + 1}-{end} of {total} (last page).")
+        last = "(last page of what the reasoner returned)" if capped else "(last page)"
+        lines.append(f"\nShowing {offset + 1}-{end} of {counted} {last}.")
     return "\n".join(lines)
 
 
@@ -645,6 +661,10 @@ async def browse_hierarchy(class_iri: str, ontology: str, direction: str = "subc
         "type": direction,
         "ontologies": ontology,
         "labels": "true",
+        # Without this the API defaults to the transitive answer and the tool
+        # would list every ancestor or descendant under a "Direct" heading
+        # (#126). /api/dlquery_all forwards it to the worker's runQuery.groovy.
+        "direct": "true",
     }
     data = await _api_get("/api/dlquery_all", params)
     results = data.get("result", [])

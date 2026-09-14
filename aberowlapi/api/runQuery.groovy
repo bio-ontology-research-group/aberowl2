@@ -75,20 +75,28 @@ if (!manager.hasOntology(ontologyId)) {
 
 try {
     def results = new HashMap()
+    // The reasoner answer is cut off at RequestManager.MAX_REASONER_RESULTS, and
+    // runQueryWithReport reports that cut from the truncation itself: when
+    // `capped` is true the answer is incomplete and its size is a lower bound,
+    // not a count (#126). Guarded: a worker that has not been restarted since
+    // that method was added runs the old RequestManager, and a DL query must not
+    // fail over a report field, so there the answer is returned without `capped`.
+    def reportsCap = manager.respondsTo("runQueryWithReport")
+    def out
+    def capped = null
     def start = System.currentTimeMillis()
-    def out = manager.runQuery(ontologyId, query, type, direct, labels, axioms, shortform)
+    if (reportsCap) {
+        def report = manager.runQueryWithReport(ontologyId, query, type, direct, labels, axioms, shortform)
+        out = report.result
+        capped = report.capped
+    } else {
+        out = manager.runQuery(ontologyId, query, type, direct, labels, axioms, shortform)
+    }
     def end = System.currentTimeMillis()
     results.put('time', (end - start))
     results.put('result', out)
-    // The reasoner answer is cut off at RequestManager.MAX_REASONER_RESULTS
-    // before owl:Thing and owl:Nothing are dropped, so a capped answer arrives
-    // here at most two classes short of the limit. When this is true the answer
-    // is incomplete and its size is a lower bound, not a count (#126).
-    // Guarded: a worker that has not been restarted since this field was added runs
-    // the old RequestManager, and a DL query must not fail because of a report field.
-    def maxResults = manager.respondsTo("getMaxReasonerResults") ? manager.getMaxReasonerResults() : null
-    if (maxResults != null) {
-        results.put('capped', out.size() >= (maxResults - 2))
+    if (capped != null) {
+        results.put('capped', capped)
     }
     print new JsonBuilder(results).toString()
 } catch(java.lang.IllegalArgumentException e) {

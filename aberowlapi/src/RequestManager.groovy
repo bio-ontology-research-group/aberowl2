@@ -437,6 +437,24 @@ public class RequestManager {
     }
 
     /**
+     * Cut a reasoner answer down to MAX_REASONER_RESULTS classes, recording at
+     * the point of truncation whether anything was left behind. Returns
+     * `[<classes>, <capped>]`. The flag is read from the iterator that produced
+     * the answer, so an exact answer that happens to hold exactly the limit is
+     * not reported as incomplete (#126).
+     */
+    private static List truncateResults(Iterable classes) {
+        Set resultSet = new HashSet()
+        int taken = 0
+        def it = classes.iterator()
+        while (it.hasNext() && taken < MAX_REASONER_RESULTS) {
+            resultSet.add(it.next())
+            taken++
+        }
+        return [resultSet, it.hasNext()]
+    }
+
+    /**
      * Run a DL query against a specific ontology (by OWLClassExpression).
      */
     Set runQuery(String ontId, OWLClassExpression mOwlQuery, String type, boolean direct, boolean labels, boolean axioms, String shortform) {
@@ -459,7 +477,7 @@ public class RequestManager {
 
         def currentSfp = (shortform == 'iri') ? iriShortFormProviders.get(ontId) : shortFormProviders.get(ontId)
 
-        Set resultSet = Sets.newHashSet(Iterables.limit(qEngine.getClasses(mOwlQuery, requestType, direct, labels), MAX_REASONER_RESULTS))
+        Set resultSet = truncateResults(qEngine.getClasses(mOwlQuery, requestType, direct, labels))[0]
         resultSet.remove(df.getOWLNothing())
         resultSet.remove(df.getOWLThing())
         def classes = classes2info(ontId, resultSet, axioms, currentSfp)
@@ -478,6 +496,18 @@ public class RequestManager {
      * silently failed for any single-word rdfs:label like `'cell'`.
      */
     Set runQuery(String ontId, String mOwlQuery, String type, boolean direct, boolean labels, boolean axioms, String shortform) {
+        return runQueryWithReport(ontId, mOwlQuery, type, direct, labels, axioms, shortform).result
+    }
+
+    /**
+     * The same query as the `runQuery` above, reporting whether the answer was
+     * cut at MAX_REASONER_RESULTS. Returns `[result: <classes>, capped:
+     * <boolean>]`, where `capped` comes from the truncation itself rather than
+     * from the size of the answer (#126). A cached answer carries the flag it
+     * was stored with; the pre-computed root classes are reported as complete,
+     * an ontology with more than MAX_REASONER_RESULTS roots being implausible.
+     */
+    Map runQueryWithReport(String ontId, String mOwlQuery, String type, boolean direct, boolean labels, boolean axioms, String shortform) {
         type = type.toLowerCase()
         def requestType
         switch (type) {
@@ -502,7 +532,7 @@ public class RequestManager {
                 && (mOwlQuery == '<http://www.w3.org/2002/07/owl#Thing>'
                     || mOwlQuery == 'http://www.w3.org/2002/07/owl#Thing')) {
             def cached = rootClassCache.get(ontId)
-            if (cached != null) return cached
+            if (cached != null) return [result: cached, capped: false]
         }
 
         // General query cache (keyed by ontId + query + type + direct + axioms)
@@ -510,17 +540,19 @@ public class RequestManager {
         def cached = queryCache.get(cacheKey)
         if (cached != null) {
             long age = System.currentTimeMillis() - (cached[0] as long)
-            if (age < QUERY_CACHE_TTL_MS) return cached[1] as Set
+            if (age < QUERY_CACHE_TTL_MS) return [result: cached[1] as Set, capped: (cached[2] as boolean)]
         }
 
-        Set resultSet = Sets.newHashSet(Iterables.limit(qEngine.getClasses(mOwlQuery, requestType, direct, labels), MAX_REASONER_RESULTS))
+        def limited = truncateResults(qEngine.getClasses(mOwlQuery, requestType, direct, labels))
+        Set resultSet = limited[0]
+        boolean capped = limited[1]
         resultSet.remove(df.getOWLNothing())
         resultSet.remove(df.getOWLThing())
         def classes = classes2info(ontId, resultSet, axioms, currentSfp)
         def result = classes.sort { x, y -> x["label"].compareTo(y["label"]) }
 
-        queryCache.put(cacheKey, [System.currentTimeMillis(), result] as Object[])
-        return result
+        queryCache.put(cacheKey, [System.currentTimeMillis(), result, capped] as Object[])
+        return [result: result, capped: capped]
     }
 
     Set runQuery(String ontId, String mOwlQuery, String type, boolean direct, boolean labels, boolean axioms) {

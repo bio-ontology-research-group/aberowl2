@@ -1132,6 +1132,12 @@ async def dl_query_all(request: Request):
         direct     - "true" for direct results only
         labels     - "true" to include labels (default true)
         axioms     - "true" to include axioms
+
+    The response keeps its shape: `result` is the flat list of classes from
+    every worker. `capped` is added on top of it, and is true when at least one
+    worker cut its answer at the reasoner result limit, in which case
+    `capped_ontologies` names those ontologies and len(result) is a lower bound
+    rather than a count (#126).
     """
     query = request.query_params.get("query")
     query_type = request.query_params.get("type")
@@ -1169,6 +1175,7 @@ async def dl_query_all(request: Request):
             "ontologyId": ontology_name,  # Pass ontologyId for multi-ontology containers
         }
 
+        empty = {"ontology": ontology_name, "result": [], "capped": False}
         try:
             async with session.get(api_url, params=params, timeout=30) as response:
                 if response.status == 200:
@@ -1177,22 +1184,37 @@ async def dl_query_all(request: Request):
                         if isinstance(item, dict):
                             item["ontology"] = ontology_name
                             item["ontology_title"] = ontology_title
-                    return data.get("result", [])
+                    # A worker that cut its answer at the reasoner result limit
+                    # says so with `capped`; a worker predating that field sends
+                    # nothing, which reads here as a complete answer (#126).
+                    return {
+                        "ontology": ontology_name,
+                        "result": data.get("result", []),
+                        "capped": bool(data.get("capped")),
+                    }
                 else:
                     logger.warning(f"DL query failed for {ontology_name}: Status {response.status}")
-                    return []
+                    return empty
         except Exception as e:
             logger.error(f"Error DL querying {ontology_name}: {e}")
-            return []
+            return empty
 
     all_results = []
+    capped_ontologies = []
     async with aiohttp.ClientSession() as session:
         tasks = [query_one_server(server, session) for server in online_servers]
         results_from_servers = await asyncio.gather(*tasks)
-        for res_list in results_from_servers:
-            all_results.extend(res_list)
+        for res in results_from_servers:
+            all_results.extend(res["result"])
+            if res["capped"]:
+                capped_ontologies.append(res["ontology"])
 
-    return {"result": all_results}
+    # Additive: `result` is unchanged, and the cap report rides alongside it so a
+    # caller can tell a complete answer from a truncated one (#126).
+    body = {"result": all_results, "capped": bool(capped_ontologies)}
+    if capped_ontologies:
+        body["capped_ontologies"] = capped_ontologies
+    return body
 
 
 @app.get("/api/servers")

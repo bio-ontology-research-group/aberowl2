@@ -336,3 +336,109 @@ class TestAPIKeyAdmin:
         assert r.status_code == 200
         keys = r.json()
         assert isinstance(keys, list)
+
+
+# ---------------------------------------------------------------------------
+# dlquery_all — cap reporting
+# ---------------------------------------------------------------------------
+
+class _FakeResponse:
+    """One worker's reply to a DL query."""
+
+    def __init__(self, payload, status=200):
+        self._payload = payload
+        self.status = status
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def json(self):
+        return self._payload
+
+
+class _FakeSession:
+    """aiohttp.ClientSession stand-in: replies per worker URL."""
+
+    def __init__(self, by_url):
+        self._by_url = by_url
+        self.calls = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    def get(self, url, params=None, timeout=None):
+        self.calls.append((url, params or {}))
+        for fragment, payload in self._by_url.items():
+            if fragment in url:
+                return _FakeResponse(payload)
+        return _FakeResponse({"result": []}, status=500)
+
+
+@pytest.mark.unit
+class TestDLQueryAllCapReporting:
+    """A worker cuts its answer at the reasoner result limit and says so with
+    `capped`; the aggregate must carry that through instead of dropping it, or
+    len(result) reads as a count when it is only a lower bound (#126)."""
+
+    def _patch_session(self, by_url):
+        import app.main as main_module
+        session = _FakeSession(by_url)
+        return session, patch.object(
+            main_module.aiohttp, "ClientSession", lambda *a, **kw: session
+        )
+
+    @pytest.mark.asyncio
+    async def test_capped_worker_is_reported(self, client):
+        session, patched = self._patch_session({
+            "go-server": {"result": [{"class": "http://example.org/A", "label": "a"}],
+                          "capped": True},
+            "hp-server": {"result": [{"class": "http://example.org/B", "label": "b"}],
+                          "capped": False},
+        })
+        with patched:
+            r = await client.get("/api/dlquery_all",
+                                 params={"query": "'cell'", "type": "subeq"})
+        assert r.status_code == 200
+        body = r.json()
+        assert len(body["result"]) == 2          # shape unchanged: one flat list
+        assert body["capped"] is True
+        assert body["capped_ontologies"] == ["go"]
+
+    @pytest.mark.asyncio
+    async def test_uncapped_and_legacy_workers_report_complete(self, client):
+        # `capped` absent is a worker predating the field: a complete answer.
+        session, patched = self._patch_session({
+            "go-server": {"result": [{"class": "http://example.org/A", "label": "a"}]},
+            "hp-server": {"result": [{"class": "http://example.org/B", "label": "b"}],
+                          "capped": False},
+        })
+        with patched:
+            r = await client.get("/api/dlquery_all",
+                                 params={"query": "'cell'", "type": "subeq"})
+        body = r.json()
+        assert body["capped"] is False
+        assert "capped_ontologies" not in body
+        assert len(body["result"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_direct_is_forwarded_to_the_worker(self, client):
+        # browse_hierarchy relies on this: direct=true must reach the worker.
+        session, patched = self._patch_session({
+            "go-server": {"result": []}, "hp-server": {"result": []},
+        })
+        with patched:
+            r = await client.get("/api/dlquery_all",
+                                 params={"query": "'cell'", "type": "subclass",
+                                         "ontologies": "go", "direct": "true"})
+        assert r.status_code == 200
+        assert session.calls, "no worker was queried"
+        url, params = session.calls[0]
+        assert url.endswith("/api/runQuery.groovy")
+        assert params["direct"] == "true"
+        assert params["ontologyId"] == "go"
