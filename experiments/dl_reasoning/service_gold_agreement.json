@@ -1,0 +1,1093 @@
+{
+ "api": "https://aber-owl.net",
+ "gold": "gold_all.jsonl",
+ "checked_at": "2026-09-14T04:40:00Z",
+ "n": 120,
+ "counts": {
+  "exact|T1": 60,
+  "exact|T2": 60
+ },
+ "note": "all 120 answer sets equal to gold without anchor removal; produced by the same comparison as check_service_gold.py, before its argparse wrapper was added",
+ "rows": [
+  {
+   "task": "T1",
+   "ontology": "go",
+   "term": "all subclasses of \"heterotetrameric ADPG pyrophosphorylase complex\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0030931>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "go",
+   "term": "all subclasses of \"negative regulation of mechanoreceptor differentiation\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0045632>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "go",
+   "term": "all subclasses of \"viral penetration into host nucleus\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0075732>",
+   "n_gold": 4,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "go",
+   "term": "all subclasses of \"positive regulation of meiotic cell cycle\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0051446>",
+   "n_gold": 22,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "go",
+   "term": "all subclasses of \"vesicle uncoating\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0072319>",
+   "n_gold": 4,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "go",
+   "term": "all subclasses of \"neuron fate specification\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0048665>",
+   "n_gold": 8,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "go",
+   "term": "all subclasses of \"negative regulation of intestinal absorption\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_1904479>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "go",
+   "term": "all subclasses of \"photoreceptor cell development\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0042461>",
+   "n_gold": 11,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "go",
+   "term": "all subclasses of \"choline biosynthetic process\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0042425>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "go",
+   "term": "all subclasses of \"BLOC complex\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0031082>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "go",
+   "term": "all subclasses of \"symbiont-mediated evasion of host immune response\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0042783>",
+   "n_gold": 11,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "go",
+   "term": "all subclasses of \"regulation of synapse assembly\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0051963>",
+   "n_gold": 20,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "go",
+   "term": "all subclasses of \"negative regulation of neurogenesis\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0050768>",
+   "n_gold": 22,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "go",
+   "term": "all subclasses of \"dAMP metabolic process\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0046053>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "go",
+   "term": "all subclasses of \"regulation of synapse maturation\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0090128>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "go",
+   "term": "all subclasses of \"complex of collagen trimers\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0098644>",
+   "n_gold": 7,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "go",
+   "term": "all subclasses of \"cyclo-ligase activity\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0016882>",
+   "n_gold": 4,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "go",
+   "term": "all subclasses of \"inositol trisphosphate kinase activity\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0051766>",
+   "n_gold": 5,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "go",
+   "term": "all subclasses of \"CD4-positive or CD8-positive, alpha-beta T cell lineage commitment\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0043369>",
+   "n_gold": 7,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "go",
+   "term": "all subclasses of \"prostate gland epithelium morphogenesis\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0060740>",
+   "n_gold": 6,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "go",
+   "term": "all classes that are \"positively regulates\" some \"stem cell differentiation\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002213> some <http://purl.obolibrary.org/obo/GO_0048863>",
+   "n_gold": 8,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "go",
+   "term": "all classes that are \"negatively regulates\" some \"myeloid cell apoptotic process\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002212> some <http://purl.obolibrary.org/obo/GO_0033028>",
+   "n_gold": 5,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "go",
+   "term": "all classes that are \"regulates\" some \"synaptic vesicle fusion to presynaptic active zone membrane\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002211> some <http://purl.obolibrary.org/obo/GO_0031629>",
+   "n_gold": 5,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "go",
+   "term": "all classes that are \"part of\" some \"chromosome, centromeric region\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/BFO_0000050> some <http://purl.obolibrary.org/obo/GO_0000775>",
+   "n_gold": 20,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "go",
+   "term": "all classes that are \"negatively regulates\" some \"asymmetric cell division\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002212> some <http://purl.obolibrary.org/obo/GO_0008356>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "go",
+   "term": "all classes that are \"regulates\" some \"cardiac ventricle formation\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002211> some <http://purl.obolibrary.org/obo/GO_0003211>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "go",
+   "term": "all classes that are \"regulates\" some \"shoot apical meristem development\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002211> some <http://purl.obolibrary.org/obo/GO_1902182>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "go",
+   "term": "all classes that are \"regulates\" some \"sodium ion import across plasma membrane\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002211> some <http://purl.obolibrary.org/obo/GO_0098719>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "go",
+   "term": "all classes that are \"regulates\" some \"c-di-GMP signaling\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002211> some <http://purl.obolibrary.org/obo/GO_0061939>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "go",
+   "term": "all classes that are \"positively regulates\" some \"lymphoid progenitor cell differentiation\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002213> some <http://purl.obolibrary.org/obo/GO_0002320>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "go",
+   "term": "all classes that are \"part of\" some \"artery development\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/BFO_0000050> some <http://purl.obolibrary.org/obo/GO_0060840>",
+   "n_gold": 15,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "go",
+   "term": "all classes that are \"regulates\" some \"lymphotoxin A production\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002211> some <http://purl.obolibrary.org/obo/GO_0032641>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "go",
+   "term": "all classes that are \"part of\" some \"angiogenesis\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/BFO_0000050> some <http://purl.obolibrary.org/obo/GO_0001525>",
+   "n_gold": 9,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "go",
+   "term": "all classes that are \"positively regulates\" some \"xylan catabolic process\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002213> some <http://purl.obolibrary.org/obo/GO_0045493>",
+   "n_gold": 4,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "go",
+   "term": "all classes that are \"regulates\" some \"meiotic cell cycle process involved in oocyte maturation\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002211> some <http://purl.obolibrary.org/obo/GO_1903537>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "go",
+   "term": "all classes that are \"regulates\" some \"cyclase activity\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002211> some <http://purl.obolibrary.org/obo/GO_0009975>",
+   "n_gold": 18,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "go",
+   "term": "all classes that are \"regulates\" some \"collagen catabolic process\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002211> some <http://purl.obolibrary.org/obo/GO_0030574>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "go",
+   "term": "all classes that are \"negatively regulates\" some \"leukocyte mediated cytotoxicity\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002212> some <http://purl.obolibrary.org/obo/GO_0001909>",
+   "n_gold": 16,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "go",
+   "term": "all classes that are \"positively regulates\" some \"extracellular matrix organization\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002213> some <http://purl.obolibrary.org/obo/GO_0030198>",
+   "n_gold": 5,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "go",
+   "term": "all classes that are \"part of\" some \"extrinsic component of membrane\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/BFO_0000050> some <http://purl.obolibrary.org/obo/GO_0019898>",
+   "n_gold": 12,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "cl",
+   "term": "all subclasses of \"cranial bone\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/UBERON_0004766>",
+   "n_gold": 6,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "cl",
+   "term": "all subclasses of \"regulation of mast cell activation\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0033003>",
+   "n_gold": 4,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "cl",
+   "term": "all subclasses of \"bronchiole\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/UBERON_0002186>",
+   "n_gold": 9,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "cl",
+   "term": "all subclasses of \"negative regulation of organelle assembly\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_1902116>",
+   "n_gold": 6,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "cl",
+   "term": "all subclasses of \"nucleus of dorsal thalamus\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/UBERON_0015233>",
+   "n_gold": 22,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "cl",
+   "term": "all subclasses of \"negative regulation of cell junction assembly\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_1901889>",
+   "n_gold": 4,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "cl",
+   "term": "all subclasses of \"cellular response to stress\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0033554>",
+   "n_gold": 5,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "cl",
+   "term": "all subclasses of \"regulation of endothelial cell migration\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0010594>",
+   "n_gold": 8,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "cl",
+   "term": "all subclasses of \"extratelencephalic-projecting glutamatergic cortical neuron\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/CL_4023009>",
+   "n_gold": 8,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "cl",
+   "term": "all subclasses of \"voltage-gated sodium channel subunit alpha\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/PR_000001975>",
+   "n_gold": 6,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "cl",
+   "term": "all subclasses of \"positive regulation of corticosteroid hormone secretion\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_2000848>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "cl",
+   "term": "all subclasses of \"kidney blood vessel\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/UBERON_0003517>",
+   "n_gold": 18,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "cl",
+   "term": "all subclasses of \"regulation of synaptic transmission, glycinergic\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0060092>",
+   "n_gold": 5,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "cl",
+   "term": "all subclasses of \"pituitary gland cell\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/CL_2000004>",
+   "n_gold": 13,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "cl",
+   "term": "all subclasses of \"Rhabditoidea\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/NCBITaxon_55879>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "cl",
+   "term": "all subclasses of \"segment of pes\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/UBERON_0005445>",
+   "n_gold": 4,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "cl",
+   "term": "all subclasses of \"cell differentiation involved in embryonic placenta development\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0060706>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "cl",
+   "term": "all subclasses of \"B cell tolerance induction\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0002514>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "cl",
+   "term": "all subclasses of \"ligand-gated monoatomic cation channel activity\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0099094>",
+   "n_gold": 10,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "cl",
+   "term": "all subclasses of \"positive regulation of amine transport\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/GO_0051954>",
+   "n_gold": 13,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "cl",
+   "term": "all classes that are \"regulates\" some \"starch metabolic process\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002211> some <http://purl.obolibrary.org/obo/GO_0005982>",
+   "n_gold": 6,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "cl",
+   "term": "all classes that are \"regulates\" some \"cytokine production involved in inflammatory response\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002211> some <http://purl.obolibrary.org/obo/GO_0002534>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "cl",
+   "term": "all classes that are \"contributes to morphology of\" some \"nose\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002433> some <http://purl.obolibrary.org/obo/UBERON_0000004>",
+   "n_gold": 5,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "cl",
+   "term": "all classes that are \"part of\" some \"intervertebral joint\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/BFO_0000050> some <http://purl.obolibrary.org/obo/UBERON_0001468>",
+   "n_gold": 12,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "cl",
+   "term": "all classes that are \"adjacent to\" some \"dorsal thalamus\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002220> some <http://purl.obolibrary.org/obo/UBERON_0004703>",
+   "n_gold": 4,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "cl",
+   "term": "all classes that are \"positively regulates\" some \"muscle organ development\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002213> some <http://purl.obolibrary.org/obo/GO_0007517>",
+   "n_gold": 8,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "cl",
+   "term": "all classes that are \"capable of\" some \"excitatory chemical synaptic transmission\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002215> some <http://purl.obolibrary.org/obo/GO_0098976>",
+   "n_gold": 4,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "cl",
+   "term": "all classes that are \"negatively regulates\" some \"cytoskeleton organization\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002212> some <http://purl.obolibrary.org/obo/GO_0007010>",
+   "n_gold": 9,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "cl",
+   "term": "all classes that are \"has characteristic\" some \"corticothalamic projecting\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0000053> some <http://purl.obolibrary.org/obo/PATO_0070029>",
+   "n_gold": 4,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "cl",
+   "term": "all classes that are \"positively regulates\" some \"protein localization to cell periphery\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002213> some <http://purl.obolibrary.org/obo/GO_1990778>",
+   "n_gold": 5,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "cl",
+   "term": "all classes that are \"has developmental contribution from\" some \"proctodeum\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002254> some <http://purl.obolibrary.org/obo/UBERON_0000931>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "cl",
+   "term": "all classes that are \"adjacent to\" some \"neural tube mantle layer\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002220> some <http://purl.obolibrary.org/obo/UBERON_0004061>",
+   "n_gold": 5,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "cl",
+   "term": "all classes that are \"regulates\" some \"glutamatergic neuron differentiation\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002211> some <http://purl.obolibrary.org/obo/GO_1905962>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "cl",
+   "term": "all classes that are \"bounding layer of\" some \"mouth\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002007> some <http://purl.obolibrary.org/obo/UBERON_0000165>",
+   "n_gold": 10,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "cl",
+   "term": "all classes that are \"regulates\" some \"extracellular matrix assembly\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002211> some <http://purl.obolibrary.org/obo/GO_0085029>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "cl",
+   "term": "all classes that are \"adjacent to\" some \"space surrounding organism\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002220> some <http://purl.obolibrary.org/obo/UBERON_0013514>",
+   "n_gold": 23,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "cl",
+   "term": "all classes that are \"part of\" some \"tunica adventitia of blood vessel\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/BFO_0000050> some <http://purl.obolibrary.org/obo/UBERON_0005734>",
+   "n_gold": 4,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "cl",
+   "term": "all classes that are \"negatively regulates\" some \"T-helper cell differentiation\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002212> some <http://purl.obolibrary.org/obo/GO_0042093>",
+   "n_gold": 4,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "cl",
+   "term": "all classes that are \"overlaps\" some \"distal interphalangeal joint\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002131> some <http://purl.obolibrary.org/obo/UBERON_0009768>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "cl",
+   "term": "all classes that are \"adjacent to\" some \"epithelial cell\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/RO_0002220> some <http://purl.obolibrary.org/obo/CL_0000066>",
+   "n_gold": 12,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "so",
+   "term": "all subclasses of \"core_eukaryotic_promoter_element\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/SO_0001660>",
+   "n_gold": 18,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "so",
+   "term": "all subclasses of \"silenced_gene\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/SO_0000127>",
+   "n_gold": 6,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "so",
+   "term": "all subclasses of \"enzymatic_RNA_gene\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/SO_0002180>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "so",
+   "term": "all subclasses of \"immunoglobulin_gene\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/SO_0002122>",
+   "n_gold": 4,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "so",
+   "term": "all subclasses of \"feature_truncation\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/SO_0001906>",
+   "n_gold": 7,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "so",
+   "term": "all subclasses of \"splice_site_variant\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/SO_0001629>",
+   "n_gold": 7,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "so",
+   "term": "all subclasses of \"methylated_DNA_base_feature\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/SO_0000306>",
+   "n_gold": 6,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "so",
+   "term": "all subclasses of \"epigenetically_modified_gene\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/SO_0000898>",
+   "n_gold": 4,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "so",
+   "term": "all subclasses of \"consensus_region\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/SO_0000994>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "so",
+   "term": "all subclasses of \"remark\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/SO_0000700>",
+   "n_gold": 23,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "so",
+   "term": "all subclasses of \"methylated_cytosine\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/SO_0000114>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "so",
+   "term": "all subclasses of \"pseudogenic_region\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/SO_0000462>",
+   "n_gold": 14,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "so",
+   "term": "all subclasses of \"missense_variant\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/SO_0001583>",
+   "n_gold": 6,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "so",
+   "term": "all subclasses of \"histone_2B_acetylation_site\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/SO_0002143>",
+   "n_gold": 5,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "so",
+   "term": "all subclasses of \"restriction_enzyme_cleavage_junction\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/SO_0001688>",
+   "n_gold": 4,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "so",
+   "term": "all subclasses of \"feature_amplification\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/SO_0001880>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "so",
+   "term": "all subclasses of \"kinetoplast_gene\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/SO_0000089>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "so",
+   "term": "all subclasses of \"long_terminal_repeat\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/SO_0000286>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "so",
+   "term": "all subclasses of \"sequence_secondary_structure\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/SO_0000002>",
+   "n_gold": 19,
+   "verdict": "exact"
+  },
+  {
+   "task": "T1",
+   "ontology": "so",
+   "term": "all subclasses of \"non_processed_pseudogene\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/SO_0001760>",
+   "n_gold": 9,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "so",
+   "term": "all classes that are \"derives_from\" some \"transposable_element\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/so#derives_from> some <http://purl.obolibrary.org/obo/SO_0000101>",
+   "n_gold": 5,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "so",
+   "term": "all classes that are \"has_part\" some \"gene_cassette\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/so#has_part> some <http://purl.obolibrary.org/obo/SO_0005853>",
+   "n_gold": 4,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "so",
+   "term": "all classes that are \"part_of\" some \"membrane_structure\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/so#part_of> some <http://purl.obolibrary.org/obo/SO_0001071>",
+   "n_gold": 7,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "so",
+   "term": "all classes that are \"derives_from\" some \"tRNA_primary_transcript\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/so#derives_from> some <http://purl.obolibrary.org/obo/SO_0000210>",
+   "n_gold": 24,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "so",
+   "term": "all classes that are \"has_part\" some \"reagent\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/so#has_part> some <http://purl.obolibrary.org/obo/SO_0000695>",
+   "n_gold": 5,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "so",
+   "term": "all classes that are \"part_of\" some \"clone\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/so#part_of> some <http://purl.obolibrary.org/obo/SO_0000151>",
+   "n_gold": 23,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "so",
+   "term": "all classes that are \"has_quality\" some \"RNA\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/so#has_quality> some <http://purl.obolibrary.org/obo/SO_0000356>",
+   "n_gold": 7,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "so",
+   "term": "all classes that are \"has_quality\" some \"ribozymic\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/so#has_quality> some <http://purl.obolibrary.org/obo/SO_0001186>",
+   "n_gold": 10,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "so",
+   "term": "all classes that are \"has_quality\" some \"DNA\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/so#has_quality> some <http://purl.obolibrary.org/obo/SO_0000352>",
+   "n_gold": 21,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "so",
+   "term": "all classes that are \"has_quality\" some \"consensus\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/so#has_quality> some <http://purl.obolibrary.org/obo/SO_0000993>",
+   "n_gold": 4,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "so",
+   "term": "all classes that are \"part_of\" some \"intron\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/so#part_of> some <http://purl.obolibrary.org/obo/SO_0000188>",
+   "n_gold": 11,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "so",
+   "term": "all classes that are \"has_quality\" some \"protein_coding\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/so#has_quality> some <http://purl.obolibrary.org/obo/SO_0000010>",
+   "n_gold": 10,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "so",
+   "term": "all classes that are \"non_functional_homolog_of\" some \"gene\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/so#non_functional_homolog_of> some <http://purl.obolibrary.org/obo/SO_0000704>",
+   "n_gold": 25,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "so",
+   "term": "all classes that are \"has_quality\" some \"single\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/so#has_quality> some <http://purl.obolibrary.org/obo/SO_0000984>",
+   "n_gold": 6,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "so",
+   "term": "all classes that are \"derives_from\" some \"snRNA_primary_transcript\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/so#derives_from> some <http://purl.obolibrary.org/obo/SO_0000231>",
+   "n_gold": 11,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "so",
+   "term": "all classes that are \"has_quality\" some \"intrachromosomal\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/so#has_quality> some <http://purl.obolibrary.org/obo/SO_0001510>",
+   "n_gold": 25,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "so",
+   "term": "all classes that are \"part_of\" some \"tmRNA\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/so#part_of> some <http://purl.obolibrary.org/obo/SO_0000584>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "so",
+   "term": "all classes that are \"has_part\" some \"unit_of_gene_expression\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/so#has_part> some <http://purl.obolibrary.org/obo/SO_0002300>",
+   "n_gold": 3,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "so",
+   "term": "all classes that are \"part_of\" some \"UTR\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/so#part_of> some <http://purl.obolibrary.org/obo/SO_0000203>",
+   "n_gold": 13,
+   "verdict": "exact"
+  },
+  {
+   "task": "T2",
+   "ontology": "so",
+   "term": "all classes that are \"has_quality\" some \"supported_by_sequence_similarity\"",
+   "query_type": "subclass",
+   "manchester": "<http://purl.obolibrary.org/obo/so#has_quality> some <http://purl.obolibrary.org/obo/SO_0000907>",
+   "n_gold": 4,
+   "verdict": "exact"
+  }
+ ]
+}
