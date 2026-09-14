@@ -80,7 +80,7 @@ the model. Verified against the registry:
 |---|---|---|---|
 | `go` | large | 51,937 | 2026-03-25 |
 | `cl` | medium | 19,151 | 2026-03-26 |
-| `so` | small | 2,752 | current |
+| `so` | small | 2,752 | not recorded (the class universe `classes_so.txt` fixes the release's 2,752 classes) |
 
 Size is **not** the hypothesis; it proxies training-data familiarity. The prediction
 is that the `none` arm does best on GO and worst on SO, so the reasoning gain grows
@@ -136,8 +136,8 @@ Grapes cannot resolve OWLAPI on the bare workstation (Ivy fails to download
 worker image, which already carries the resolved classpath:
 
 ```bash
-docker run --rm -v ~/dl_gold:/work -e JAVA_OPTS="-Xmx24g" \
-  --entrypoint sh aberowl2-ontology-api:latest -c \
+docker run --rm -v "$PWD/dl_gold":/work -e JAVA_OPTS="-Xmx24g" \
+  --entrypoint sh kaustborg/aberowl-worker:2.0 -c \
   "cd /work && groovy build_dl_gold.groovy --owl go.owl --id go \
      --out gold_go.jsonl --classes classes_go.txt --n 20"
 ```
@@ -196,3 +196,12 @@ earlier return; this experiment's own run loop follows the same shared pattern.
   unmeasurable.
 - **Turn cap.** `MAX_TOOL_TURNS = 12` here; 6 already truncated 39/346 of Gemini's
   runs on the simpler IRI task.
+
+## Service/gold agreement
+
+`check_service_gold.py` submits every gold expression to the deployed service and compares
+the answer sets with `gold_iris`, strictly and with the anchor class set aside.
+`service_gold_agreement.json` is the run of 14 September 2026 against `https://aber-owl.net`:
+all 120 expressions returned the gold set exactly. The check establishes agreement between
+the served ontologies and the gold sets at the time it runs; it does not recover the
+service version that answered the released model runs.
