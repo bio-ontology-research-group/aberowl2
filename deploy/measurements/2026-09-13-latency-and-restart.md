@@ -29,3 +29,13 @@ Two worker hosts (16 cores, 157 GB each): 13 + 14 containers, 607 + 364 ontologi
 container RSS from 2.0 GiB to 31.6 GiB. Central host: 8 cores, 15 GB; Elasticsearch
 6.9 GiB of 8 GiB, API server 184 MiB, Redis 17 MiB. Registry: 971 ontologies,
 12,115,179 classes; statuses 958 classified, 6 incoherent (structural reasoner), 7 unknown.
+
+## Reasoning-contract fields live (14 September 2026)
+
+After the full worker restart (27 containers, on-host sequential loop, 05:13 to 06:00 UTC),
+`/api/getOntology` and the MCP `get_ontology_info` tool report the active reasoner for all 971
+ontologies. Saved responses for a classified ontology (GO: `reasoner_active: elk`), a fallback
+ontology (FMA: `reasoner_active: structural`, `reasoner_configured: elk`, status incoherent) and
+a failed one (cu-vo: `reasoner_active: none`, status error) are in
+`2026-09-14-reasoning-contract-evidence.json`. Registry at that time: 971 online, 958
+classified, 6 incoherent, 7 error.
