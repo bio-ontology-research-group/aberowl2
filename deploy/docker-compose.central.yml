@@ -10,8 +10,18 @@
 #   cd /data/aberowl
 #   docker compose -f deploy/docker-compose.central.yml up -d
 
+# Container logs are capped per service: docker's json-file driver never rotates by
+# default, and one unhealthy Elasticsearch loop filled a 49 GB root disk twice in two
+# days (2026-09-13/14). 100 MB x 3 files per container; `docker logs` still works.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "100m"
+    max-file: "3"
+
 services:
   redis:
+    logging: *default-logging
     image: redis:7-alpine
     restart: unless-stopped
     volumes:
@@ -21,6 +31,7 @@ services:
       - aberowl-internal
 
   elasticsearch:
+    logging: *default-logging
     image: elasticsearch:7.17.10
     restart: unless-stopped
     environment:
@@ -41,6 +52,7 @@ services:
           memory: 4g
 
   central-server:
+    logging: *default-logging
     build:
       context: ..
       dockerfile: central_server/Dockerfile
