@@ -1,0 +1,43 @@
+{
+ "captured_at": "2026-09-14T03:26:56Z",
+ "api": {
+  "GO": {
+   "acronym": null,
+   "status": "online",
+   "reasoner_status": "classified",
+   "reasoner_type": "elk",
+   "reasoner_configured": "elk",
+   "reasoner_active": "elk",
+   "imports_loaded": false,
+   "imports_declared": 0,
+   "class_count": 51937
+  },
+  "FMA": {
+   "acronym": null,
+   "status": "online",
+   "reasoner_status": "incoherent",
+   "reasoner_type": "elk",
+   "reasoner_configured": "elk",
+   "reasoner_active": "structural",
+   "imports_loaded": false,
+   "imports_declared": 0,
+   "class_count": 104721
+  },
+  "cu-vo": {
+   "acronym": null,
+   "status": "online",
+   "reasoner_status": "error",
+   "reasoner_type": "elk",
+   "reasoner_configured": "elk",
+   "reasoner_active": "none",
+   "imports_loaded": false,
+   "imports_declared": 0,
+   "class_count": 11
+  }
+ },
+ "mcp": {
+  "GO": "Reasoning contract: reasoner: elk (active), status: classified, imports: not loaded (0 declared).",
+  "FMA": "Reasoning contract: reasoner: structural (active, elk configured), status: incoherent, imports: not loaded (0 declared).",
+  "cu-vo": "Reasoning contract: reasoner: none (active, elk configured), status: error, imports: not loaded (0 declared)."
+ }
+}
