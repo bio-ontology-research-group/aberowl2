@@ -120,6 +120,17 @@ class TestMCPOntologyServerSchemas:
         assert "imported ontologies" in desc
         assert "100,000" in desc
 
+    async def test_dl_query_description_states_structural_fallback(self):
+        # An ontology with too many unsatisfiable classes is answered by the
+        # structural reasoner, not ELK, and the tool must say so (#126).
+        from mcp_ontology_server import mcp
+        tools = await mcp.list_tools()
+        dl = next(t for t in tools if t.name == "run_dl_query")
+        desc = dl.description.lower()
+        assert "structural" in desc
+        assert "500" in desc
+        assert "get_ontology_info" in desc
+
 
 # ---------------------------------------------------------------------------
 # MCP Ontology Server — tool execution with mocked HTTP
@@ -213,6 +224,55 @@ class TestMCPOntologyServerCalls:
         assert "class 249 " in last and "(last page)" in last and "Pass offset" not in last
         # an offset past the end is reported, not silently empty
         assert "past the end" in past
+
+    async def test_run_dl_query_reports_a_capped_answer(self):
+        # A worker that cut its answer at the reasoner result limit reports it as
+        # `capped`, so the count is a lower bound and must be rendered as one (#126).
+        import mcp_ontology_server as srv
+        payload = {
+            "result": [
+                {"label": f"class {i}", "class": f"http://example.org/C{i}", "ontology": "ncbitaxon"}
+                for i in range(250)
+            ],
+            "capped": True,
+            "capped_ontologies": ["ncbitaxon"],
+        }
+        with patch.object(srv, "_api_get", new=AsyncMock(return_value=payload)):
+            first = _text(await srv.mcp.call_tool(
+                "run_dl_query", {"query": "'cell'", "type": "subeq", "ontology": "ncbitaxon"}))
+            last = _text(await srv.mcp.call_tool(
+                "run_dl_query", {"query": "'cell'", "type": "subeq", "ontology": "ncbitaxon",
+                                 "offset": 200}))
+        # the header never presents a truncated answer as a count
+        assert "Found at least 250 results" in first
+        assert "Found 250 results" not in first
+        assert "cut at the reasoner result limit" in first
+        assert "ncbitaxon" in first
+        # paging states the same lower bound
+        assert "Showing 1-100 of at least 250. Pass offset=100" in first
+        assert "Showing 201-250 of at least 250" in last
+        assert "(last page of what the reasoner returned)" in last
+
+    async def test_run_dl_query_reports_an_uncapped_answer_unchanged(self):
+        # `capped` absent (an older worker) or false is a complete answer: the
+        # rendering must stay exactly as it was.
+        import mcp_ontology_server as srv
+        results = [
+            {"label": f"class {i}", "class": f"http://example.org/C{i}", "ontology": "go"}
+            for i in range(150)
+        ]
+        for payload in ({"result": results}, {"result": results, "capped": False}):
+            with patch.object(srv, "_api_get", new=AsyncMock(return_value=payload)):
+                first = _text(await srv.mcp.call_tool(
+                    "run_dl_query", {"query": "'cell'", "type": "subeq", "ontology": "go"}))
+                last = _text(await srv.mcp.call_tool(
+                    "run_dl_query", {"query": "'cell'", "type": "subeq", "ontology": "go",
+                                     "offset": 100}))
+            assert "Found 150 results" in first
+            assert "at least" not in first
+            assert "cut at the reasoner result limit" not in first
+            assert "Showing 1-100 of 150. Pass offset=100" in first
+            assert "Showing 101-150 of 150 (last page)." in last
 
     async def test_get_class_info_returns_json(self):
         import mcp_ontology_server as srv
@@ -467,6 +527,24 @@ class TestLookupIRICalls:
         params = mock.call_args[0][1]
         assert params["query"] == "<http://www.w3.org/2002/07/owl#Thing>"
         assert params["type"] == "subclass"
+
+    async def test_browse_hierarchy_requests_direct_neighbours(self):
+        # The tool promises direct sub/superclasses, and /api/dlquery_all defaults
+        # to the transitive answer, so it has to ask for direct=true (#126).
+        import mcp_ontology_server as srv
+        payload = {"result": [
+            {"label": "organelle", "class": "http://example.org/X", "ontology": "go"},
+        ]}
+        mock = AsyncMock(return_value=payload)
+        with patch.object(srv, "_api_get", new=mock):
+            result = await srv.mcp.call_tool(
+                "browse_hierarchy",
+                {"class_iri": "http://purl.obolibrary.org/obo/GO_0005623",
+                 "ontology": "go", "direction": "superclass"},
+            )
+        assert "Direct superclasses" in _text(result)
+        assert mock.call_args[0][0] == "/api/dlquery_all"
+        assert mock.call_args[0][1]["direct"] == "true"
 
 
 # ---------------------------------------------------------------------------
