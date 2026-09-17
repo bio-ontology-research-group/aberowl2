@@ -1,16 +1,15 @@
 # Production rollout: hppcrt iterator-pool fix
 
 Applies the fix from #74 / #75 to production and recovers the offline ontologies.
-Read this fully before starting. Every phase is independently valuable — you can
-stop after any of them and leave production in a better state than you found it.
+Read the full procedure before you start. You can stop after any completed phase.
 
 ## Why this is worth doing
 
 On beta the fix took the full 859-ontology fleet from **630 GB of live heap to
 94.8 GB** (RSS 805 -> 312 GB). Production has 16-core workers rather than beta's
-256, so its pools are already 16 deep instead of 256 and the win there is
-smaller — expect roughly 20-30% off live heap, not 85%. The bigger prize on prod
-is that it unblocks hosting the *whole* fleet: ~95 GB of live heap fits on a
+256, so its pools are already 16 deep instead of 256. The estimated live-heap
+reduction is therefore roughly 20-30%, compared with 85% on beta. The fix may
+also allow production to host the whole fleet: ~95 GB of live heap fits on a
 single 157 GB host.
 
 ## Hosts
@@ -22,7 +21,7 @@ single 157 GB host.
 | worker2 | 10.254.146.61 | 16 | 157 GB | workers 2,4,6,8,10,11,13,15,17 |
 
 Log in as `a-zhapacfp`. That account is in the `docker` group, so **`docker` works
-without sudo** (there is no passwordless sudo — don't reach for it).
+without sudo**. The account does not have passwordless sudo.
 
 Code lives at `/opt/aberowl2` and is mounted read-only into the containers, so a
 code change takes effect on worker restart. Ontologies are at
@@ -49,7 +48,7 @@ Also record the live registry so you can prove what changed:
 curl -s http://aber-owl.net/api/servers > ~/aberowl_backup_$ts/registry_before.json
 ```
 
-## Phase 1 — the canary (`worker-12`)
+## Phase 1: the canary (`worker-12`)
 
 `aberowl-worker-12` on **worker1** died with `java.lang.OutOfMemoryError: Java heap
 space` on 2026-07-19 at `-Xmx8g`. Its API does not respond and it serves none of
@@ -77,9 +76,9 @@ lose, and ~90% of what it was failing to allocate was iterator pools.
 
 3. Success looks like worker-12 reporting **14 classified** where it previously
    reported nothing. If it still OOMs, the ontologies genuinely need more than
-   8 GB even without the pools — recreate it with a larger `-Xmx` (see phase 4).
+   8 GB even without the pools; recreate it with a larger `-Xmx` (see phase 4).
 
-## Phase 2 — roll the remaining workers
+## Phase 2: roll the remaining workers
 
 **One at a time. Never in parallel.** On beta, restarting 15 workers at once drove
 the host to load average 119 and pushed a marginal JVM into OOM. Production has
@@ -103,19 +102,19 @@ python3 deploy/rollout_worker.py --host a-zhapacfp@10.254.146.61 --workers 2,4,6
 Expect wide variation in reload time. Measured on beta: 120 small ontologies came
 back in **15 s**, a 40-ontology worker in **292 s**, larger ones in **713 s** and
 **794 s**, and the NCBITaxon worker took **over an hour**. Each worker is offline
-for its whole reload and production has no redundancy — every ontology lives on
+for its whole reload and production has no redundancy; every ontology lives on
 exactly one worker.
 
-## Phase 3 — recover `worker-14`
+## Phase 3: recover `worker-14`
 
 The other 80 offline ontologies belong to `worker_14`, which has no container at
 all, though `/opt/aberowl2/ontologies/worker_14_config.json` still exists. Recreate
-it from that config using the same `docker run` shape as its siblings — copy the
+it from that config using the same `docker run` shape as its siblings; copy the
 flags from a working worker's `docker inspect` output (captured in your backup).
 
 Phases 1 and 3 together close all 94 offline ontologies for roughly zero extra RAM.
 
-## Phase 4 — right-size `-Xmx` (optional, second pass)
+## Phase 4: right-size `-Xmx` (optional, second pass)
 
 `docker restart` preserves the environment, so phases 1-3 apply the code fix but
 **not** new heap settings. Changing `-Xmx` needs `docker rm` + `docker run`.
@@ -130,14 +129,14 @@ docker exec <container> jcmd 7 GC.run
 docker exec <container> jcmd 7 GC.heap_info   # read post-GC "used"
 ```
 
-## Phase 5 — add the 397 missing ontologies
+## Phase 5: add the 397 missing ontologies
 
 Production has 462 of beta's 859. The missing 397 are **7.9 GB** of OWL files;
 prod has 62 GB free. Four files are half the bulk (ncbitaxon 1.85 GB, mesh 1.0 GB,
 bero 878 MB, loinc 705 MB) and 274 of the 397 are under 1 MB.
 
 Copy them from beta (`onto:/data/aberowl/ontologies/<id>/<id>.owl`) rather than
-re-downloading from source — beta's copies already went through
+re-downloading from source; beta's copies already went through
 `fix_ontology_files.py`, whereas a fresh intake reintroduces the parse and 404
 failures.
 
@@ -158,7 +157,7 @@ rsync -av --files-from=/tmp/missing_from_prod_2026-08-02.txt \
 ```
 
 Copy the list to `onto:/tmp/` first. Note the trailing slashes, and that plain
-`rsync` without `--delete` is safe here — it only adds directories. Split the list
+`rsync` without `--delete` is safe here; it only adds directories. Split the list
 across the two worker hosts according to where you intend the new workers to run.
 
 Then extend the worker configs (or add workers), register with the central server,

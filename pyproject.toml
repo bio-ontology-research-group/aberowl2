@@ -9,12 +9,17 @@ dependencies = [
     "aiohttp",
     "python-multipart",
     "redis",
-    "mcp",
+    "mcp>=1.28.1,<2.0",
     "pyyaml",
     "aiofiles",
+    "slowapi",
+    "rdflib",
 ]
 
 [project.optional-dependencies]
+evaluation = [
+    "httpx",
+]
 test = [
     "pytest",
     "pytest-asyncio",
@@ -22,7 +27,6 @@ test = [
     "requests",
     "httpx",
     "fakeredis",
-    "slowapi",
 ]
 
 [tool.pytest.ini_options]

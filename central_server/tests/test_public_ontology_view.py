@@ -53,7 +53,7 @@ _ENTRY = {
     "class_count": 50000,
     "property_count": 12,
     # --- internal fields that MUST NOT leak ---
-    "secret_key": "d34db33f-super-secret",
+    "secret_key": 'test-d34db33f-super-secret',
     "url": "http://10.254.146.227:8084/",
     "server_url": "http://10.254.146.227:8084/",
     "update_status": "ok",

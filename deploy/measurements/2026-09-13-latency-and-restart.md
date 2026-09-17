@@ -12,9 +12,8 @@ Recorded for the AberOWL 2 paper (deployment paragraph). Hostnames and paths omi
 | `/api/search_all` "apoptosis", all ontologies | 1,034 ms (p95 1,130) | 2,073 ms (p95 2,210) |
 
 The external client was a laptop outside the KAUST network; the public HTTPS path runs
-through a reverse proxy and an SSH tunnel before reaching the central host. The
-differences between the two columns are reported as observed, without attributing them
-to a single cause.
+through a reverse proxy and an SSH tunnel before reaching the central host. These measurements do not identify a single cause for the differences
+between the two columns.
 
 ## Worker restart
 

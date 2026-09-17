@@ -15,6 +15,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from urllib.parse import urlsplit
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 OBO_URL_TEMPLATE = "http://purl.obolibrary.org/obo/{id}.owl"
@@ -24,13 +25,13 @@ BIOPORTAL_URLS = {
     "SNOMEDCT": None,  # Too large / restricted, skip
     # download_format must be rdf, not csv — BioPortal's CSV export is not OWL and
     # fails to load on the worker ("Content is not allowed in prolog"). See #32.
-    "MESH": "https://data.bioontology.org/ontologies/MESH/download?apikey=8b5b7825-538d-40e0-9e9e-5ab9274a9aeb&download_format=rdf",
+    "MESH": 'https://data.bioontology.org/ontologies/MESH/download?download_format=rdf',
     "NCIT": "https://purl.obolibrary.org/obo/ncit.owl",
     "LOINC": None,  # Restricted
     "ICD10CM": None,  # Restricted
     "RXNORM": None,  # Restricted
-    "RADLEX": "http://data.bioontology.org/ontologies/RADLEX/download?apikey=8b5b7825-538d-40e0-9e9e-5ab9274a9aeb",
-    "FMA": "http://data.bioontology.org/ontologies/FMA/download?apikey=8b5b7825-538d-40e0-9e9e-5ab9274a9aeb",
+    "RADLEX": 'https://data.bioontology.org/ontologies/RADLEX/download',
+    "FMA": 'https://data.bioontology.org/ontologies/FMA/download',
     "EFO": "https://github.com/EBISPOT/efo/releases/latest/download/efo.owl",
     "EDAM": "https://edamontology.org/EDAM.owl",
     "SIO": "https://raw.githubusercontent.com/MaastrichtU-IDS/semanticscience/master/ontology/sio.owl",
@@ -73,19 +74,23 @@ def download_bioportal(ont_id: str, url: str, dest_dir: Path) -> dict:
     if owl_path.exists() and owl_path.stat().st_size > 1000:
         return {"id": ont_id, "status": "exists", "size": owl_path.stat().st_size}
 
+    api_key = os.environ.get("BIOPORTAL_API_KEY", "") if urlsplit(url).hostname == "data.bioontology.org" else ""
+    if urlsplit(url).hostname == "data.bioontology.org" and not api_key:
+        return {"id": ont_id, "status": "failed", "error": "BIOPORTAL_API_KEY is not configured"}
+    auth = ["-H", f"Authorization: apikey token={api_key}"] if api_key else []
     try:
         result = subprocess.run(
-            ["curl", "-fSL", "--max-time", "600", "-o", str(owl_path), url],
+            ["curl", "-fSL", "--max-time", "600", "-o", str(owl_path), *auth, url],
             capture_output=True, text=True, timeout=620,
         )
         if result.returncode == 0 and owl_path.exists() and owl_path.stat().st_size > 100:
             return {"id": ont_id, "status": "ok", "size": owl_path.stat().st_size}
         else:
             owl_path.unlink(missing_ok=True)
-            return {"id": ont_id, "status": "failed", "error": result.stderr[:200]}
+            return {"id": ont_id, "status": "failed", "error": (result.stderr.replace(api_key, "[redacted]") if api_key else result.stderr)[:200]}
     except Exception as e:
         owl_path.unlink(missing_ok=True)
-        return {"id": ont_id, "status": "error", "error": str(e)[:200]}
+        return {"id": ont_id, "status": "error", "error": type(e).__name__}
 
 
 def main():

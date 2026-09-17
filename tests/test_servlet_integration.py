@@ -298,7 +298,7 @@ def test_update_ontology_unauthorized(pizza_stack):
     r = _post(f"{pizza_stack}/updateOntology.groovy", json_body={
         "owlPath": "/data/pizza_active.owl",
         "ontologyId": "pizza",
-        "secretKey": "wrong_key",
+        "secretKey": 'test-wrong_key',
     })
     assert r.status_code == 401
 
@@ -314,7 +314,7 @@ def test_add_ontology_unauthorized(pizza_stack):
     r = _post(f"{pizza_stack}/addOntology.groovy", json_body={
         "ontologyId": "test_add",
         "owlPath": "/data/pizza_active.owl",
-        "secretKey": "wrong_key",
+        "secretKey": 'test-wrong_key',
     })
     assert r.status_code == 401
 
@@ -325,7 +325,7 @@ def test_remove_ontology_unauthorized(pizza_stack):
     """removeOntology rejects bad secret key."""
     r = _post(f"{pizza_stack}/removeOntology.groovy", json_body={
         "ontologyId": "pizza",
-        "secretKey": "wrong_key",
+        "secretKey": 'test-wrong_key',
     })
     assert r.status_code == 401
 

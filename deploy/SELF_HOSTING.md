@@ -4,19 +4,19 @@ Goal: let anyone run their **own** AberOWL 2 over their **own** set of ontologie
 with a single command, on one host. This is a second delivery mode alongside the
 public hosted service (aber-owl.net):
 
-- **Hosted repository** — the curated public corpus at aber-owl.net.
-- **Self-hosted** — you deploy a private instance over your own K ontologies, so
+- **Hosted repository**: the curated public corpus at aber-owl.net.
+- **Self-hosted**: you deploy a private instance over your own K ontologies, so
   you do not depend on the public service and **privacy-sensitive ontologies never
   leave your infrastructure** (your LLM agent reasons over them locally via the
   built-in MCP server, with no external calls).
 
-> Status: **implemented**. Verified on a clean host (2026-07-20); see the checklist below
-> for what is done and what remains optional.
+> Status: **implemented**. Verified on a clean host (2026-07-20); see “Implementation checklist”
+> for completed and optional work.
 
 ## Why single-host is simple
 The building blocks already exist:
-- `central_server/docker-compose.yml` — central-server + redis + `elasticsearch:7.17.10` on `aberowl-net`.
-- `deploy/docker-compose.worker.yml` — a worker (Groovy/OWLAPI + ELK) that reaches ES by
+- `central_server/docker-compose.yml`: central-server + redis + `elasticsearch:7.17.10` on `aberowl-net`.
+- `deploy/docker-compose.worker.yml`: a worker (Groovy/OWLAPI + ELK) that reaches ES by
   **container name** (`CENTRAL_ES_URL=http://elasticsearch:9200`) on `aberowl-net`.
 
 When central, ES and the worker are co-located on one host they share `aberowl-net`,
@@ -26,16 +26,15 @@ feasible with little new code.
 
 ## How you feed in ontologies
 
-Point `ONTOLOGIES_DIR` at **one** folder. You supply ontologies to it in two ways that
-work **together in the same folder** — you don't pick one:
+Point `ONTOLOGIES_DIR` at one folder. The folder accepts both local files and URL lists:
 
-- **Files** — drop `.owl` files in directly. Each file's id comes from its name
+- **Files**: drop `.owl` files in directly. Each file's id comes from its name
   (`myont.owl` → `myont`), reasoner defaults to ELK.
-- **URLs** — add a `sources.txt` listing ontologies to download on startup, one
+- **URLs**: add a `sources.txt` listing ontologies to download on startup, one
   `[id] URL [reasoner]` per line (e.g. OBO Foundry PURLs; `#` comments allowed).
 
 Both are read. For example, a folder holding `pizza.owl` **and** a `sources.txt` with
-`bfo http://purl.obolibrary.org/obo/bfo.owl` loads **both** — pizza from the file and
+`bfo http://purl.obolibrary.org/obo/bfo.owl` loads both: pizza from the file and
 bfo from the URL:
 
 ```
@@ -44,7 +43,7 @@ my-ontologies/
   sources.txt        # lists URLs to fetch (one is: bfo  http://purl.obolibrary.org/obo/bfo.owl)
 ```
 
-**Advanced, instead of the above:** drop an `ontologies.config.json` — a list of
+For per-ontology control, add an `ontologies.config.json` with a list of
 `{"id", "path" | "url", "reasoner"}` for per-ontology control. When present it is
 **authoritative and replaces** the files/`sources.txt` scan.
 
@@ -64,13 +63,13 @@ ONTOLOGIES_DIR=$PWD/my-ontologies docker compose -f deploy/docker-compose.selfho
 
 ## How it fits together
 Six services on an internal `aberowl-net` (container-name DNS, no cross-host IP wiring):
-`redis`, `elasticsearch`, `central-server`, one `worker`, and two one-shots —
+`redis`, `elasticsearch`, `central-server`, one `worker`, and two one-shot services:
 `ontology-prepare` (download + write `ontologies.json`, before the worker) and
 `ontology-register` (register each loaded ontology with central + trigger its index,
 after the worker classifies).
 
 ## Implementation checklist
-- [x] `deploy/docker-compose.selfhost.yml` — redis + ES + central + one worker + two init one-shots
+- [x] `deploy/docker-compose.selfhost.yml`: redis + ES + central + one worker + two init one-shots
       on `aberowl-net`; worker `ONTOLOGY_PATH=/data/ontologies.json`, ontologies bind-mounted.
 - [x] `ONTOLOGIES_HOST_PATH=/data` on central so the reindex `owlPath` matches the worker mount.
 - [x] Registration + indexing on `up` via `ontology-register` (container-name URLs, existing
@@ -87,7 +86,7 @@ after the worker classifies).
       dev defaults; fine for a private single host, but should self-generate).
 - [x] Bake the SPA into the central image (multi-stage `central_server/Dockerfile`: a Node stage runs
       `npm ci && npm run build`, the final stage `COPY --from` the built `dist/`), so the web UI is
-      served with no local `npm build`. Prod is unaffected — it bind-mounts its own `dist/` over it.
+      served with no local `npm build`. Prod is unaffected; it bind-mounts its own `dist/` over it.
       Verified: `http://localhost:8000` serves the real SPA (title, `#root`, `/assets/*.js` -> 200).
 - [ ] Optional nginx + friendly `/mcp` route. Not implemented; there is no
       `docker-compose.selfhost.override.yml` in the repository.
@@ -96,7 +95,7 @@ after the worker classifies).
 
 ## Settings
 
-Every variable has a working default, so `up` needs none of them. Override by
+Every variable has a working default, so `up` does not require overrides. Override by
 exporting the variable or putting it in a `.env` file next to the compose file.
 
 | Variable | Default | What it does |
@@ -108,7 +107,7 @@ exporting the variable or putting it in a `.env` file next to the compose file.
 | `ADMIN_PASSWORD` | `changeme` | Admin password. Change it on any host others can reach. |
 | `ABEROWL_SECRET_KEY` | `selfhost-dev-key` | Shared secret the central server uses to call the worker's mutating endpoints. Change it alongside the password. |
 
-The worker sets no JVM heap limit, so it takes the container default. A large
+The worker does not set a JVM heap limit, so it takes the container default. A large
 ontology set may need one; give the worker a `mem_limit` and set `JAVA_OPTS`
 if you hit an out-of-memory kill.
 

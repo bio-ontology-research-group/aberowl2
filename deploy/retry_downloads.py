@@ -26,19 +26,21 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 OBO_URL = "http://purl.obolibrary.org/obo/{id}.owl"
-BP_URL = "https://data.bioontology.org/ontologies/{ID}/download?apikey={key}"
-BP_API_KEY = "24e0413e-54e0-11e0-9d7b-005056aa3316"
+BP_URL = "https://data.bioontology.org/ontologies/{ID}/download"
+BP_API_KEY = os.environ.get("BIOPORTAL_API_KEY", "")
 
 
-def _curl(url: str, dest: Path, max_time: int) -> subprocess.CompletedProcess:
+def _curl(url: str, dest: Path, max_time: int, api_key: str = "") -> subprocess.CompletedProcess:
+    headers = ["-H", f"Authorization: apikey token={api_key}"] if api_key else []
     return subprocess.run(
-        ["curl", "-fSL", "--max-time", str(max_time), "-o", str(dest), url],
+        ["curl", "-fSL", "--max-time", str(max_time), *headers, "-o", str(dest), url],
         capture_output=True, text=True, timeout=max_time + 30,
     )
 
@@ -61,18 +63,21 @@ def retry_one(ont_id: str, dest_dir: Path, min_size: int, max_time: int) -> dict
         r = None  # fall through to BioPortal
 
     # 2) BioPortal direct download (acronym is the uppercased id)
+    if not BP_API_KEY:
+        owl_path.unlink(missing_ok=True)
+        return {"id": ont_id, "status": "failed", "error": "OBO download failed; BIOPORTAL_API_KEY is not configured"}
     owl_path.unlink(missing_ok=True)
     try:
-        bp = _curl(BP_URL.format(ID=ont_id.upper(), key=BP_API_KEY), owl_path, max_time)
+        bp = _curl(BP_URL.format(ID=ont_id.upper()), owl_path, max_time, api_key=BP_API_KEY)
         if bp.returncode == 0 and owl_path.exists() and owl_path.stat().st_size > min_size:
             return {"id": ont_id, "status": "ok", "source": "bioportal", "size": owl_path.stat().st_size}
         size = owl_path.stat().st_size if owl_path.exists() else 0
         owl_path.unlink(missing_ok=True)
         return {"id": ont_id, "status": "failed", "size_seen": size,
-                "error": (bp.stderr or "").strip()[:160] or "both OBO and BioPortal failed"}
+                "error": (bp.stderr or "").replace(BP_API_KEY, "[redacted]").strip()[:160] or "both OBO and BioPortal failed"}
     except Exception as e:
         owl_path.unlink(missing_ok=True)
-        return {"id": ont_id, "status": "error", "error": str(e)[:160]}
+        return {"id": ont_id, "status": "error", "error": type(e).__name__}
 
 
 def main() -> int:

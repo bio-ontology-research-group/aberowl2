@@ -27,6 +27,7 @@ Usage:
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -34,15 +35,17 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from urllib.request import urlopen, Request
 
-API_KEY = "24e0413e-54e0-11e0-9d7b-005056aa3316"
+API_KEY = os.environ.get("BIOPORTAL_API_KEY", "")
 API_BASE = "https://data.bioontology.org"
 OBO_REGISTRY = "http://purl.obolibrary.org/meta/ontologies.jsonld"
 
 
 def fetch_catalog() -> list[dict]:
+    if not API_KEY:
+        raise RuntimeError("Set BIOPORTAL_API_KEY before fetching BioPortal ontologies")
     req = Request(
-        f"{API_BASE}/ontologies?apikey={API_KEY}",
-        headers={"Accept": "application/json"},
+        f"{API_BASE}/ontologies",
+        headers={"Accept": "application/json", "Authorization": f"apikey token={API_KEY}"},
     )
     with urlopen(req, timeout=60) as resp:
         data = json.loads(resp.read())
@@ -65,7 +68,9 @@ def download_one(acronym: str, dest_dir: Path, min_size: int) -> dict:
     if owl_path.exists() and owl_path.stat().st_size > min_size:
         return {"id": ont_id, "acronym": acronym, "status": "exists", "size": owl_path.stat().st_size}
 
-    url = f"{API_BASE}/ontologies/{acronym}/download?apikey={API_KEY}"
+    if not API_KEY:
+        return {"id": ont_id, "acronym": acronym, "status": "failed", "error": "BIOPORTAL_API_KEY is not configured"}
+    url = f"{API_BASE}/ontologies/{acronym}/download"
     try:
         # --compressed: request and transparently decompress Content-Encoding:
         # gzip responses (BioPortal returns several large ontologies this way;
@@ -88,13 +93,13 @@ def download_one(acronym: str, dest_dir: Path, min_size: int) -> dict:
             # Remove tiny / empty files (HTML error pages etc.)
             if owl_path.exists() and owl_path.stat().st_size <= min_size:
                 owl_path.unlink(missing_ok=True)
-            err = (result.stderr or result.stdout or "")[:300].strip()
+            err = (result.stderr or result.stdout or "").replace(API_KEY, "[redacted]")[:300].strip()
             return {"id": ont_id, "acronym": acronym, "status": "failed", "error": err}
     except subprocess.TimeoutExpired:
         owl_path.unlink(missing_ok=True)
         return {"id": ont_id, "acronym": acronym, "status": "timeout"}
     except Exception as e:
-        return {"id": ont_id, "acronym": acronym, "status": "error", "error": str(e)[:200]}
+        return {"id": ont_id, "acronym": acronym, "status": "error", "error": type(e).__name__}
 
 
 def main():
@@ -127,14 +132,14 @@ def main():
     try:
         catalog = fetch_catalog()
     except Exception as e:
-        log(f"FATAL: catalog fetch failed: {e}")
+        log(f"FATAL: catalog fetch failed: {type(e).__name__}")
         sys.exit(1)
 
     log(f"[{time.strftime('%H:%M:%S')}] Fetching OBO Foundry registry (for skip-list)...")
     try:
         obo_ids = fetch_obo_foundry_ids()
     except Exception as e:
-        log(f"FATAL: OBO Foundry registry fetch failed: {e}")
+        log(f"FATAL: OBO Foundry registry fetch failed: {type(e).__name__}")
         sys.exit(1)
     log(f"[{time.strftime('%H:%M:%S')}] OBO Foundry has {len(obo_ids)} registered ontologies — these will be skipped")
 

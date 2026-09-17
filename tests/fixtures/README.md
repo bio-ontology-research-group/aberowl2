@@ -13,21 +13,19 @@ for the AberOWL 1 compatibility work (`GET /api/ontology/?format=json`).
 https://web.archive.org/web/20221120122151id_/http://aber-owl.net/api/ontology/?drf_fromat=json&format=json
 ```
 
-The full archived response holds 1,374 entries (1.2 MB). This file is a subset,
-sorted by acronym and otherwise **unmodified** — no field was added, renamed or
-invented. The 20 entries were picked by hand, not sliced off the top: the
-archived registry carries a lot of link-spam submissions (the reason
-Bioregistry's getter keeps a `SKIP` set), and none of that belongs in a
-committed fixture. What is here:
+The full archived response holds 1,374 entries (1.2 MB). This file contains 20 manually selected entries,
+sorted by acronym, with their original fields. The selection excludes link-spam
+submissions from the archived registry, which also motivate the `SKIP` set in
+Bioregistry's getter. The sample contains:
 
-- the eight ontologies the tests name — `CHEBI`, `DOID`, `FMA`, `GO`, `HP`,
+- the eight ontologies the tests name: `CHEBI`, `DOID`, `FMA`, `GO`, `HP`,
   `MONDO`, `PATO`, `UBERON`;
-- eight further real ontologies with a `submission` object — `AEO`, `BTO`,
+- eight further real ontologies with a `submission` object: `AEO`, `BTO`,
   `CL`, `ENVO`, `NCIT`, `OBI`, `PO`, `SO`;
-- four whose `submission` is `null` — `CSTD`, `FRAPO`, `IBO`, `TUNIGO-SLIM` —
+- four whose `submission` is `null`: `CSTD`, `FRAPO`, `IBO`, `TUNIGO-SLIM`,
   so the contract test sees both shapes.
 
-To regenerate or extend it, re-fetch the archive URL above and pick by acronym.
+To regenerate or extend it, re-fetch the archive URL in “Provenance” and pick by acronym.
 
 **What it pins down.** The shape Bioregistry's getter reads
 (`bioregistry/external/aberowl/__init__.py`): `acronym`, `name`, `status`, and

@@ -1,21 +1,21 @@
-# AberOWL Central Server
+# AberOWL central server
 
 The AberOWL Central Server is a registry and query aggregator for distributed AberOWL ontology servers. It provides a unified interface to query multiple ontology servers simultaneously and implements the FAIR MOD-API specification.
 
 ## Features
 
-- **Server Registry**: Ontology servers can register themselves with the central server
-- **Unified Querying**: Run DL queries and text searches across all registered ontologies
+- **Server registry**: Ontology servers can register themselves with the central server
+- **Unified queries**: Run DL queries and text searches across all registered ontologies
 - **FAIR API**: Implements the MOD-API specification for semantic artefact catalogues
-- **MCP Support**: Exposes functionality to LLM agents via Model Context Protocol
+- **MCP support**: Exposes functionality to LLM agents via Model Context Protocol
 - **Auto-discovery**: Automatically fetches and updates metadata from registered servers
-- **Web Interface**: User-friendly interface for browsing and querying ontologies
+- **Web interface**: Browse and query ontologies
 
-## Quick Start
+## Quick start
 
-### Using Docker Compose
+### Use Docker Compose
 
-The easiest way to run the central server is using Docker Compose:
+Run the central server with Docker Compose:
 
 ```bash
 cd central_server
@@ -27,10 +27,10 @@ This will start:
 - Redis for data storage
 - Elasticsearch for search functionality
 
-### Manual Setup
+### Manual setup
 
 If running manually, you'll need:
-- Python 3.8+
+- Python 3.10+
 - Redis server
 - Elasticsearch (optional, for enhanced search)
 
@@ -45,12 +45,17 @@ cd app
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-## Model Context Protocol (MCP) Support
+BioPortal intake requires `BIOPORTAL_API_KEY` in the server process environment.
+For containers, pass it explicitly through your local Compose environment
+configuration; exporting it on the host alone does not pass it into a container.
+No fallback key is bundled. See [credential handling](../release/SECURITY.md).
+
+## Model Context Protocol (MCP) support
 
 The central server ships with one MCP server that lets LLM agents (Claude Desktop, Cursor, custom agents, etc.) query AberOWL programmatically. It uses the official `mcp` Python SDK and supports two transports:
 
-- **stdio** — the client spawns the server as a subprocess (standard for Claude Desktop).
-- **streamable HTTP** — the server runs as a long-lived HTTP service at `/mcp` (standard for remote/shared access).
+- **stdio**: the client spawns the server as a subprocess (standard for Claude Desktop).
+- **streamable HTTP**: the server runs as a long-lived HTTP service at `/mcp` (standard for remote/shared access).
 
 ### The server
 
@@ -60,22 +65,23 @@ The central server ships with one MCP server that lets LLM agents (Claude Deskto
 
 ### Available tools
 
-**Ontology server (7 tools)**
-- `list_ontologies` — all registered ontologies with status and metadata
-- `search_classes` — search classes by label/synonym/OBO ID (all ontologies or one)
-- `run_dl_query` — Description Logic query in Manchester OWL Syntax. `subclass`/`superclass` return all sub/superclasses at any depth (not direct ones); `subeq`/`supeq` add the equivalent classes; `equivalent` returns those alone. Results are paged with `offset`/`limit` (default 100 per call) and the header states the full count, which is a lower bound once the 100,000-class cap below is reached
-- `get_class_info` — full annotations/axioms for a class
-- `get_ontology_info` — metadata for one ontology, plus a closing "Reasoning contract" line naming the reasoner that actually answers DL queries for it, its classification status, and its unloaded `owl:imports`
-- `browse_hierarchy` — direct subclasses or superclasses of a class
-- `rewrite_sparql` — rewrite a SPARQL query containing `VALUES ?x { OWL subeq GO { ... } }` or `FILTER OWL(?x, subeq, GO, "...")` frames to one with concrete IRIs spliced in. AberOWL only rewrites; the caller runs the result against any SPARQL endpoint (Ontobee, UniProt, …).
-- `list_sparql_examples` — curated SPARQL+OWL example queries to use as templates.
-- `query_sparql` — same rewrite, but also forwards the result to an external SPARQL endpoint (Ontobee by default; pass `endpoint=` for UniProt / Wikidata / DBpedia / etc.) and returns the rows. AberOWL still doesn't host a SPARQL store — this just chains rewrite → POST → format.
+**Ontology server (10 tools)**
+- `list_ontologies`: all registered ontologies with status and metadata
+- `search_classes`: search classes by label/synonym/OBO ID (all ontologies or one)
+- `find_iri`: resolve a term, label, synonym, CURIE or IRI to exact canonical matches; ambiguous terms can return multiple matches.
+- `run_dl_query`: Description Logic query in Manchester OWL Syntax. `subclass`/`superclass` return all sub/superclasses at any depth (not direct ones); `subeq`/`supeq` add the equivalent classes; `equivalent` returns those alone. Results are paged with `offset`/`limit` (default 100 per call) and the header states the full count, which is a lower bound once the 100,000-class cap described in “Reasoning contract” is reached.
+- `get_class_info`: full annotations/axioms for a class
+- `get_ontology_info`: metadata for one ontology, plus a closing "Reasoning contract" line naming the reasoner that actually answers DL queries for it, its classification status, and its unloaded `owl:imports`
+- `browse_hierarchy`: direct subclasses or superclasses of a class
+- `rewrite_sparql`: rewrite a SPARQL query containing `VALUES ?x { OWL subeq GO { ... } }` or `FILTER OWL(?x, subeq, GO, "...")` frames to one with concrete IRIs spliced in. AberOWL only rewrites; the caller runs the result against any SPARQL endpoint (Ontobee, UniProt, …).
+- `list_sparql_examples`: curated SPARQL+OWL example queries to use as templates.
+- `query_sparql`: same rewrite, but also forwards the result to an external SPARQL endpoint (Ontobee by default; pass `endpoint=` for UniProt / Wikidata / DBpedia / etc.) and returns the rows. AberOWL still doesn't host a SPARQL store: this just chains rewrite → POST → format.
 
 ### Reasoning contract
 
 What a DL answer covers, for both `/api/dlquery_all` and the `run_dl_query` tool:
 
-- **OWL 2 EL fragment.** Workers classify with ELK, so an answer holds only what the EL fragment of the ontology entails. Axioms that use constructs outside EL contribute nothing, whatever the query asks for.
+- **OWL 2 EL fragment.** Workers classify with ELK, so an answer holds only what the EL fragment of the ontology entails. Axioms that use constructs outside EL do not contribute to the answer.
 - **Imports are not loaded.** The worker maps every `owl:imports` IRI to a path that does not exist and the SILENT missing-import strategy drops it, so each ontology is classified without its imports closure, even when the imported ontology sits in the local corpus. `/api/getOntology` reports this as `imports_loaded: false` with `imports_declared: <n>`.
 - **Structural fallback.** When 500 or more classes are unsatisfiable, the worker disposes the ELK reasoner and answers from the OWLAPI structural reasoner, which returns asserted relationships only. That ontology then has `reasoner_status: incoherent`, `reasoner_active: structural` and `reasoner_configured: elk`.
 - **100,000-class cap.** A single query answer is truncated at `MAX_REASONER_RESULTS` (100,000) inside the worker. The truncation itself records the fact, and the worker's `runQuery.groovy` reports it as `capped: true` (an answer that happens to hold exactly the limit is not flagged). `/api/dlquery_all` carries it through: the aggregated response has `capped: true/false` next to `result`, plus `capped_ontologies: ["<id>", …]` naming the workers that cut their answer. When `capped` is true, `len(result)` is a lower bound rather than a count, and the `run_dl_query` tool says "Found at least N results".
@@ -83,13 +89,13 @@ What a DL answer covers, for both `/api/dlquery_all` and the `run_dl_query` tool
 
 ### Deploying with Docker (streamable HTTP)
 
-When the central stack is started with `docker compose up`, the MCP server is launched automatically as a subprocess of the central-server container and exposed on port 8766:
+When you start the central stack with `docker compose up`, the central-server container automatically launches the MCP server as a subprocess on port 8766:
 
 ```
 http://localhost:8766/mcp   # ontology server
 ```
 
-**Prerequisite — shared Docker network**
+**Prerequisite: shared Docker network**
 
 The central stack attaches to an external Docker network called `aberowl-net` so worker containers can reach the central services by name. Create it once:
 
@@ -131,8 +137,8 @@ the deploy procedure for the hosted instances.
 
 For public deployments you must expose (or proxy) two ports:
 
-- `8000` — central FastAPI app (registry, search, admin UI, SPARQL rewriter)
-- `8766` — ontology MCP server (if you want remote MCP clients to reach it)
+- `8000`: central FastAPI app (registry, search, admin UI, SPARQL rewriter)
+- `8766`: ontology MCP server (if you want remote MCP clients to reach it)
 
 If only local/LAN MCP access is needed, bind `8766` to a private interface only.
 
@@ -180,15 +186,15 @@ Claude Desktop configuration (`~/Library/Application Support/Claude/claude_deskt
 
 The ontology MCP server is exposed over streamable HTTP and can be registered with the Claude Code CLI using `claude mcp add`.
 
-**Option A — public deployment (recommended)**
+**Option A: public deployment (recommended)**
 
-The production server is live at `https://beta.aber-owl.net/mcp/ontology/mcp`. To use it from any machine with Claude Code installed:
+To connect to the beta deployment from a machine with Claude Code installed:
 
 ```bash
 claude mcp add aberowl-ontology https://beta.aber-owl.net/mcp/ontology/mcp --transport http
 ```
 
-**Option B — local stack**
+**Option B: local stack**
 
 With the central stack running (`docker compose up -d` in `central_server/`) the server is reachable at `http://localhost:8766/mcp`:
 
@@ -206,7 +212,7 @@ By default `claude mcp add` writes to project scope (`.mcp.json` in the current 
 claude mcp list        # shows the server, URL, and transport
 ```
 
-Start (or restart) a Claude Code session and type `/mcp` — the `aberowl-ontology` entry should show `connected` with `9 tools`.
+Start (or restart) a Claude Code session and type `/mcp`; the `aberowl-ontology` entry should show `connected` with `10 tools`.
 
 **Remove**
 
@@ -216,17 +222,17 @@ claude mcp remove aberowl-ontology
 
 #### Example prompts to try
 
-DL queries accept either an IRI (`<http://purl.obolibrary.org/obo/GO_0008150>`) or a label in Manchester syntax (`'biological process'`, `'part of' some 'cell'`). Note that `'cell'` returns 0 in current GO releases because GO_0005623 was obsoleted — use `'biological process'` (or any non-deprecated label) for smoke tests.
+DL queries accept either an IRI (`<http://purl.obolibrary.org/obo/GO_0008150>`) or a label in Manchester syntax (`'biological process'`, `'part of' some 'cell'`). Note that `'cell'` returns 0 in current GO releases because GO_0005623 was obsoleted; use `'biological process'` (or any non-deprecated label) for smoke tests.
 
-- *"List the ontologies available via the aberowl tools."* — `list_ontologies`
-- *"Search GO for apoptosis using aberowl."* — `search_classes`
-- *"Using aberowl, show me the class info for `<http://purl.obolibrary.org/obo/GO_0008150>`."* — `get_class_info`
-- *"Using aberowl, get the metadata for the `go` ontology."* — `get_ontology_info`
-- *"Using aberowl, give me direct subclasses of `<http://purl.obolibrary.org/obo/GO_0008150>` in GO."* — `browse_hierarchy`
-- *"Using aberowl, run a DL query for subclasses of 'biological process' in GO."* — `run_dl_query` (label form)
-- *"Using aberowl, show me example SPARQL queries with OWL DL frames."* — `list_sparql_examples`
-- *"Using aberowl, rewrite this SPARQL: `SELECT ?c WHERE { VALUES ?c { OWL subeq go-plus { 'cell death' } } }`"* — `rewrite_sparql`
-- *"Using aberowl, run this SPARQL against Ontobee: `SELECT ?c ?l WHERE { VALUES ?c { OWL subeq go-plus { 'cell death' } } ?c <http://www.w3.org/2000/01/rdf-schema#label> ?l . } LIMIT 10`"* — `query_sparql`
+- *"List the ontologies available via the aberowl tools."*: `list_ontologies`
+- *"Search GO for apoptosis using aberowl."*: `search_classes`
+- *"Using aberowl, show me the class info for `<http://purl.obolibrary.org/obo/GO_0008150>`."*: `get_class_info`
+- *"Using aberowl, get the metadata for the `go` ontology."*: `get_ontology_info`
+- *"Using aberowl, give me direct subclasses of `<http://purl.obolibrary.org/obo/GO_0008150>` in GO."*: `browse_hierarchy`
+- *"Using aberowl, run a DL query for subclasses of 'biological process' in GO."*: `run_dl_query` (label form)
+- *"Using aberowl, show me example SPARQL queries with OWL DL frames."*: `list_sparql_examples`
+- *"Using aberowl, rewrite this SPARQL: `SELECT ?c WHERE { VALUES ?c { OWL subeq go-plus { 'cell death' } } }`"*: `rewrite_sparql`
+- *"Using aberowl, run this SPARQL against Ontobee: `SELECT ?c ?l WHERE { VALUES ?c { OWL subeq go-plus { 'cell death' } } ?c <http://www.w3.org/2000/01/rdf-schema#label> ?l . } LIMIT 10`"*: `query_sparql`
 
 If Claude Code answers from general knowledge instead of calling a tool, add *"use the aberowl MCP tool"* to the prompt.
 
@@ -238,7 +244,7 @@ The repo ships three helpers (at the repo root / `agents/`) that together spin u
 
 1. Central stack running: `cd central_server && docker compose up -d`.
 2. Two OWL files present at `./data/pizza.owl` and `./data/go.owl`. Pizza is a small tutorial ontology (~100 classes); GO is any recent `go.owl` release.
-3. A `data/ontologies.json` file telling the worker which ontologies to load (this file is *not* shipped — create it):
+3. A `data/ontologies.json` file telling the worker which ontologies to load (this file is *not* shipped: create it):
 
    ```json
    [
@@ -249,7 +255,7 @@ The repo ships three helpers (at the repo root / `agents/`) that together spin u
 
 4. The `aberowl-net` Docker network exists (created automatically by the central stack, or run `docker network create aberowl-net`).
 
-**Step 1 — start a local multi-ontology worker**
+**Step 1: start a local multi-ontology worker**
 
 ```bash
 ./start_local_test_worker.sh
@@ -261,7 +267,7 @@ This builds and runs a single worker container (compose project `aberowl_local_m
 ./start_local_test_worker.sh --stop
 ```
 
-**Step 2 — index the ontologies into central Elasticsearch**
+**Step 2: index the ontologies into central Elasticsearch**
 
 ```bash
 ./reindex_local_test_worker.sh
@@ -269,7 +275,7 @@ This builds and runs a single worker container (compose project `aberowl_local_m
 
 This cleans any stale `registered_servers` entries, triggers `IndexElastic.groovy` on the worker for each ontology, and polls until each task finishes. Expect pizza in ~10 s and GO in ~10 min.
 
-**Step 3 — run the MCP test client**
+**Step 3: run the MCP test client**
 
 ```bash
 python agents/mcp_test_client.py
@@ -287,7 +293,7 @@ python agents/mcp_test_client.py \
 **Troubleshooting (read this first if the local stack "doesn't work")**
 
 The single most common failure is **broken docker networking on the host**, not a
-bug in the app. Symptoms — any of:
+bug in the app. Symptoms include:
 
 - the central is "Up" but `curl http://localhost:8000/api/servers` hangs / returns nothing;
 - the worker image build fails with `No matching distribution found for fastapi`;
@@ -295,7 +301,7 @@ bug in the app. Symptoms — any of:
 - `redis ... No route to host` on central startup.
 
 These all mean docker's iptables/NAT rules are corrupted (host↔container and
-container→internet are broken). **Fix: restart the docker daemon** — containers
+container→internet are broken). **Fix: restart the docker daemon**; containers
 come back on their own (`restart: unless-stopped`):
 
 ```bash
@@ -316,7 +322,7 @@ docker exec aberowl-central-server python -c \
 
 Other gotchas:
 
-- **Central hangs and logs `fetch metadata for dummy_bench_… / *.invalid`** — stale
+- **Central hangs and logs `fetch metadata for dummy_bench_… / *.invalid`**: stale
   registry entries (e.g. from a benchmark run) are in Redis, and the periodic refresh
   ties up the event loop trying to reach those dead hosts. Clear them and restart:
   ```bash
@@ -324,7 +330,7 @@ Other gotchas:
   docker exec aberowl-central-server sh -c 'echo "[]" > /code/state/servers.json'
   docker restart aberowl-central-server
   ```
-- **The worker build takes a long time** — the first `start_local_test_worker.sh`
+- **The worker build takes a long time**: the first `start_local_test_worker.sh`
   build resolves the OWLAPI/ELK/Jetty/RDF4J jars via Grapes (hundreds of MB); this
   can take 10–30 min on a cold cache, then it's reused. `go.owl` also takes a few
   minutes to classify. For a fast smoke test, use **pizza only** (it classifies in
@@ -348,9 +354,9 @@ async with streamablehttp_client("http://localhost:8766/mcp") as (read, write, _
         result = await session.call_tool("list_ontologies", {})
 ```
 
-## API Documentation
+## API documentation
 
-### Server Registration
+### Server registration
 
 Ontology servers register themselves with:
 
@@ -364,11 +370,11 @@ POST /register
 
 Returns a secret key for future updates.
 
-### Query Endpoints
+### Query endpoints
 
 - `GET /api/servers` - List all registered servers
 - `GET /api/search_all?query=term` - Search across all ontologies
-- `GET /api/dlquery_all?query=expression&type=subclass` - Run DL queries (see "Reasoning contract" above for what an answer covers)
+- `GET /api/dlquery_all?query=expression&type=subclass` - Run DL queries (see "Reasoning contract" for what an answer covers)
 
 ### FAIR API (MOD-API)
 
@@ -383,13 +389,13 @@ See the web interface documentation for full API details.
 
 ## Configuration
 
-### Environment Variables
+### Environment variables
 
 - `CENTRAL_SERVER_URL`: URL where the central server is accessible (for MCP server)
 - `REDIS_URL`: Redis connection URL (default: `redis://redis`)
 - `ELASTICSEARCH_URL`: Elasticsearch URL (default: `http://elasticsearch:9200`)
 
-### Configuration Files
+### Configuration files
 
 - `/code/state/servers.json`: cold-start seed for the registry, reloaded only
   when the Redis hash is absent. Redis is the source of truth. Volume-backed
@@ -398,13 +404,13 @@ See the web interface documentation for full API details.
 
 ## Development
 
-### Running Tests
+### Run tests
 
 ```bash
 pytest tests/
 ```
 
-### Resetting Data
+### Reset data
 
 To clear all registered servers and start fresh:
 

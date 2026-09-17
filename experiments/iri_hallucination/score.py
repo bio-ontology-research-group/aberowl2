@@ -59,6 +59,7 @@ def main():
     ap.add_argument("--runs", required=True)
     ap.add_argument("--gold", help="restrict to this gold set (e.g. the de-duplicated one)")
     ap.add_argument("--map", default=_MAP_F)
+    ap.add_argument("--out", help="write per-response classifications as JSONL")
     ap.add_argument("--by-difficulty", action="store_true")
     ap.add_argument("--by-stratum", action="store_true",
                     help="split real classes from constructed-nonexistent terms")
@@ -107,7 +108,7 @@ def main():
         if got is None:
             r["_lab"] = "abstained"
         elif gold is None:
-            r["_lab"] = "hallucinated"          # term names no class: any IRI is fabricated
+            r["_lab"] = "hallucinated"          # negative gold: any IRI is a false assignment
         elif norm(got) == norm(gold):
             r["_lab"] = "correct"
         else:
@@ -123,6 +124,11 @@ def main():
     if missing:
         print(f"WARNING: {missing} produced IRIs are absent from the map; "
               f"rebuild it with build_exists_map.py --runs {a.runs}")
+
+    if a.out:
+        with open(a.out, "w") as fh:
+            for row in rows:
+                fh.write(json.dumps(row) + "\n")
 
     keyf = (lambda r: (r["model"], r["regime"], r["condition"], r.get("difficulty", "-"))) \
         if a.by_difficulty else (lambda r: (r["model"], r["regime"], r["condition"]))

@@ -1,8 +1,8 @@
-# AberOWL2 Changelog
+# AberOWL2 changelog
 
-## 2026-04-03 / 2026-04-04: Complete System Overhaul
+## 2026-04-03 / 2026-04-04: Complete system overhaul
 
-### Phase 1: Multi-Ontology Container Architecture
+### Phase 1: Multi-ontology container architecture
 - **`aberowlapi/src/RequestManager.groovy`**: Complete rewrite. Single-ontology fields
   replaced with `ConcurrentHashMap<String, ...>` keyed by ontology ID. All methods
   accept `ontologyId` as first parameter. Backward-compatible single-ontology methods
@@ -15,7 +15,7 @@
   HermiT `@Grab` dependency added. Parallel classification via GParsPool.
 - **All servlets updated**: `runQuery`, `findRoot`, `getObjectProperties`,
   `retrieveRSuccessors`, `retrieveAllLabels`, `getStatistics`, `getSparqlExamples`,
-  `runSparqlQuery`, `reloadOntology`, `updateOntology`, `health` — all accept
+  `runSparqlQuery`, `reloadOntology`, `updateOntology`, `health`. All accept
   `ontologyId` parameter. Auto-resolve to default when only one ontology loaded.
 - **New servlets**: `addOntology.groovy`, `removeOntology.groovy`,
   `listLoadedOntologies.groovy` for dynamic runtime management.
@@ -25,28 +25,28 @@
 - **`server_manager.py`**: Fixed registration to use `ONTOLOGY_ID` env var instead of
   deriving from filename.
 
-### Phase 2: Bug Fixes
+### Phase 2: Bug fixes
 - Fixed double-URL bug (`/api/api/` → `/api/`) in `search_all` and `dlquery_all`.
 - Rewrote `search_all` to query central Elasticsearch directly with boosted `dis_max`
   query (oboid=10000, label=100, synonym=75), eliminating slow scatter-gather.
 - Fixed circular import in `updater.py`.
 - Fixed `reloadOntology.groovy` memory leak (now calls `disposeOntology` before reload).
 
-### Phase 3: Missing API Endpoints
-- `GET /api/queryNames` — boosted class search via central ES.
-- `GET /api/getClass` — class detail from ES with fallback to worker API.
-- `GET /api/listOntologies`, `GET /api/getOntology` — ontology metadata.
-- `GET /api/queryOntologies` — search ontology metadata.
-- `GET /api/getStats`, `GET /api/getStatuses` — statistics and status.
+### Phase 3: Missing API endpoints
+- `GET /api/queryNames`: boosted class search via central ES.
+- `GET /api/getClass`: class detail from ES with fallback to worker API.
+- `GET /api/listOntologies`, `GET /api/getOntology`: ontology metadata.
+- `GET /api/queryOntologies`: search ontology metadata.
+- `GET /api/getStats`, `GET /api/getStatuses`: statistics and status.
 
-### Phase 4: SPARQL Query Expansion
+### Phase 4: SPARQL query expansion
 - `runSparqlQuery.groovy`: Added `FILTER OWL(?var, type, "dl_query")` pattern alongside
   existing `VALUES` pattern.
 - `central_server/app/sparql_expander.py` (new): Expansion engine for central server.
-- `POST /api/sparql` — central SPARQL expansion endpoint. Parses SPARQL for OWL patterns,
+- `POST /api/sparql`: central SPARQL expansion endpoint. Parses SPARQL for OWL patterns,
   dispatches DL queries to correct worker, rewrites SPARQL, executes against Virtuoso.
 
-### Phase 5: MCP Servers
+### Phase 5: MCP servers
 - **`central_server/mcp_ontology_server.py`** (new): 6 tools (list_ontologies,
   search_classes, run_dl_query, get_class_info, get_ontology_info, browse_hierarchy).
   Rich Manchester OWL Syntax documentation in tool descriptions. Official `mcp` SDK,
@@ -63,10 +63,10 @@
 - Admin endpoints: `POST/GET/DELETE /admin/api_keys`.
 - Webhook update trigger: `POST /api/webhook/update/{ontology_id}`.
 
-### Phase 7: Update Strategy
-- `POST /api/webhook/update/{ontology_id}` — push-based update trigger with webhook
+### Phase 7: Update strategy
+- `POST /api/webhook/update/{ontology_id}`: push-based update trigger with webhook
   secret verification.
-- Daily pull pipeline preserved (already working).
+- Preserved the daily pull workflow.
 
 ### Phase 8: Frontend
 - **React 19 + TypeScript SPA** with Vite, TailwindCSS 4, CodeMirror.
@@ -90,12 +90,12 @@
 
 ---
 
-## Previous Changes
+## Previous changes
 
-### Centralised Infrastructure & Ontology Intake (prior work)
+### Centralised infrastructure and ontology intake (prior work)
 
-1. **Centralised Virtuoso and Elasticsearch** — one shared instance each.
-2. **Automated ontology intake** — daily discovery from OBOFoundry and BioPortal.
-3. **Hot-swap update pipeline** — ontologies updated without downtime.
-4. **Admin web interface** — Bootstrap dashboard for monitoring.
-5. **Per-ontology stack simplification** — Groovy API + nginx only per container.
+1. **Centralised Virtuoso and Elasticsearch**: one shared instance each.
+2. **Automated ontology intake**: daily discovery from OBOFoundry and BioPortal.
+3. **Hot-swap update workflow**: ontologies updated without downtime.
+4. **Admin web interface**: Bootstrap dashboard for monitoring.
+5. **Per-ontology stack simplification**: Groovy API + nginx only per container.

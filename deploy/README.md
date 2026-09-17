@@ -1,6 +1,6 @@
-# AberOWL2 Deployment Guide
+# AberOWL2 deployment guide
 
-## Live Instance
+## Live instance
 
 **URL:** https://beta.aber-owl.net
 
@@ -60,10 +60,10 @@ Gated behind `ENABLE_MCP=true` (the parent switch). The MCP port is
 `${MCP_BIND_HOST}` (default `127.0.0.1`); for prod we set
 `MCP_BIND_HOST=10.67.24.207` so the frontend nginx can reach it, but
 nothing else can. Public access is exclusively via the nginx route
-`/aberowl-beta/mcp/ontology/` — see
+`/aberowl-beta/mcp/ontology/`; see
 `deploy/nginx/frontend-aberowl-beta.conf`.
 
-## Server Access
+## Server access
 
 | Server | SSH | User | Notes |
 |--------|-----|------|-------|
@@ -72,7 +72,7 @@ nothing else can. Public access is exclusively via the nginx route
 | frontend1 | See borg-infrastructure AGENTS.md | a-hohndor | Same as frontend. |
 | borg-server | `ssh borg-server` | leechuck | Needs `sudo` for nginx. User `root` for direct access via `ssh root@borg-server`. |
 
-## File Layout on onto (/data/aberowl/)
+## File layout on onto (/data/aberowl/)
 
 ```
 /data/aberowl/
@@ -105,9 +105,9 @@ nothing else can. Public access is exclusively via the nginx route
     └── ...
 ```
 
-## How Deployment Works
+## How deployment works
 
-### Central Stack
+### Central stack
 
 The central stack is managed by Docker Compose. On a host that has no
 `deploy/.env` yet, create one before the first `up`:
@@ -126,7 +126,7 @@ EOF
 
 `MCP_BIND_HOST` binds the MCP port on the host; keep it on `127.0.0.1` or the
 host's internal IP, never `0.0.0.0`. On `onto` and the production hosts this
-file already exists — do not regenerate it, the secrets are in use.
+file already exists; do not regenerate it, the secrets are in use.
 
 Then, on an existing host:
 
@@ -152,15 +152,15 @@ at `app/static/dist/` is bind-mounted into the container.
 
 ### Which git ref a deployment runs
 
-A deploy host's checkout is **not inert**: `docker-compose.central.yml` builds with
+The deploy host's checkout determines the image source: `docker-compose.central.yml` builds with
 `context: ..`, and `central_server/Dockerfile` does `COPY ./central_server/app /code/app`,
 so **the checked-out commit determines the Python image that runs**. (The frontend is the
-exception — `app/static/dist/` is gitignored and shipped as a locally-built bundle, so its
+exception; `app/static/dist/` is gitignored and shipped as a locally-built bundle, so its
 `.tsx` *source* on the host can lag what's served.) Treat the deploy host's git ref as part
 of the running state:
 
 - **Sit on `main`, tracking `origin/main`.** Do not create a long-lived `prod`/`release`
-  branch — the deploy history *is* `main`'s, and a second pointer only drifts. Record what
+  branch; the deploy history *is* `main`'s, and a second pointer only drifts. Record what
   is live with **tags**, not a branch.
 - **Never deploy by a bare `git pull`.** Move forward explicitly and forward-only:
   ```bash
@@ -174,7 +174,7 @@ of the running state:
   git -C <deploy-dir> tag prod-$(date +%Y-%m-%d) <deployed-commit>
   ```
 
-**Gotcha — a host stood up with `git init` + `fetch` + `reset` (not `clone`)** ends up on a
+**Gotcha: a host stood up with `git init` + `fetch` + `reset` (not `clone`)** ends up on a
 local `master` branch (git init's default) that does not exist on the remote and has **no
 upstream**, so `git pull` fails with "no tracking information" and the host can sit silently
 stale. If you find a deploy host like that, put it on a tracking `main`:
@@ -184,7 +184,7 @@ git -C <deploy-dir> checkout -B main origin/main
 git -C <deploy-dir> branch -d master
 ```
 
-### Worker Containers
+### Worker containers
 
 Workers are started individually with `docker run` (not compose), because each has
 different memory limits and ontology assignments:
@@ -217,7 +217,7 @@ docker run -d \
 Key points:
 - The `aberowl-api` image is built once: `docker build -f Dockerfile.api -t aberowl-api .`
 - Ontology files are bind-mounted read-only from `/data/aberowl/ontologies/`
-- Groovy code is bind-mounted read-only from `/data/aberowl/aberowlapi/` — code
+- Groovy code is bind-mounted read-only from `/data/aberowl/aberowlapi/`: code
   changes take effect on container restart without rebuilding the image.
 - Each worker reads a JSON config listing its ontologies:
   ```json
@@ -227,7 +227,7 @@ Key points:
   ]
   ```
 
-### Registering Ontologies
+### Register ontologies
 
 After a worker starts and classifies its ontologies, each ontology must be
 registered with the central server so aggregation endpoints know about it:
@@ -242,7 +242,7 @@ The URL uses the Docker container name (resolved via the `aberowl-net` network).
 The central server stores the registration in Redis and periodically fetches
 metadata (class count, statistics) from each worker.
 
-### Adding a New Ontology
+### Add an ontology
 
 1. Download the OWL file:
    ```bash
@@ -255,13 +255,13 @@ metadata (class count, statistics) from each worker.
 
 3. Register it with the central server.
 
-### Removing an Ontology
+### Remove an ontology
 
 1. Remove from the worker config JSON.
 2. Restart the worker: `docker restart aberowl-worker-N`
 3. Remove registration: `docker exec deploy-redis-1 redis-cli hdel registered_servers ONT_ID`
 
-## Bulk Onboarding (Full BioPortal + OBO Foundry)
+## Bulk intake (full BioPortal + OBO Foundry)
 
 End-to-end workflow for pulling the complete OBO Foundry and BioPortal
 catalogs onto a fresh deployment. All scripts are in `deploy/` and
@@ -293,7 +293,7 @@ uv run deploy/download_bioportal.py /data/aberowl/ontologies \
 
 BioPortal occasionally returns zip archives named `.owl`, or gzip
 without a proper `Content-Encoding: gzip` header. Detect and repair
-BEFORE the bin-packer measures sizes — otherwise a 12MB zip gets
+BEFORE the bin-packer measures sizes; otherwise a 12MB zip gets
 placed on a low-RAM worker that later OOMs when the 253MB extracted
 OWL tries to load.
 
@@ -301,8 +301,8 @@ OWL tries to load.
 uv run deploy/fix_ontology_files.py /data/aberowl/ontologies
 ```
 
-The script is idempotent — plain XML/text files are left alone. Files
-with gzip magic are gunzipped in-place; zip archives are replaced by
+The script is idempotent. It leaves plain XML/text files unchanged, decompresses
+files with gzip magic in place, and replaces zip archives with
 their largest `.owl`/`.rdf`/`.ttl`/`.obo` member.
 
 ### 3. Plan and launch workers
@@ -327,7 +327,7 @@ uv run deploy/launch_workers.py \
     --port-start 9015
 ```
 
-**Memory sizing — critical gotchas:**
+**Memory sizing: critical gotchas:**
 
 - `OWLOntologyMerger` (inside `RequestManager.loadOntology`) keeps the
   original ontology AND the merged-imports-closure copy in memory at
@@ -336,7 +336,7 @@ uv run deploy/launch_workers.py \
   file size for peak load heap** on ontologies with heavy axioms.
 - NCBITaxon (1.8 GB raw OWL) needs ~96 GB container / -Xmx77g to make
   it through load+merge+classify. PR (1.4 GB) needs ~24 GB.
-- `launch_workers.py` sets `-Xmx = ram_gb - max(4, ram_gb/5)` — a
+- `launch_workers.py` sets `-Xmx = ram_gb - max(4, ram_gb/5)`: a
   naive `-Xmx = ram - 2` gets SIGKILL'd by the kernel (not docker's
   OOM-killer) because JVM non-heap (metaspace, JIT, direct buffers,
   thread stacks) plus kernel page cache exceed the cgroup limit.
@@ -370,7 +370,7 @@ Each ontology directory gets a `metadata.json` with `title`,
 etc. OBO Foundry ontologies are resolved against
 `purl.obolibrary.org/meta/ontologies.jsonld`; BioPortal ones via
 `/ontologies/{acronym}` + `/latest_submission`. The central server's
-60-second periodic poll picks up the new metadata automatically — no
+60-second periodic poll picks up the new metadata automatically: no
 worker restart required.
 
 ### Full procedure, in order
@@ -395,19 +395,19 @@ usable OWL file. They are excluded from `scripts/plan_distribution.py`'s plan
 by default (override with `--include-missing`).
 
 Categories:
-- **License-gated (~11)** — `MEDDRA`, `SNOMEDCT`, `ICD10`, `ICNP`, `ICPC2P`,
+- **License-gated (~11)**: `MEDDRA`, `SNOMEDCT`, `ICD10`, `ICNP`, `ICPC2P`,
   `HERO`, `MDDB`, `NDDF`, `NDFRT`, `RCD`, `WHO-ART`. Require per-account
   approval at bioontology.org before download.
-- **Abandoned BP submissions (~65)** — BioPortal returns 404
+- **Abandoned BP submissions (~65)**: BioPortal returns 404
   `no_latest_submission`; nothing to download.
-- **Broken OBO purls / parse failures** — e.g. `ero`, `fix` still fail even
+- **Broken OBO purls / parse failures**: e.g. `ero`, `fix` still fail even
   with the long timeout. Need an alternative source URL or local repair.
 
 Each plan run writes `results/missing_ontologies_<date>.md` with the exact
 list of skipped ontologies, grouped by likely cause. Revisit periodically as
 BP catalog churn or license approvals change.
 
-## Nginx Configuration
+## Nginx configuration
 
 ### borg-server (/etc/nginx/sites-available/beta.aber-owl.net)
 
@@ -472,8 +472,8 @@ All secrets are in `/data/aberowl/deploy/.env` on `onto`:
 
 Separately, each registry entry carries a per-ontology `secret_key` (a uuid4 in
 Redis, used only for `/register` re-registration auth and the `/webhook` update
-trigger — **not** the worker `ABEROWL_SECRET_KEY` above). To invalidate those keys
-(e.g. after a leak), rotate them — Redis-only, no worker restarts, no downtime:
+trigger; **not** the worker `ABEROWL_SECRET_KEY`). To invalidate those keys
+(e.g. after a leak), rotate them; Redis-only, no worker restarts, no downtime:
 
 ```bash
 docker cp scripts/rotate_registry_keys.py deploy-central-server-1:/tmp/
@@ -481,7 +481,7 @@ docker exec deploy-central-server-1 python3 /tmp/rotate_registry_keys.py        
 docker exec deploy-central-server-1 python3 /tmp/rotate_registry_keys.py --apply    # rotate + resync servers.json
 ```
 
-Back up the `deploy_redis_data` volume first (see the rollback section above).
+Back up the `deploy_redis_data` volume first (see “Rollback”).
 
 ## Monitoring
 
@@ -508,10 +508,10 @@ ssh onto "docker exec deploy-redis-1 redis-cli info keyspace"
 ssh onto "docker exec deploy-elasticsearch-1 curl -sf http://localhost:9200/_cluster/health?pretty"
 ```
 
-## Pre-deployment Regression Test
+## Pre-deployment regression test
 
 Run this from your **laptop** before and after any nginx or central-server
-change. Save the before output as a baseline and diff against after — any
+change. Save the before output as a baseline and diff against after; any
 status code that changed is a regression to investigate.
 
 ```bash
@@ -525,7 +525,7 @@ diff ~/aberowl_smoke_before.txt ~/aberowl_smoke_after.txt
 ```
 
 An empty diff means no regressions. Some routes return 502 or 404 by
-design (pre-existing backend issues unrelated to AberOWL) — those are
+design (pre-existing backend issues unrelated to AberOWL); those are
 expected and should remain stable across deployments.
 
 ### MCP smoke test (from laptop)
@@ -538,7 +538,7 @@ curl -sf https://beta.aber-owl.net/mcp/ontology/mcp -H 'Accept: text/event-strea
 
 Expected: HTTP 200 with `event: message` and `"serverInfo":{"name":"aberowl-ontology",...}` in the body.
 
-## Updating Code
+## Update code
 
 ```bash
 # From the dev machine (aberowl2 repo root):
@@ -566,11 +566,11 @@ but **keeps the named volumes** (`redis_data`, `es_data`,
 and downloaded OWL files all survive an upgrade.
 
 What would destroy data:
-- `docker compose down -v` (the `-v` removes named volumes — never run this without a backup).
+- `docker compose down -v` (the `-v` removes named volumes: never run this without a backup).
 - `rm -rf /data/aberowl/ontologies` or `/var/lib/docker/volumes/deploy_*`.
-- Renaming the compose project (`-p` flag) — would create new volumes with the new prefix.
+- Renaming the compose project (`-p` flag): would create new volumes with the new prefix.
 
-### ALWAYS back up the current state before deploying (rollback safety)
+### Always back up the current state before deployment (rollback safety)
 
 A normal `up --build -d` preserves volumes, but **always capture a rollback
 point first** so a bad deploy can be reverted. Run on `onto`, before syncing
@@ -601,7 +601,7 @@ outside the rsync path, so deploys don't clobber it; prune old ones manually.)
 - *Data:* stop the stack, restore the tarball into the volume, restart, e.g.
   `docker run --rm -v deploy_es_data:/vol -v "$(pwd)/backups/<ts>":/backup alpine sh -c 'rm -rf /vol/* && tar xzf /backup/deploy_es_data.tar.gz -C /vol'`.
 - *Schema/reindex changes:* reindex into a **new** versioned index and swap the
-  alias, keeping the old index — then rollback is just swapping the alias back,
+  alias, keeping the old index; then rollback is just swapping the alias back,
   with no data loss.
 
 For the MCP rollout specifically, the upgrade sequence is:
@@ -632,9 +632,9 @@ curl -sf http://10.67.24.207:8766/mcp -H 'Accept: text/event-stream' \
 ```
 
 Then push the nginx route to the frontend (one of `frontend` /
-`frontend1`, then the other) — see "Updating nginx" below.
+`frontend1`, then the other); see "Updating nginx".
 
-## Port Allocation
+## Port allocation
 
 | Port | Service |
 |------|---------|
@@ -659,9 +659,9 @@ and must not be used for AberOWL workers.
 
 | Port | Service | Binding |
 |------|---------|---------|
-| 8766 | MCP ontology server | `${MCP_BIND_HOST}` only — never `0.0.0.0` |
+| 8766 | MCP ontology server | `${MCP_BIND_HOST}` only; never `0.0.0.0` |
 
-## Transitioning to Production (aber-owl.net)
+## Transition to production (aber-owl.net)
 
 1. Update DNS: point `aber-owl.net` A record to borg-server (87.106.144.182)
    or keep it pointing to frontend/frontend1 and adjust nginx accordingly.

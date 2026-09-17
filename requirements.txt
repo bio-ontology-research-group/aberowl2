@@ -11,4 +11,4 @@ pillow
 unstructured
 aiohttp
 redis
-mcp
+mcp>=1.28.1,<2.0

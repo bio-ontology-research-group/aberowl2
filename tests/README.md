@@ -1,6 +1,9 @@
-# AberOWL2 Integration Tests
+# AberOWL2 integration tests
 
 ## Quick start
+
+The full suite includes Docker integration tests and live service calls. See
+[Selective execution](#selective-execution) to select tests for your environment.
 
 ```bash
 # From the repository root
@@ -24,7 +27,7 @@ uv run --extra test pytest tests/ -v
 
 ```bash
 # Only fast tests (no Docker)
-uv run --extra test pytest tests/ -v -m "not slow and not bioportal"
+uv run --extra test python -m pytest tests/ -v -m "not slow and not live and not bioportal"
 
 # Only the BioPortal fetch test
 uv run --extra test pytest tests/ -v -m bioportal
@@ -62,7 +65,7 @@ uv run --extra test pytest tests/ -v -k test_ontology_update_hotswap
 
 ## Fixtures (`conftest.py`)
 
-All fixtures are **session-scoped** — Docker containers start once and are shared across the whole test session.
+All fixtures are **session-scoped**. Docker containers start once per test session.
 
 ### `central_es`
 
@@ -95,7 +98,7 @@ Yields: `http://localhost:8080/api`
 
 ## Port configuration
 
-All ports can be overridden with environment variables so the tests can run alongside other services:
+Override ports with environment variables to run the tests alongside other services:
 
 | Env var | Default | Purpose |
 |---------|---------|---------|
@@ -106,7 +109,7 @@ All ports can be overridden with environment variables so the tests can run alon
 | `ABEROWL_TEST_ONT_PATH` | `/tmp/aberowl_test_ontologies` | host path for shared OWL files |
 | `ABEROWL_REPO_PATH` | (parent of `tests/`) | repository root |
 
-Example — run on non-default ports to avoid conflicts:
+Run on non-default ports to avoid conflicts:
 
 ```bash
 ABEROWL_TEST_ES_PORT=29200 \
@@ -136,7 +139,7 @@ axioms = false
 Assertions:
 - Response contains `result` list with at least one entry.
 - Every entry has `class` (IRI string) and `label` fields.
-- IRI `http://purl.obolibrary.org/obo/GO_0000003` (reproduction) is in the result set — a well-known direct child of biological\_process.
+- IRI `http://purl.obolibrary.org/obo/GO_0000003` (reproduction) is in the result set: a well-known direct child of biological\_process.
 
 ### 2 · `test_bioportal_fetch_dedup`
 
@@ -185,7 +188,7 @@ Full hot-swap lifecycle:
 3. Asserts response `{"status": "accepted", "taskId": "…"}`.
 4. Polls `/api/updateStatus.groovy?taskId=…` every 5 s until status ≠ `pending`.
 5. Asserts final status is `success`.
-6. Issues a `runQuery.groovy` subClassOf query for the Pizza class and asserts results are non-empty — confirming the new `RequestManager` is live and the old one was disposed.
+6. Issues a `runQuery.groovy` subClassOf query for the Pizza class and asserts results are non-empty: confirming the new `RequestManager` is live and the old one was disposed.
 
 ---
 
@@ -194,6 +197,6 @@ Full hot-swap lifecycle:
 | Symptom | Likely cause |
 |---------|-------------|
 | `go_stack` fixture times out | GO classification took > 10 min; increase `ABEROWL_TEST_TIMEOUT_GO` or check container RAM |
-| `test_bioportal_fetch_dedup` skipped or fails | BioPortal API key expired or rate limited; update `BIOPORTAL_API_KEY` in `bioportal.py` |
-| `test_es_search_via_groovy_api` — 0 hits | ES document not refreshed in time; the test uses `?refresh=true` which forces immediate visibility |
-| `test_ontology_update_hotswap` — `status=failed` | `ABEROWL_SECRET_KEY` mismatch or OWL file path wrong; check container env and volume mount |
+| `test_bioportal_fetch_dedup` skipped or fails | BioPortal API key expired or rate limited; set a valid `BIOPORTAL_API_KEY` in the test process environment |
+| `test_es_search_via_groovy_api`: 0 hits | ES document not refreshed in time; the test uses `?refresh=true` which forces immediate visibility |
+| `test_ontology_update_hotswap`: `status=failed` | `ABEROWL_SECRET_KEY` mismatch or OWL file path wrong; check container env and volume mount |
