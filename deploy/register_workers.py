@@ -8,7 +8,7 @@ Register each ontology in a worker plan with the central server.
 Reads worker_plan.json, POSTs to central server's /register endpoint
 for each ontology with the URL of its assigned worker container.
 
-Usage (on onto):
+Usage (on the central host):
     uv run deploy/register_workers.py \\
         --plan /data/aberowl/ontologies/worker_plan.json \\
         --central http://localhost:8000

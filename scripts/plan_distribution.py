@@ -43,7 +43,7 @@ from fleet_report import (  # noqa: E402
 
 DEFAULT_OUTPUT_HTML = Path(f"results/plan_distribution_{dt.date.today().isoformat()}.html")
 DEFAULT_OUTPUT_JSON = Path(f"results/plan_distribution_{dt.date.today().isoformat()}.json")
-DEFAULT_SSH_HOST = "onto"
+DEFAULT_SSH_HOST = os.environ.get("ABEROWL_SSH_HOST", "central.example.org")
 N_WORKERS = 33
 
 # Memory model calibrated to observations:
@@ -162,7 +162,7 @@ class WorkerSlot:
 
 
 def fetch_current_configs(ssh_host: str) -> dict[int, list[dict]]:
-    """SSH to onto and read every worker_N_config.json. Empty dict on failure.
+    """SSH to the central host and read every worker_N_config.json. Empty dict on failure.
 
     Returns plain shell-tarred bundle: prints each file with a marker line
     we can parse client-side. Avoids inline-python-over-ssh quoting hell.
@@ -214,7 +214,7 @@ def fetch_current_configs(ssh_host: str) -> dict[int, list[dict]]:
 
 
 def fetch_on_disk_ontologies(ssh_host: str, min_size: int = 20_000) -> set[str]:
-    """List ontology IDs that have an OWL file on disk on onto (>min_size bytes).
+    """List ontology IDs that have an OWL file on disk on the central host (>min_size bytes).
 
     Looks at /data/aberowl/ontologies/<id>/<id>.owl. Returns set of ids.
     """
@@ -236,7 +236,7 @@ def fetch_on_disk_ontologies(ssh_host: str, min_size: int = 20_000) -> set[str]:
 
 
 def fetch_current_memory_limits(ssh_host: str) -> dict[int, int]:
-    """SSH to onto and read each worker's docker memory limit (in GB)."""
+    """SSH to the central host and read each worker's docker memory limit (in GB)."""
     out: dict[int, int] = {}
     try:
         r = subprocess.run(

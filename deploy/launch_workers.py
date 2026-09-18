@@ -10,7 +10,7 @@ runs `docker run` with the memory limit and port allocated by the
 plan. Idempotent: if a container of the same name is already running,
 it is left alone unless --recreate is passed.
 
-Usage (on onto):
+Usage (on a worker host):
     uv run deploy/launch_workers.py \\
         --plan /data/aberowl/ontologies/worker_plan.json \\
         --env /data/aberowl/deploy/.env \\
