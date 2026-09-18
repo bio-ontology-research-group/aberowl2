@@ -1,12 +1,19 @@
 {
   "schema_version": 1,
   "prepared_on": "2026-09-18",
-  "status": "Release cleanup applied to the working tree and not yet committed; archive rebuild pending; not deposited",
+  "status": "Release cleanup merged to main and deployed to the beta service; archive rebuild pending; not deposited",
   "software": {
-    "base_commit": "4f81f12f6c2a8105516cf51524d3049fff1f373f",
-    "release_commit": null,
-    "includes_uncommitted_cleanup": true,
-    "cleanup_scope": "Retired the standalone LLM query parsers and the worker UI LLM tab, then removed 50 audited paths and sanitised retained documentation, scripts and compose comments. See release/contents.json."
+    "release_commit": "1a71218434999b63dda88364d28c4fa019cdf657",
+    "includes_uncommitted_cleanup": false,
+    "cleanup_scope": "Retired the standalone LLM query parsers and the worker UI LLM tab, removed 50 audited paths, sanitised retained documentation, scripts and compose comments, retired an unreachable provisioning endpoint, made the worker integration tests runnable, and narrowed the worker proxy to serve only the interface files, and scrubbed the deployment host alias from the provisioning scripts after a privacy audit of the release directory. See release/contents.json.",
+    "audited_commit": "4f81f12f6c2a8105516cf51524d3049fff1f373f",
+    "validated_on_beta": {
+      "date": "2026-09-18",
+      "commit": "f6b65bd",
+      "note": "the commit carrying every code change that affects the running service; the release commit adds documentation and removes a hardcoded host alias from provisioning scripts on top",
+      "ontologies_online": "859/859",
+      "checks": "central API, web interface, MCP endpoint, exact identifier lookup, DL reasoning query, SPARQL rewrite"
+    }
   },
   "manuscript": {
     "base_commit": "53b2a47bc419b3f6df091ac283c4d5088d0909b1",

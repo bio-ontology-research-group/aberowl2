@@ -1,11 +1,19 @@
 # Release provenance
 
-The working tree carries a release cleanup that is **not yet committed**. It retired
-the standalone LLM query parsers and the worker interface's LLM tab, removed 50
-audited paths, and sanitised retained documentation, scripts and compose comments.
-The selected bytes therefore correspond to no commit. The earlier archive predates
-the cleanup, retains the privacy findings the cleanup fixed, and must not be
-published. The current file selection and checksums describe the working tree.
+The release cleanup is **merged to `main`** at commit
+`1a71218434999b63dda88364d28c4fa019cdf657`. The beta service was updated and
+validated on 18 September 2026 at `f6b65bd`, the commit carrying every code change
+in this release; `1a71218` adds documentation and a scrub of the deployment host alias from the provisioning scripts on top. That validation found 859 of 859
+ontologies online, with the central API, web interface, MCP endpoint, exact
+identifier lookup, a DL reasoning query and a SPARQL rewrite all checked. The cleanup retired the standalone LLM query parsers
+and the worker interface's LLM tab, removed 50 audited paths, sanitised retained
+documentation, scripts and compose comments, retired an unreachable provisioning
+endpoint, made the worker integration tests runnable, narrowed the worker proxy
+to serve only the interface files, and scrubbed the deployment host alias from
+the provisioning scripts after a privacy audit of the release directory.
+
+The earlier archive predates all of this, retains the privacy findings the cleanup
+fixed, and must not be published.
 
 The working release candidate dated 18 September 2026 supports **offline rescoring of
 saved responses**. Missing historical records prevent exact repetition of the model
@@ -13,13 +21,13 @@ calls and reconstruction of the services that answered them.
 
 ## Source revisions
 
-The audited software revision is `4f81f12f6c2a8105516cf51524d3049fff1f373f`, and the
-cleanup's changes sit on top of it uncommitted, so no revision names the exported
-bytes. The separate manuscript source revision is
+The software release revision is `1a71218434999b63dda88364d28c4fa019cdf657`. The
+audit that selected these files inspected `4f81f12f6c2a8105516cf51524d3049fff1f373f`,
+the commit the cleanup was built on. The separate manuscript source revision is
 `ed2c4e3baa1c6c254f7ef2fe1de2f7fedbe8be12`. The software package excludes the
 manuscript repository and generated manuscript PDFs.
 
-The archive selects software, data and documentation from the working tree.
+The archive selects software, data and documentation from the release revision.
 Four packaging records contain metadata generated after that commit:
 `release/provenance.json`, `release/PROVENANCE.md`, `release/contents.json` and
 `release/SHA256SUMS`. These records identify the source revisions, file selection
