@@ -52,7 +52,11 @@ services:
     depends_on:
       - ontology-api
     volumes:
-      - ./:/usr/share/nginx/html
+      # Mount only the three files the page needs. Sharing the whole checkout
+      # here would also publish everything else that happens to sit in it.
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+      - ./ontology.js:/usr/share/nginx/html/ontology.js:ro
+      - ./app.css:/usr/share/nginx/html/app.css:ro
 
 networks:
   default:
