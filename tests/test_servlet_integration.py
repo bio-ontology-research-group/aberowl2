@@ -67,6 +67,28 @@ def test_health_endpoint(pizza_stack):
 
 @pytest.mark.slow
 @pytest.mark.timeout(120)
+def test_proxy_serves_only_the_ui_files(pizza_stack):
+    """The worker proxy publishes the page, and nothing else from the checkout.
+
+    Its web root used to be the whole checkout, so any file sitting there was
+    downloadable over the published port. It now serves three files.
+    """
+    base_url = pizza_stack.replace("/api", "")
+
+    for asset in ("/", "/index.html", "/ontology.js", "/app.css"):
+        r = _get(f"{base_url}{asset}")
+        assert r.status_code == 200, f"{asset} should be served, got {r.status_code}"
+
+    # A tracked file that is in the checkout but is not part of the page.
+    r = _get(f"{base_url}/docker-compose.yml")
+    assert r.status_code == 404, (
+        f"the proxy served /docker-compose.yml ({r.status_code}); its web root "
+        "is exposing the checkout again"
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.timeout(120)
 def test_health_root_endpoint(pizza_stack):
     """Root health endpoint also works."""
     base_url = pizza_stack.replace("/api", "")
