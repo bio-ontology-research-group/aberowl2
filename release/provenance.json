@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "prepared_on": "2026-09-18",
-  "status": "Release cleanup merged to main and validated on the beta service; candidate archive built; not deposited",
+  "status": "Deposited on Zenodo as version 2.0 (tag v2.0-release); metadata editable, files fixed",
   "software": {
     "release_commit": "1a71218434999b63dda88364d28c4fa019cdf657",
     "includes_uncommitted_cleanup": false,
@@ -22,7 +22,7 @@
     "included_in_software_package": false,
     "includes_uncommitted_edits": false
   },
-  "version_doi": null,
+  "version_doi": "10.5281/zenodo.22837021",
   "file_selection": "release/contents.json",
   "supported_reproduction": "Offline rescoring of saved responses with the released scorers.",
   "grounding": {
