@@ -67,13 +67,14 @@ docker compose up -d
 
 ### 2. A single-ontology worker
 
-A worker looks for an ontology under `<ontologies_dir>/<ontology_id>/<ontology_id>_active.owl`.
-Pick an id, place the file, then choose a port and start a worker:
+The worker mounts your ontologies directory at `/data` and loads
+`/data/<ontology_id>_active.owl`, so the file goes directly in that directory,
+named after the id. Pick an id, place the file, then choose a port:
 
 ```bash
 export ONTOLOGIES_HOST_PATH="$PWD/data"
-mkdir -p "$ONTOLOGIES_HOST_PATH/myont"
-cp /path/to/your_ontology.owl "$ONTOLOGIES_HOST_PATH/myont/myont_active.owl"
+mkdir -p "$ONTOLOGIES_HOST_PATH"
+cp /path/to/your_ontology.owl "$ONTOLOGIES_HOST_PATH/myont_active.owl"
 ./start_docker.sh myont 89   # ontology id, then nginx reverse proxy port
 ```
 
