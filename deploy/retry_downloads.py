@@ -15,7 +15,7 @@ Idempotent: an id whose file already exists above --min-size is skipped.
 A freshly downloaded file below --min-size is treated as junk (BioPortal
 often returns tiny HTML error pages) and deleted.
 
-Usage (on onto):
+Usage (on the central host):
     python3 deploy/retry_downloads.py /data/aberowl/ontologies \\
         --ids foodon maxo bto pw ...
     python3 deploy/retry_downloads.py /data/aberowl/ontologies \\

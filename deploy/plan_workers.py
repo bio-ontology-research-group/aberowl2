@@ -7,7 +7,7 @@ Plan worker assignments for the full ontology set.
 
 Reads existing worker_*_config.json files (to respect already-assigned
 ontologies), plus a list of OWL files with sizes (either `find -printf
-'%s %p'` output from onto, or read directly if the ontologies directory
+'%s %p'` output from the central host, or read directly if the ontologies directory
 is available), then bin-packs the unassigned ontologies into new
 worker configs by size bucket.
 
