@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "status": "Release cleanup applied to the working tree and not yet committed, so the selected bytes do not correspond to any commit. Version DOI unset; not deposited.",
+  "status": "Release cleanup merged to main. The selected bytes are those of the release commit, except the four packaging records regenerated afterwards. Version DOI unset; not deposited.",
   "path_base": "repository root; preserve relative paths",
   "inspected_code_commit": "4f81f12f6c2a8105516cf51524d3049fff1f373f",
   "groups": {
@@ -272,5 +272,6 @@
   "manuscript": "Separate repository; excluded from the software package.",
   "publication_ready": false,
   "excluded_tracked_files_note": "Empty. The eight files previously listed here were retired from the repository by the release cleanup, so they are no longer tracked and no longer need an exclusion rationale.",
-  "inspected_code_commit_note": "inspected_code_commit names the commit the audit inspected. The selected bytes differ from it: the cleanup's removals and sanitisations are uncommitted. release/provenance.json records this under software.includes_uncommitted_cleanup."
+  "release_commit": "b5ba97782c8803ff17e90868daa13b79d41bdd79",
+  "inspected_code_commit_note": "inspected_code_commit names the commit the audit inspected. release_commit names the commit the selected bytes come from."
 }
