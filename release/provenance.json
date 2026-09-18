@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "prepared_on": "2026-09-18",
-  "status": "Release cleanup merged to main and deployed to the beta service; archive rebuild pending; not deposited",
+  "status": "Release cleanup merged to main and validated on the beta service; candidate archive built; not deposited",
   "software": {
     "release_commit": "1a71218434999b63dda88364d28c4fa019cdf657",
     "includes_uncommitted_cleanup": false,
@@ -121,16 +121,14 @@
     "Historical dependency environment and model/provider terms"
   ],
   "archive": {
-    "source_commit": "4f81f12f6c2a8105516cf51524d3049fff1f373f",
+    "describes": "this candidate",
+    "code_commit": "1a71218434999b63dda88364d28c4fa019cdf657",
+    "packaging_note": "The four packaging records, release/provenance.json, release/PROVENANCE.md, release/contents.json and release/SHA256SUMS, are regenerated after code_commit and merged as the next commit on main. The archive's bytes therefore equal the tree of that next commit, whose hash appears in the archive's file name. A record cannot name the commit that contains it.",
     "selection": "release/contents.json",
-    "metadata_generated_after_source_commit": [
-      "release/provenance.json",
-      "release/PROVENANCE.md",
-      "release/contents.json",
-      "release/SHA256SUMS"
-    ],
-    "git_history_included": false,
-    "status": "Superseded candidate built before the cleanup. It retains privacy findings the cleanup fixed and must not be published.",
-    "superseded": true
+    "git_history_included": false
+  },
+  "superseded_archive": {
+    "source_commit": "4f81f12f6c2a8105516cf51524d3049fff1f373f",
+    "status": "Built before the cleanup. Retains the privacy findings the cleanup fixed. Must not be published. It is not this archive."
   }
 }

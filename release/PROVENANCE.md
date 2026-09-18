@@ -12,8 +12,15 @@ endpoint, made the worker integration tests runnable, narrowed the worker proxy
 to serve only the interface files, and scrubbed the deployment host alias from
 the provisioning scripts after a privacy audit of the release directory.
 
-The earlier archive predates all of this, retains the privacy findings the cleanup
-fixed, and must not be published.
+A different, earlier archive named after commit `4f81f12` predates all of this,
+retains the privacy findings the cleanup fixed, and must not be published. It is
+not this archive.
+
+The four packaging records, this file, `provenance.json`, `contents.json` and
+`SHA256SUMS`, are regenerated after the code commit named above and merged as the
+next commit on `main`. This archive's bytes therefore equal the tree of that next
+commit, whose hash appears in the archive's file name. A record cannot name the
+commit that contains it.
 
 The working release candidate dated 18 September 2026 supports **offline rescoring of
 saved responses**. Missing historical records prevent exact repetition of the model
