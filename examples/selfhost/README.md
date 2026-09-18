@@ -30,11 +30,10 @@ your current directory, so a bare `./my-ontologies` looks for `deploy/my-ontolog
 and finds nothing; see the default (`../examples/selfhost/ontologies`) and the
 header comment in `deploy/docker-compose.selfhost.yml` for the same rule.
 
-You feed ontologies to that folder in two ways that **work together in the same
-folder** — you don't pick one:
+The folder accepts both local files and URL lists:
 
-- **Files** — drop `.owl` files in directly (id from the filename, reasoner ELK).
-- **URLs** — add a `sources.txt` (see `ontologies/sources.txt.example`) listing
+- **Files**: drop `.owl` files in directly (id from the filename, reasoner ELK).
+- **URLs**: add a `sources.txt` (see `ontologies/sources.txt.example`) listing
   URLs to download on startup.
 
 Both are loaded. For example, this folder loads **both** pizza (file) and bfo (URL):
@@ -45,7 +44,7 @@ my-ontologies/
   sources.txt        # one line:  bfo  http://purl.obolibrary.org/obo/bfo.owl
 ```
 
-**Advanced, instead of the above** — for per-ontology control, add an
+For per-ontology control, add an
 `ontologies.config.json` (authoritative; it replaces the files/`sources.txt` scan):
 ```json
 [
@@ -58,19 +57,16 @@ See [`deploy/SELF_HOSTING.md`](../../deploy/SELF_HOSTING.md) for details.
 
 ## Requirements
 
-Read `deploy/docker-compose.selfhost.yml` for the exact settings; summarized here:
+See `deploy/docker-compose.selfhost.yml` for the exact settings.
 
-- **Memory.** The compose file fixes one heap size explicitly: Elasticsearch's,
-  via `ES_JAVA_OPTS=-Xms1g -Xmx1g` (1 GB). It sets no `mem_limit`, `deploy.resources`,
-  or `JAVA_OPTS` for the `worker` or `central-server` services, and none for `redis`
-  either, so their memory footprint is **not fixed by the compose file**; for the
-  bundled example (the small `pizza.owl` ontology) that is not a problem in practice,
-  but there is no compose-enforced floor or ceiling to quote beyond the 1 GB ES
-  heap. A larger corpus in `ONTOLOGIES_DIR` scales the worker's JVM heap with the
-  size of the loaded ontologies (more classes/axioms need more heap to classify and
-  hold in memory); size the host accordingly, but this file does not fix that number
-  either; it must be set by the operator (e.g. a `JAVA_OPTS`/`mem_limit` override)
-  for anything beyond the bundled example.
+- **Memory.** Elasticsearch uses a 1 GB heap (`ES_JAVA_OPTS=-Xms1g -Xmx1g`).
+  The Compose file does not set `mem_limit`, `deploy.resources`, or `JAVA_OPTS`
+  for the `worker`, `central-server`, or `redis` services. It therefore does not
+  fix their memory use or impose a memory floor or ceiling beyond the ES heap.
+  The bundled small `pizza.owl` example works with these defaults. Larger
+  ontology sets require more worker heap to classify and retain their classes
+  and axioms. Size the host for the corpus and configure memory limits, for
+  example through `JAVA_OPTS` and `mem_limit` overrides.
 - **Offline vs. network.** The container images (`kaustborg/aberowl-worker:2.0`,
   `kaustborg/aberowl-central:2.0`, `redis:alpine`, `elasticsearch:7.17.10`) need
   network access to pull the first time; after that, `up` runs offline. Ontology

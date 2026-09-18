@@ -138,21 +138,21 @@ class TestRateLimitKey:
 
     def test_key_from_api_key_header(self):
         request = MagicMock()
-        request.headers = {"X-API-Key": "aberowl_test123"}
+        request.headers = {"X-API-Key": 'test-aberowl_test123'}
         request.query_params = {}
         request.client = MagicMock()
         request.client.host = "192.168.1.1"
         key = get_rate_limit_key(request)
-        assert key == "apikey:aberowl_test123"
+        assert key == 'apikey:test-aberowl_test123'
 
     def test_key_from_api_key_query_param(self):
         request = MagicMock()
         request.headers = {}
-        request.query_params = {"api_key": "aberowl_qp123"}
+        request.query_params = {"api_key": 'test-aberowl_qp123'}
         request.client = MagicMock()
         request.client.host = "10.0.0.1"
         key = get_rate_limit_key(request)
-        assert key == "apikey:aberowl_qp123"
+        assert key == 'apikey:test-aberowl_qp123'
 
     def test_key_from_forwarded_ip(self):
         request = MagicMock()
@@ -165,7 +165,7 @@ class TestRateLimitKey:
 
     def test_api_key_takes_precedence_over_ip(self):
         request = MagicMock()
-        request.headers = {"X-API-Key": "aberowl_priority", "X-Forwarded-For": "1.2.3.4"}
+        request.headers = {"X-API-Key": 'test-aberowl_priority', "X-Forwarded-For": "1.2.3.4"}
         request.query_params = {}
         request.client = MagicMock()
         request.client.host = "127.0.0.1"

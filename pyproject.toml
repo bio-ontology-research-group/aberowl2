@@ -9,12 +9,17 @@ dependencies = [
     "aiohttp",
     "python-multipart",
     "redis",
-    "mcp",
+    "mcp>=1.28.1,<2.0",
     "pyyaml",
     "aiofiles",
+    "slowapi",
+    "rdflib",
 ]
 
 [project.optional-dependencies]
+evaluation = [
+    "httpx",
+]
 test = [
     "pytest",
     "pytest-asyncio",
@@ -22,14 +27,14 @@ test = [
     "requests",
     "httpx",
     "fakeredis",
-    "slowapi",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 timeout = 900          # 15 min hard cap per test (GO classification can be slow)
-testpaths = ["tests"]
-# Exclude pre-existing tests that require gevent (aberowlapi/)
+testpaths = ["tests", "central_server/tests"]
+# Exclude pre-existing tests that require gevent (aberowlapi/). They also reach
+# a worker at import time, so they must stay out of the default run.
 norecursedirs = ["tests/aberowlapi"]
 markers = [
     "slow: tests that spin up Docker containers and may take several minutes",

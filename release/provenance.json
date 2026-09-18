@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "prepared_on": "2026-09-18",
+  "status": "Release cleanup applied to the working tree and not yet committed; archive rebuild pending; not deposited",
+  "software": {
+    "base_commit": "4f81f12f6c2a8105516cf51524d3049fff1f373f",
+    "release_commit": null,
+    "includes_uncommitted_cleanup": true,
+    "cleanup_scope": "Retired the standalone LLM query parsers and the worker UI LLM tab, then removed 50 audited paths and sanitised retained documentation, scripts and compose comments. See release/contents.json."
+  },
+  "manuscript": {
+    "base_commit": "53b2a47bc419b3f6df091ac283c4d5088d0909b1",
+    "release_commit": "ed2c4e3baa1c6c254f7ef2fe1de2f7fedbe8be12",
+    "separate_repository": true,
+    "included_in_software_package": false,
+    "includes_uncommitted_edits": false
+  },
+  "version_doi": null,
+  "file_selection": "release/contents.json",
+  "supported_reproduction": "Offline rescoring of saved responses with the released scorers.",
+  "grounding": {
+    "scored_runs": 3231,
+    "repeat_pairs": 239,
+    "original_gold_rows": 173,
+    "distinct_gold_items": 162,
+    "model_run_dates": "July 2026 batches with later retries; exact per-row dates unrecorded",
+    "existence_check_date": "2026-08-19",
+    "service_commit": null,
+    "provider_routing": "unpinned and unlogged",
+    "tool_characters_visible": 4000,
+    "tool_characters_logged": 600
+  },
+  "direct_lookup": {
+    "response_dates": [
+      "2026-08-25",
+      "2026-08-30"
+    ],
+    "input_items": 162,
+    "positive_correct": 117,
+    "positive_total": 122,
+    "positive_ambiguous": 5,
+    "negative_no_exact_match": 40,
+    "negative_total": 40,
+    "source": "Saved beta exact-resolver responses; not complete MCP replay",
+    "service_commit": null
+  },
+  "reasoning": {
+    "scored_runs": 2400,
+    "gold_expressions": 120,
+    "model_run_dates": "approximately August\u2013September 2026",
+    "service_commit": null,
+    "original_sampling_seed": null,
+    "tool_characters_visible_and_logged": 6000,
+    "provider_routing": "unpinned",
+    "provider_metadata": {
+      "gpt-oss-20b": "unrecorded",
+      "llama-4-scout": "unrecorded",
+      "deepseek-v3.2": "per-run provider-name sets; no call-by-call mapping",
+      "gemini-3.5-flash": "per-run provider-name sets; no call-by-call mapping",
+      "qwen3.6-35b-a3b": "per-run provider-name sets; no call-by-call mapping"
+    },
+    "ontologies": [
+      {
+        "id": "GO",
+        "registry_release_date": "2026-03-25",
+        "class_count": 51937,
+        "original_owl_sha256": null
+      },
+      {
+        "id": "CL",
+        "registry_release_date": "2026-03-26",
+        "class_count": 19151,
+        "original_owl_sha256": null
+      },
+      {
+        "id": "SO",
+        "registry_release_date": null,
+        "class_count": 2752,
+        "original_owl_sha256": null
+      }
+    ],
+    "service_gold_check": {
+      "checked_at": "2026-09-14T04:40:00Z",
+      "matches": 120,
+      "total": 120,
+      "evidence": "experiments/dl_reasoning/service_gold_agreement.json",
+      "interpretation": "Later ELK service agreement; not original-run provenance or an independent-reasoner check"
+    }
+  },
+  "deployment_evidence": {
+    "date": "2026-09-14",
+    "source_commit_abbreviated": "2addd92",
+    "source": "deploy/measurements/2026-09-13-latency-and-restart.md",
+    "image_digests": {
+      "kaustborg/aberowl-central": "sha256:3163da734d84db84d7776764bead805d5e2e43190d10f63b09c05a0422a7e3b2",
+      "kaustborg/aberowl-worker": "sha256:9759dc16b8b561e513e0d38e2375bbe22f25f3f3d99e743c32f817c5c41d2d6b"
+    },
+    "original_model_run_pins": false,
+    "availability_rechecked": false
+  },
+  "licences": {
+    "project_software": "BSD-3-Clause; see LICENSE",
+    "bundled_pizza_ontology": "CC BY 3.0 per embedded metadata",
+    "evaluation_third_party_permissions": "Not fully evidenced; see release/THIRD_PARTY_NOTICES.md"
+  },
+  "historical_reconstruction_gaps": [
+    "Deployed service commits at model-run time",
+    "Original ontology files, checksums and imports state",
+    "SO release date",
+    "Original reasoning gold sampling seed",
+    "Grounding per-row timestamps and provider routes",
+    "Complete reasoning provider/call mapping and serving configurations",
+    "Complete grounding tool contexts",
+    "Historical dependency environment and model/provider terms"
+  ],
+  "archive": {
+    "source_commit": "4f81f12f6c2a8105516cf51524d3049fff1f373f",
+    "selection": "release/contents.json",
+    "metadata_generated_after_source_commit": [
+      "release/provenance.json",
+      "release/PROVENANCE.md",
+      "release/contents.json",
+      "release/SHA256SUMS"
+    ],
+    "git_history_included": false,
+    "status": "Superseded candidate built before the cleanup. It retains privacy findings the cleanup fixed and must not be published.",
+    "superseded": true
+  }
+}

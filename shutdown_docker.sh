@@ -1,51 +1,23 @@
 #!/bin/bash
 set -e
 
-# Script to shutdown Docker containers and clean up volumes
+# Convenience wrapper: stops the per-ontology AberOWL stack started for a port.
+# It delegates to reload_docker.sh, which owns the supported Compose contract
+# (project name aberowl_<port> and the generated env_files/aberowl_<port>.env).
+# For richer options, call reload_docker.sh directly.
 
-# Check if port is provided
 if [ $# -lt 1 ]; then
     echo "Usage: $0 <nginx_port>"
     echo "Example: $0 8080"
     exit 1
 fi
 
-# Store the port
-NGINX_PORT=$1
-echo "Shutting down services running on port: $NGINX_PORT"
+NGINX_PORT="$1"
 
-# Create a unique project name based on the port number
-PROJECT_NAME="aberowl_${NGINX_PORT}"
-echo "Using project name: $PROJECT_NAME"
+# Validate port
+if ! [[ "$NGINX_PORT" =~ ^[0-9]+$ ]]; then
+    echo "Error: Invalid nginx_port '$NGINX_PORT'." >&2; exit 1
+fi
 
-# Set unique container names based on port to avoid conflicts
-export ELASTICSEARCH_CONTAINER_NAME="elasticsearch_${NGINX_PORT}"
-export INDEXER_CONTAINER_NAME="indexer_${NGINX_PORT}"
-echo "Using container names: $ELASTICSEARCH_CONTAINER_NAME, $INDEXER_CONTAINER_NAME"
-
-# Define volume names based on the project name
-ES_DATA_VOLUME="${PROJECT_NAME}_elasticsearch_data"
-
-# --- Stop and Clean Up ---
-echo "Stopping and removing existing containers and networks (including anonymous volumes)..."
-# -v removes anonymous volumes attached to containers
-# Create a temporary docker-compose override file to set unique container names
-cat > docker-compose.override.yml <<EOL
-services:
-  elasticsearch:
-    container_name: ${ELASTICSEARCH_CONTAINER_NAME}
-  indexer:
-    container_name: ${INDEXER_CONTAINER_NAME}
-EOL
-
-# Shut down the containers with the unique project name
-docker compose -p "$PROJECT_NAME" down -v --remove-orphans
-
-# Clean up the temporary override file
-rm docker-compose.override.yml
-
-echo "Attempting to remove existing named volumes ($ES_DATA_VOLUME)..."
-docker volume rm "$ES_DATA_VOLUME" 2>/dev/null || true     # Ignore error if not found
-echo "Volume cleanup attempt finished."
-
-echo "All Docker containers and volumes have been successfully shut down and removed."
+# Delegate to reload_docker.sh
+exec "$(dirname "$0")/reload_docker.sh" --stop "$NGINX_PORT"

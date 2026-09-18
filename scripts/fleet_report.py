@@ -34,7 +34,7 @@ from pathlib import Path
 import requests
 
 DEFAULT_CENTRAL = "https://beta.aber-owl.net"
-DEFAULT_BP_APIKEY = "8b5b7825-538d-40e0-9e9e-5ab9274a9aeb"  # same key as deploy/download_ontologies.py
+DEFAULT_BP_APIKEY = os.environ.get("BIOPORTAL_API_KEY", os.environ.get("BIOPORTAL_APIKEY", ""))
 DEFAULT_CACHE = Path("/tmp/bp_metrics_cache.json")
 DEFAULT_OUTPUT = Path(f"results/fleet_report_{dt.date.today().isoformat()}.html")
 
@@ -76,10 +76,12 @@ def fetch_bp_metrics(acronym: str, apikey: str, cache: dict, session: requests.S
     key = acronym.upper()
     if key in cache:
         return cache[key]
+    if not apikey:
+        return None
     try:
         r = session.get(
             f"https://data.bioontology.org/ontologies/{key}/metrics",
-            params={"apikey": apikey},
+            headers={"Authorization": f"apikey token={apikey}"},
             timeout=15,
         )
         if r.status_code != 200:
@@ -340,8 +342,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", default=DEFAULT_CENTRAL,
                     help="central server base URL (default: %(default)s)")
-    ap.add_argument("--bioportal-apikey", default=os.environ.get("BIOPORTAL_APIKEY", DEFAULT_BP_APIKEY),
-                    help="BioPortal API key (default: deploy/download_ontologies.py key)")
+    ap.add_argument("--bioportal-apikey", default=DEFAULT_BP_APIKEY,
+                    help="BioPortal API key (prefer the BIOPORTAL_API_KEY environment variable)")
     ap.add_argument("--no-bioportal", action="store_true",
                     help="don't fill missing metadata from BioPortal")
     ap.add_argument("--cache", type=Path, default=DEFAULT_CACHE,
@@ -354,7 +356,7 @@ def main() -> int:
     servers = fetch_servers(args.url)
     print(f"  got {len(servers)} entries", flush=True)
 
-    use_bp = not args.no_bioportal
+    use_bp = not args.no_bioportal and bool(args.bioportal_apikey)
     if use_bp:
         missing = sum(1 for o in servers if not o.get("class_count"))
         print(f"BioPortal fill-in for {missing} entries lacking metadata (cache={args.cache})...", flush=True)

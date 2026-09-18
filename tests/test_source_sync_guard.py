@@ -63,7 +63,7 @@ def registry(main_module):
             "ontology_id": "go",
             "title": "Gene Ontology",
             "url": "http://go-worker:80",
-            "secret_key": "s3cret",
+            "secret_key": 'test-s3cret',
             "status": "online",
             "class_count": 47000,
         })
@@ -117,7 +117,7 @@ class TestSourceSyncEnrichesOnly:
         )
         go = entries(main_module, registry)["go"]
         assert go["url"] == "http://go-worker:80"
-        assert go["secret_key"] == "s3cret"
+        assert go["secret_key"] == 'test-s3cret'
         assert go["status"] == "online"
         assert go["class_count"] == 47000
 

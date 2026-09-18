@@ -1,4 +1,4 @@
-# Central AberOWL2 stack on server "onto" (cbontsr01.kaust.edu.sa)
+# Central AberOWL 2 stack for a separate central host.
 # Deploys to /data/aberowl/
 #
 # Services:
@@ -87,10 +87,10 @@ services:
       # by hand, which nobody did.
     ports:
       - "${CENTRAL_PORT:-8000}:8000"
-      # MCP port is NOT published to 0.0.0.0. Default binds to loopback;
-      # production sets MCP_BIND_HOST=10.67.24.207 (onto's internal IP) so
-      # the frontend nginx can reach it. Public internet must always go
-      # through the nginx route /aberowl-beta/mcp/ontology/.
+      # MCP port is NOT published to 0.0.0.0. It binds to loopback by default.
+      # Set MCP_BIND_HOST to a private interface only when your reverse proxy
+      # needs to reach it from another host. Public traffic must always arrive
+      # through the reverse proxy, never by exposing this port directly.
       - "${MCP_BIND_HOST:-127.0.0.1}:${MCP_ONTOLOGY_PORT:-8766}:8766"
     depends_on:
       - redis

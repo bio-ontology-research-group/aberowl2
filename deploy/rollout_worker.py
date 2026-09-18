@@ -17,13 +17,13 @@ Default behaviour is a dry run. Nothing restarts until you pass --apply.
 
 Usage:
     # see what would happen, and the pre-flight state of each worker
-    python3 deploy/rollout_worker.py --host 10.254.146.227 --workers 12
+    python3 deploy/rollout_worker.py --host operator@worker.example.org --workers 12
 
     # actually roll one worker, then stop
-    python3 deploy/rollout_worker.py --host 10.254.146.227 --workers 12 --apply
+    python3 deploy/rollout_worker.py --host operator@worker.example.org --workers 12 --apply
 
     # roll several, sequentially, aborting if any fails to come back
-    python3 deploy/rollout_worker.py --host 10.254.146.227 \
+    python3 deploy/rollout_worker.py --host operator@worker.example.org \
         --workers 1,3,5 --apply
 """
 from __future__ import annotations
@@ -48,7 +48,8 @@ def sh(host: str, cmd: str, timeout: int = 180) -> str:
 
 
 def docker(host: str, args: str, timeout: int = 180) -> str:
-    # prod workers run with the invoking user in the docker group; beta needs sudo.
+    # Works either way: plain docker when the ssh user is in the docker group,
+    # falling back to sudo when it is not.
     return sh(host, f"docker {args} 2>/dev/null || sudo docker {args} 2>/dev/null", timeout)
 
 
@@ -151,7 +152,7 @@ def roll(host: str, num: int, wait_s: int, apply: bool) -> bool:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--host", required=True, help="ssh target, e.g. a-zhapacfp@10.254.146.227")
+    ap.add_argument("--host", required=True, help="ssh target, e.g. operator@worker.example.org")
     ap.add_argument("--workers", required=True, help="comma-separated worker numbers, in order")
     ap.add_argument("--wait", type=int, default=5400,
                     help="max seconds to wait for one worker to reload (default 5400; "

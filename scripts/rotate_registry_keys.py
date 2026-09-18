@@ -12,20 +12,23 @@ COLD-START seed (``_load_servers_from_file`` loads it *only* when the Redis hash
 is absent). So this also rewrites ``servers.json`` to match — otherwise a Redis
 wipe + restart would resurrect the old, leaked keys.
 
-Safety (why rotation is non-breaking): the registry ``secret_key`` is read in
-exactly three places in ``central_server/app/main.py`` / ``intake/updater.py``:
+Safety: the registry ``secret_key`` is read in exactly three places in
+``central_server/app/main.py`` / ``intake/updater.py``. Rotation is non-breaking
+only where all three preconditions below hold, so check them against your own
+deployment before running it:
 
-  1. ``/register`` re-registration auth  — legitimate only for self-registering
-     workers; the deployed workers do NOT self-register (``ABEROWL_REGISTER``
-     unset -> defaults false).
-  2. ``/webhook/<id>`` update trigger    — ``X-Webhook-Secret``; no external
-     webhook is configured with these keys.
+  1. ``/register`` re-registration auth  — matters only for self-registering
+     workers. Precondition: your workers do not self-register, i.e.
+     ``ABEROWL_REGISTER`` is unset or false.
+  2. ``/webhook/<id>`` update trigger    — ``X-Webhook-Secret``. Precondition:
+     no external webhook is configured with these keys.
   3. updater worker-auth fallback        — ``os.getenv("ABEROWL_SECRET_KEY") or
-     registry_entry["secret_key"]``; the env key wins whenever central's
-     ``ABEROWL_SECRET_KEY`` is set (it is on the deployment), so this fallback is
-     never reached.
+     registry_entry["secret_key"]``. The env key wins when central's
+     ``ABEROWL_SECRET_KEY`` is set, so the fallback is unreachable in that case.
+     Precondition: central sets ``ABEROWL_SECRET_KEY``.
 
-There are no worker restarts, no ontology reloads, and no downtime.
+Where those hold, rotation needs no worker restart, no ontology reload and no
+downtime. Where any of them does not, rotating will break the affected path.
 
 This script talks to Redis and to ``servers.json``, both of which live inside the
 central-server container, so run it THERE:

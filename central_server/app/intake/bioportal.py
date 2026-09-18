@@ -15,10 +15,8 @@ import aiohttp
 logger = logging.getLogger(__name__)
 
 BIOPORTAL_API_URL = "https://data.bioontology.org"
-# Configurable via env (BioPortal keys expire); falls back to the bundled key.
-BIOPORTAL_API_KEY = os.getenv(
-    "BIOPORTAL_API_KEY", "7LWB1EK24e8Pj7XorQdG9FnsxQA3H41VDKIxN1BeEv5n"
-)
+# Credentials must be supplied by the operator; never bundle a fallback key.
+BIOPORTAL_API_KEY = os.getenv("BIOPORTAL_API_KEY", "")
 
 # Max concurrent requests to BioPortal to avoid rate limiting
 _CONCURRENCY_LIMIT = 5
@@ -28,13 +26,17 @@ async def _get_json(
     session: aiohttp.ClientSession, url: str, params: Optional[Dict] = None
 ) -> Optional[Any]:
     """GET a BioPortal API endpoint and return parsed JSON, or None on error."""
-    base_params = {"apikey": BIOPORTAL_API_KEY}
+    if not BIOPORTAL_API_KEY:
+        logger.warning("BioPortal access skipped: BIOPORTAL_API_KEY is not configured")
+        return None
+    base_params = {}
     if params:
         base_params.update(params)
     try:
         async with session.get(
             url,
             params=base_params,
+            headers={"Authorization": f"apikey token={BIOPORTAL_API_KEY}"},
             timeout=aiohttp.ClientTimeout(total=60),
             allow_redirects=True,
         ) as resp:
@@ -48,7 +50,7 @@ async def _get_json(
         logger.warning("BioPortal GET %s timed out", url)
         return None
     except Exception as e:
-        logger.error("BioPortal GET %s error: %s", url, e)
+        logger.error("BioPortal GET failed (%s)", type(e).__name__)
         return None
 
 

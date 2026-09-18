@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -34,7 +35,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 
-BP_API_KEY = "24e0413e-54e0-11e0-9d7b-005056aa3316"
+BP_API_KEY = os.environ.get("BIOPORTAL_API_KEY", "")
 BP_API = "https://data.bioontology.org"
 OBO_REGISTRY_URL = "http://purl.obolibrary.org/meta/ontologies.jsonld"
 
@@ -73,8 +74,10 @@ def obo_to_metadata(ont_id: str, entry: dict) -> dict:
 
 
 def bp_fetch(acronym: str, retries: int = 2) -> dict | None:
-    url = f"{BP_API}/ontologies/{acronym}?apikey={BP_API_KEY}"
-    req = Request(url, headers={"Accept": "application/json"})
+    if not BP_API_KEY:
+        return None
+    url = f"{BP_API}/ontologies/{acronym}"
+    req = Request(url, headers={"Accept": "application/json", "Authorization": f"apikey token={BP_API_KEY}"})
     for attempt in range(retries + 1):
         try:
             with urlopen(req, timeout=30) as resp:
@@ -96,8 +99,10 @@ def bp_fetch(acronym: str, retries: int = 2) -> dict | None:
 
 def bp_fetch_latest_submission(acronym: str) -> dict | None:
     """Submission has richer fields — description, documentation, license."""
-    url = f"{BP_API}/ontologies/{acronym}/latest_submission?apikey={BP_API_KEY}&display=description,documentation,homepage,license,publication,released,version,contact"
-    req = Request(url, headers={"Accept": "application/json"})
+    if not BP_API_KEY:
+        return None
+    url = f"{BP_API}/ontologies/{acronym}/latest_submission?display=description,documentation,homepage,license,publication,released,version,contact"
+    req = Request(url, headers={"Accept": "application/json", "Authorization": f"apikey token={BP_API_KEY}"})
     try:
         with urlopen(req, timeout=30) as resp:
             return json.loads(resp.read())
