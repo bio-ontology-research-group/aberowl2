@@ -56,44 +56,12 @@ For more detail see [central_server/README.md](central_server/README.md)
 
 ## Quick start
 
-### 1. Central stack
-
-```bash
-cd central_server
-docker compose up -d
-# central API:  http://localhost:8000
-# MCP server:   http://localhost:8766/mcp
-```
-
-### 2. A single-ontology worker
-
-The worker mounts your ontologies directory at `/data` and loads
-`/data/<ontology_id>_active.owl`, so the file goes directly in that directory,
-named after the id. Pick an id, place the file, then choose a port:
-
-```bash
-export ONTOLOGIES_HOST_PATH="$PWD/data"
-mkdir -p "$ONTOLOGIES_HOST_PATH"
-cp /path/to/your_ontology.owl "$ONTOLOGIES_HOST_PATH/myont_active.owl"
-./start_docker.sh myont 89   # ontology id, then nginx reverse proxy port
-```
-
-Shut it down with:
-
-```bash
-./shutdown_docker.sh 89
-```
-
-For multi-ontology workers and an end-to-end local test (central + worker + a couple
-of ontologies), see `central_server/README.md` → "Local end-to-end testing".
-
-## Self-hosting your own instance
-
-Run a private, single-host AberOWL 2 over your own ontologies with one command. Loading
-and reasoning happen on your own host, and an AI agent can reason over your ontologies
-through the built-in MCP server. Downloads require network access, and if you connect an
-external LLM provider the agent may send ontology terms and tool results to it. See
-`deploy/SELF_HOSTING.md` for the details.
+Run a private, single-host AberOWL 2 over your own ontologies with one command.
+Loading and reasoning happen on your own host, and an AI agent can reason over
+your ontologies through the built-in MCP server. Downloads require network
+access, and if you connect an external LLM provider the agent may send ontology
+terms and tool results to it. See [`deploy/SELF_HOSTING.md`](deploy/SELF_HOSTING.md)
+for the details.
 
 ```bash
 # defaults to a bundled example (the pizza ontology), so this works out of the box:
@@ -120,9 +88,53 @@ the scan of local files and `sources.txt`.
 
 The stack starts Elasticsearch, Redis, the central server, and one worker on an
 internal network. It then loads, classifies, and indexes each ontology for search.
+It pulls prebuilt images, so it needs no local build.
 
 See [`deploy/SELF_HOSTING.md`](deploy/SELF_HOSTING.md) and the ready-to-run
 [`examples/selfhost/`](examples/selfhost/).
+
+## Running the components separately
+
+The stack above is the supported way to run AberOWL 2 on one host. The pieces can
+also be started individually, which is what the integration tests do and what you
+want when changing the worker or the central server. These commands build from
+this checkout rather than pulling images, and they are meant for a development
+machine rather than for exposure to a network.
+
+### Central stack only
+
+```bash
+cd central_server
+docker compose up -d
+# central API:  http://localhost:8000
+# MCP server:   http://localhost:8766/mcp
+```
+
+### A single worker
+
+The worker mounts your ontologies directory at `/data` and loads
+`/data/<ontology_id>_active.owl`, so the file goes directly in that directory,
+named after the id. Pick an id, place the file, then choose a port:
+
+```bash
+export ONTOLOGIES_HOST_PATH="$PWD/data"
+mkdir -p "$ONTOLOGIES_HOST_PATH"
+cp /path/to/your_ontology.owl "$ONTOLOGIES_HOST_PATH/myont_active.owl"
+./start_docker.sh myont 89   # ontology id, then nginx reverse proxy port
+```
+
+Shut it down with:
+
+```bash
+./shutdown_docker.sh 89
+```
+
+For multi-ontology workers and an end-to-end local test (central + worker + a couple
+of ontologies), see `central_server/README.md` → "Local end-to-end testing".
+
+In production the workers are started directly by `deploy/launch_workers.py` from a
+distribution plan, without the per-worker proxy used above. See
+[`deploy/README.md`](deploy/README.md).
 
 ## Docker images
 

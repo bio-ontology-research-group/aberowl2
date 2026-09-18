@@ -242,14 +242,43 @@ def test_get_statistics(pizza_stack):
 
 
 @pytest.mark.slow
-@pytest.mark.timeout(120)
+@pytest.mark.timeout(300)
 def test_get_statistics_all(pizza_stack):
-    """getStatistics without ontologyId returns summary of all loaded ontologies."""
-    r = _get(f"{pizza_stack}/getStatistics.groovy")
+    """getStatistics without ontologyId summarises every loaded ontology.
+
+    The summary only applies when more than one ontology is loaded: with exactly
+    one the servlet resolves to it and returns that ontology's own statistics.
+    So load a second one for the duration of this test, then remove it, because
+    the auto-resolving tests need the stack back at a single ontology.
+    """
+    second = "pizza_stats_probe"
+    r = _post(f"{pizza_stack}/addOntology.groovy", json_body={
+        "ontologyId": second,
+        "owlPath": "/data/pizza_active.owl",
+        "reasonerType": "elk",
+        "secretKey": TEST_SECRET_KEY,
+    })
     assert r.status_code == 200
-    body = r.json()
-    assert "ontologies" in body
-    assert len(body["ontologies"]) >= 1
+    task = _poll_task(pizza_stack, r.json()["taskId"], timeout=120)
+    assert task["status"] == "success", task
+
+    try:
+        r = _get(f"{pizza_stack}/getStatistics.groovy")
+        assert r.status_code == 200
+        body = r.json()
+        assert "ontologies" in body
+        ids = {entry["ontologyId"] for entry in body["ontologies"]}
+        assert {"pizza", second} <= ids
+    finally:
+        cleanup = _post(f"{pizza_stack}/removeOntology.groovy", json_body={
+            "ontologyId": second,
+            "secretKey": TEST_SECRET_KEY,
+        })
+        assert cleanup.status_code == 200
+
+    # Back to one ontology, so auto-resolution works for the tests that follow.
+    loaded = _get(f"{pizza_stack}/listLoadedOntologies.groovy").json()
+    assert [o["ontologyId"] for o in loaded["ontologies"]] == ["pizza"]
 
 
 # ---------------------------------------------------------------------------
@@ -324,9 +353,9 @@ def test_validate_ontology_bad_path(pizza_stack):
 @pytest.mark.timeout(300)
 def test_update_ontology_with_ontology_id(pizza_stack):
     """updateOntology hot-swaps using new ontologyId parameter."""
-    ont_dir = ONT_HOST_PATH / "pizza"
-    staging = ont_dir / "pizza_staging2.owl"
-    shutil.copy2(ont_dir / "pizza_active.owl", staging)
+    # ONT_HOST_PATH is what the worker sees as /data, so stage the copy there.
+    staging = ONT_HOST_PATH / "pizza_staging2.owl"
+    shutil.copy2(ONT_HOST_PATH / "pizza_active.owl", staging)
 
     r = _post(f"{pizza_stack}/updateOntology.groovy", json_body={
         "owlPath": "/data/pizza_staging2.owl",
