@@ -18,7 +18,7 @@ we own the database -- changing ONLY the `url` field and preserving the
 existing secret_key and status.
 
 It talks to Redis via `docker exec <container> redis-cli`, so run it on the
-host where the central-redis container lives (onto). Reads use HGET; the
+host where the central-redis container lives. Reads use HGET; the
 single write per ontology uses `redis-cli -x HSET` with the JSON piped on
 stdin to avoid shell-quoting issues.
 
@@ -30,8 +30,8 @@ SAFETY
   deploy/register_workers.py for brand-new ids).
 - Prints a before -> after diff for every change.
 
-USAGE (on onto)
----------------
+USAGE (on the central host)
+---------------------------
     # Read-only: inspect current entries
     python3 scripts/repoint_ontology.py --sudo --inspect mesh icd10pcs
 
@@ -185,7 +185,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Re-point ontology registry entries to a worker (direct Redis edit).")
     ap.add_argument("--redis-container", default="aberowl-central-redis",
                     help="Name of the central Redis container (default: aberowl-central-redis)")
-    ap.add_argument("--sudo", action="store_true", help="Prefix docker commands with sudo (needed on onto)")
+    ap.add_argument("--sudo", action="store_true",
+                    help="Prefix docker commands with sudo (needed where the invoking user "
+                         "is not in the docker group)")
 
     ap.add_argument("--inspect", nargs="+", metavar="ID",
                     help="Read-only: print current registry entries for these ontology ids and exit")

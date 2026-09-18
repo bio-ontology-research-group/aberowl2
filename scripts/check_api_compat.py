@@ -3,23 +3,13 @@
 check_api_compat.py — measure how much of the AberOWL 1 REST API a given
 AberOWL deployment still serves.
 
-Why this exists
----------------
-AberOWL 2 changed the API paths, so downstream consumers (Bioregistry, BARTOC,
-tetherless-world/voo, and several of our own services) silently broke. The plan
-in `API_V1_COMPAT_PLAN.md` restores the v1 surface. This script is the metric
-for that work: it replays the twelve operations AberOWL 1 declared in its own
-OpenAPI spec and reports, per operation, whether the response still matches the
-v1 contract.
-
-The operation list and the expected response shapes are NOT reconstructed from
-memory. They come from two artifacts:
-
-  * `~/Git/aberowlweb/aberowlweb/static/openapi/schema.yml` — the OpenAPI 3.0
-    spec the old Django app served at its own /docs. Twelve operations.
-  * a real archived response, `tests/fixtures/aberowl_v1_ontology_list.json`
-    (web.archive.org snapshot 20221120122151 of
-    http://aber-owl.net/api/ontology/?drf_fromat=json&format=json).
+Contract and provenance
+-----------------------
+The probe checks twelve legacy REST operations and their expected response
+shapes. The operation definitions and assertions live in this script. The
+ontology-list fixture is an archived AberOWL 1 response:
+`tests/fixtures/aberowl_v1_ontology_list.json`. Its source, retrieval date and
+selection method are documented in `tests/fixtures/README.md`.
 
 Usage
 -----
@@ -252,7 +242,8 @@ def _decode(raw: bytes) -> Any:
 
 
 # ---------------------------------------------------------------------------
-# Shape assertions, derived from the archived v1 response and schema.yml
+# Shape assertions, derived from the archived v1 response fixture named in the
+# module docstring above.
 # ---------------------------------------------------------------------------
 
 # Keys Bioregistry's getter reads (bioregistry/external/aberowl/__init__.py).

@@ -67,11 +67,14 @@ docker compose up -d
 
 ### 2. A single-ontology worker
 
-Place your ontology in `./data`, then choose a port and start a worker:
+A worker looks for an ontology under `<ontologies_dir>/<ontology_id>/<ontology_id>_active.owl`.
+Pick an id, place the file, then choose a port and start a worker:
 
 ```bash
-cp /path/to/your_ontology.owl ./data/
-./start_docker.sh data/your_ontology.owl 89   # nginx reverse proxy on port 89
+export ONTOLOGIES_HOST_PATH="$PWD/data"
+mkdir -p "$ONTOLOGIES_HOST_PATH/myont"
+cp /path/to/your_ontology.owl "$ONTOLOGIES_HOST_PATH/myont/myont_active.owl"
+./start_docker.sh myont 89   # ontology id, then nginx reverse proxy port
 ```
 
 Shut it down with:
@@ -85,9 +88,11 @@ of ontologies), see `central_server/README.md` → "Local end-to-end testing".
 
 ## Self-hosting your own instance
 
-Run a private, single-host AberOWL 2 over your own ontologies with one command. Your
-ontologies never leave your machine, and an AI agent can reason over them locally
-through the built-in MCP server.
+Run a private, single-host AberOWL 2 over your own ontologies with one command. Loading
+and reasoning happen on your own host, and an AI agent can reason over your ontologies
+through the built-in MCP server. Downloads require network access, and if you connect an
+external LLM provider the agent may send ontology terms and tool results to it. See
+`deploy/SELF_HOSTING.md` for the details.
 
 ```bash
 # defaults to a bundled example (the pizza ontology), so this works out of the box:

@@ -32,8 +32,7 @@ python3 score_dl.py --gold gold_all.jsonl \
 Use these five complete files explicitly. A `runs_*.jsonl` wildcard can also
 select partial or exploratory runs in a working checkout. Previously generated
 `scored_*.jsonl` files are derived outputs; regenerate the current scores from the
-listed raw files. `make_figure.py` is a historical plotting helper with older
-default inputs and is not used by the current manuscript.
+listed raw files.
 
 ## Questions and conditions
 
@@ -73,8 +72,8 @@ The builder selects entities with a single distinct label, filters answer sets
 to 3–25 members, and shuffles candidates with a configurable seed (default 42).
 For T2, at least half the answers must be absent from its explicit
 subclass-restriction check. The original seed is not recorded in the released
-gold files. `gold_all.jsonl` fixes the sampled questions and answer sets;
-`gold_go.jsonl`, `gold_cl.jsonl` and `gold_so.jsonl` retain the per-ontology sets.
+gold files. `gold_all.jsonl` fixes the sampled questions and answer sets for
+all three ontologies.
 
 `classes_go.txt`, `classes_cl.txt` and `classes_so.txt` record the class IRIs used
 for offline fabrication scoring. **These universes do not freeze ontology axioms

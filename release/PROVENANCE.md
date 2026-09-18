@@ -1,17 +1,30 @@
 # Release provenance
 
-The working release candidate dated 16 September 2026 supports **offline rescoring of
+The working tree carries a release cleanup that is **not yet committed**. It retired
+the standalone LLM query parsers and the worker interface's LLM tab, removed 50
+audited paths, and sanitised retained documentation, scripts and compose comments.
+The selected bytes therefore correspond to no commit. The earlier archive predates
+the cleanup, retains the privacy findings the cleanup fixed, and must not be
+published. The current file selection and checksums describe the working tree.
+
+The working release candidate dated 18 September 2026 supports **offline rescoring of
 saved responses**. Missing historical records prevent exact repetition of the model
 calls and reconstruction of the services that answered them.
 
 ## Source revisions
 
-The software base commit inspected for the revision is
-`f22901efcd693483cb844eb6ef5fa7e148b87b8c`. Release-cleanup changes are not yet
-committed; this base commit does not identify their final contents. The separate
-manuscript checkout has base commit `53b2a47bc419b3f6df091ac283c4d5088d0909b1`, also
-with subsequent edits. It is excluded from the software package. Final release
-commits and the version DOI remain unset in [provenance.json](provenance.json).
+The audited software revision is `4f81f12f6c2a8105516cf51524d3049fff1f373f`, and the
+cleanup's changes sit on top of it uncommitted, so no revision names the exported
+bytes. The separate manuscript source revision is
+`ed2c4e3baa1c6c254f7ef2fe1de2f7fedbe8be12`. The software package excludes the
+manuscript repository and generated manuscript PDFs.
+
+The archive selects software, data and documentation from the working tree.
+Four packaging records contain metadata generated after that commit:
+`release/provenance.json`, `release/PROVENANCE.md`, `release/contents.json` and
+`release/SHA256SUMS`. These records identify the source revisions, file selection
+and checksums of the exported bytes. The archive excludes local working changes
+and Git history. The version DOI remains unset in [provenance.json](provenance.json).
 
 [contents.json](contents.json) selects the package files. The release checksum
 inventory identifies the exported bytes; the reproduction report independently

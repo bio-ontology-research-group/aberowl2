@@ -32,8 +32,9 @@ test = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 timeout = 900          # 15 min hard cap per test (GO classification can be slow)
-testpaths = ["tests"]
-# Exclude pre-existing tests that require gevent (aberowlapi/)
+testpaths = ["tests", "central_server/tests"]
+# Exclude pre-existing tests that require gevent (aberowlapi/). They also reach
+# a worker at import time, so they must stay out of the default run.
 norecursedirs = ["tests/aberowlapi"]
 markers = [
     "slow: tests that spin up Docker containers and may take several minutes",

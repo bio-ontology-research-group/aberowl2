@@ -1,28 +1,10 @@
 # Self-hosting AberOWL 2
 
-Goal: let anyone run their **own** AberOWL 2 over their **own** set of ontologies
-with a single command, on one host. This is a second delivery mode alongside the
-public hosted service (aber-owl.net):
-
-- **Hosted repository**: the curated public corpus at aber-owl.net.
-- **Self-hosted**: you deploy a private instance over your own K ontologies, so
-  you do not depend on the public service and **privacy-sensitive ontologies never
-  leave your infrastructure** (your LLM agent reasons over them locally via the
-  built-in MCP server, with no external calls).
-
-> Status: **implemented**. Verified on a clean host (2026-07-20); see “Implementation checklist”
-> for completed and optional work.
-
-## Why single-host is simple
-The building blocks already exist:
-- `central_server/docker-compose.yml`: central-server + redis + `elasticsearch:7.17.10` on `aberowl-net`.
-- `deploy/docker-compose.worker.yml`: a worker (Groovy/OWLAPI + ELK) that reaches ES by
-  **container name** (`CENTRAL_ES_URL=http://elasticsearch:9200`) on `aberowl-net`.
-
-When central, ES and the worker are co-located on one host they share `aberowl-net`,
-so docker DNS resolves the names and **none of the cross-host IP wiring the production
-cluster needed applies here**. That is the whole reason a turnkey single-host path is
-feasible with little new code.
+Run a single-host instance over your own ontologies with Docker Compose. The
+worker classifies ontologies locally and exposes them through the central API
+and MCP server. Downloads require network access. If you connect an external
+LLM provider, the agent may send ontology terms and tool results to that provider;
+configure the agent to meet your data-handling requirements.
 
 ## How you feed in ontologies
 
@@ -44,14 +26,15 @@ my-ontologies/
 ```
 
 For per-ontology control, add an `ontologies.config.json` with a list of
-`{"id", "path" | "url", "reasoner"}` for per-ontology control. When present it is
+`{"id", "path" | "url", "reasoner"}` objects. When present it is
 **authoritative and replaces** the files/`sources.txt` scan.
 
 The `ontology-prepare` step turns whatever it finds into a single canonical
 `ontologies.json` that the worker loads (`deploy/selfhost_init.py`, unit-tested in
 `tests/test_selfhost_init.py`).
 
-## UX
+## Start the service
+
 ```bash
 # defaults to examples/selfhost/ontologies (the pizza ontology) so `up` just works:
 docker compose -f deploy/docker-compose.selfhost.yml up
@@ -62,41 +45,18 @@ ONTOLOGIES_DIR=$PWD/my-ontologies docker compose -f deploy/docker-compose.selfho
 ```
 
 ## How it fits together
-Six services on an internal `aberowl-net` (container-name DNS, no cross-host IP wiring):
+
+Six services share a Compose network named `aberowl-net`:
 `redis`, `elasticsearch`, `central-server`, one `worker`, and two one-shot services:
 `ontology-prepare` (download + write `ontologies.json`, before the worker) and
 `ontology-register` (register each loaded ontology with central + trigger its index,
 after the worker classifies).
 
-## Implementation checklist
-- [x] `deploy/docker-compose.selfhost.yml`: redis + ES + central + one worker + two init one-shots
-      on `aberowl-net`; worker `ONTOLOGY_PATH=/data/ontologies.json`, ontologies bind-mounted.
-- [x] `ONTOLOGIES_HOST_PATH=/data` on central so the reindex `owlPath` matches the worker mount.
-- [x] Registration + indexing on `up` via `ontology-register` (container-name URLs, existing
-      `/register` + `/admin/.../reindex` endpoints).
-- [x] Three input modes (bare files / `sources.txt` URLs / `ontologies.config.json`) in
-      `deploy/selfhost_init.py`, with unit tests.
-- [x] Quickstart + tiny example (`examples/selfhost/`, ships the pizza ontology) to `up` out of the box.
-- [x] Verified on a clean host (2026-07-20): `up` -> worker classifies pizza -> registers -> indexes;
-      DL query returns 8 subclasses of Pizza, search returns hits, and all 10 MCP tools list over
-      `http://localhost:8766/mcp`. The `ontology-register` step waits for the ES index to populate (and
-      re-triggers once if the first async reindex lands empty), so search works the moment `up` settles.
-- [x] MCP endpoint published at `http://localhost:8766/mcp` (central binds `0.0.0.0:8766`).
-- [ ] Auto-generate `ABEROWL_SECRET_KEY` + `ADMIN_PASSWORD` on first run (currently sensible
-      dev defaults; fine for a private single host, but should self-generate).
-- [x] Bake the SPA into the central image (multi-stage `central_server/Dockerfile`: a Node stage runs
-      `npm ci && npm run build`, the final stage `COPY --from` the built `dist/`), so the web UI is
-      served with no local `npm build`. Prod is unaffected; it bind-mounts its own `dist/` over it.
-      Verified: `http://localhost:8000` serves the real SPA (title, `#root`, `/assets/*.js` -> 200).
-- [ ] Optional nginx + friendly `/mcp` route. Not implemented; there is no
-      `docker-compose.selfhost.override.yml` in the repository.
-- [x] Swap `build:` for the published `kaustborg/aberowl-central` + `kaustborg/aberowl-worker` images
-      once they exist, so a user pulls instead of building.
-
 ## Settings
 
 Every variable has a working default, so `up` does not require overrides. Override by
-exporting the variable or putting it in a `.env` file next to the compose file.
+exporting the variable or supplying a private environment file with Compose
+`--env-file`.
 
 | Variable | Default | What it does |
 |---|---|---|
@@ -112,6 +72,8 @@ ontology set may need one; give the worker a `mem_limit` and set `JAVA_OPTS`
 if you hit an out-of-memory kill.
 
 ## Notes
-- Multi-worker packing (`plan_workers.py`) is for large corpora; a self-host with K
-  ontologies runs one worker by default, and can scale to a few by copying the worker service.
-- The public deploy path (cross-host, see `deploy/README.md`) is unchanged; this is additive.
+
+- This stack runs one worker. Larger corpora can use the bulk worker provisioning
+  workflow with separate per-worker configurations and registration.
+- See [Deployment and administration](README.md) for the separate central stack
+  and bulk worker provisioning.

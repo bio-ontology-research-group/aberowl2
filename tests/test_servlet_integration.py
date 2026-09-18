@@ -55,6 +55,9 @@ def test_health_endpoint(pizza_stack):
     r = _get(f"{pizza_stack}/health.groovy")
     assert r.status_code == 200
     body = r.json()
+    # "loading" is accepted deliberately: the fixture's readiness probe waits for
+    # the endpoint to answer, not for classification to finish, so a worker can
+    # still be classifying here. Assert the loaded-ontology invariants instead.
     assert body["status"] in ("ok", "loading")
     assert "totalLoaded" in body
     assert body["totalLoaded"] >= 1
@@ -113,6 +116,52 @@ def test_run_query_auto_ontology_id(pizza_stack):
 
 @pytest.mark.slow
 @pytest.mark.timeout(120)
+def test_run_query_label_superclasses(pizza_stack):
+    """Resolve the CheesyPizza label, whose IRI fragment is CheeseyPizza."""
+    r = _get(f"{pizza_stack}/runQuery.groovy", params={
+        "query": "'CheesyPizza'",
+        "type": "superclass",
+        "direct": "false",
+        "labels": "true",
+        "ontologyId": "pizza",
+    })
+    assert r.status_code == 200
+    results = r.json()["result"]
+    assert "http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza" in {
+        entry["class"] for entry in results
+    }
+    assert all(entry["ontology"] == "pizza" for entry in results)
+
+
+@pytest.mark.slow
+@pytest.mark.timeout(120)
+@pytest.mark.parametrize("query, fragment", [
+    ("Domain Thing", "DomainConcept"),
+    ("'Domain Thing'", "DomainConcept"),
+    ("Interesting Pizza", "InterestingPizza"),
+    ("'Interesting Pizza'", "InterestingPizza"),
+    ("Pizza", "Pizza"),
+])
+def test_run_query_entity_names(pizza_stack, query, fragment):
+    """Bare and quoted display names resolve to the intended named class.
+
+    DomainThing is the rdfs:label of DomainConcept; its spaced display name
+    exercises label normalization rather than an exact IRI-fragment lookup.
+    """
+    r = _get(f"{pizza_stack}/runQuery.groovy", params={
+        "query": query,
+        "type": "equivalent",
+        "labels": "true",
+        "ontologyId": "pizza",
+    })
+    assert r.status_code == 200
+    assert f"http://www.co-ode.org/ontologies/pizza/pizza.owl#{fragment}" in {
+        entry["class"] for entry in r.json()["result"]
+    }
+
+
+@pytest.mark.slow
+@pytest.mark.timeout(120)
 def test_run_query_invalid_ontology_id(pizza_stack):
     """runQuery returns 404 for unknown ontologyId."""
     r = _get(f"{pizza_stack}/runQuery.groovy", params={
@@ -159,13 +208,16 @@ def test_find_root(pizza_stack):
 @pytest.mark.slow
 @pytest.mark.timeout(120)
 def test_get_object_properties(pizza_stack):
-    """getObjectProperties returns property list."""
+    """getObjectProperties includes the known root property hasCountryOfOrigin."""
     r = _get(f"{pizza_stack}/getObjectProperties.groovy", params={
         "ontologyId": "pizza",
     })
     assert r.status_code == 200
     body = r.json()
-    assert "result" in body
+    assert "http://www.co-ode.org/ontologies/pizza/pizza.owl#hasCountryOfOrigin" in {
+        entry["class"] for entry in body["result"]
+    }
+    assert all(entry["ontology"] == "pizza" for entry in body["result"])
 
 
 # ---------------------------------------------------------------------------

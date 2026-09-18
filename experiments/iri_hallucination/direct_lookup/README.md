@@ -26,8 +26,10 @@ python3 score.py --out-dir /tmp/aberowl-direct-lookup
 The scorer reads `responses.jsonl` and `../gold_dedup.jsonl`. It writes
 `scored.jsonl` with per-item outcomes and `summary.json` with counts, response
 dates and input SHA-256 hashes. `--gold` and `--responses` can override the
-input paths. With no `--out-dir`, the scorer refreshes those two derived
-outputs in this directory; it never changes the raw response snapshot.
+input paths. The release ships the raw snapshot and the scorer, not the derived
+outputs; regenerate them with either command above. Always pass `--out-dir`: with
+no `--out-dir` the scorer writes the two derived files into this source directory.
+It never changes the raw response snapshot.
 
 ## Success criteria and results
 

@@ -1,18 +1,19 @@
 {
   "schema_version": 1,
-  "prepared_on": "2026-09-16",
-  "status": "working release candidate; not deposited",
+  "prepared_on": "2026-09-18",
+  "status": "Release cleanup applied to the working tree and not yet committed; archive rebuild pending; not deposited",
   "software": {
-    "base_commit": "f22901efcd693483cb844eb6ef5fa7e148b87b8c",
+    "base_commit": "4f81f12f6c2a8105516cf51524d3049fff1f373f",
     "release_commit": null,
-    "includes_uncommitted_cleanup": true
+    "includes_uncommitted_cleanup": true,
+    "cleanup_scope": "Retired the standalone LLM query parsers and the worker UI LLM tab, then removed 50 audited paths and sanitised retained documentation, scripts and compose comments. See release/contents.json."
   },
   "manuscript": {
     "base_commit": "53b2a47bc419b3f6df091ac283c4d5088d0909b1",
-    "release_commit": null,
+    "release_commit": "ed2c4e3baa1c6c254f7ef2fe1de2f7fedbe8be12",
     "separate_repository": true,
     "included_in_software_package": false,
-    "includes_uncommitted_edits": true
+    "includes_uncommitted_edits": false
   },
   "version_doi": null,
   "file_selection": "release/contents.json",
@@ -46,7 +47,7 @@
   "reasoning": {
     "scored_runs": 2400,
     "gold_expressions": 120,
-    "model_run_dates": "approximately August–September 2026",
+    "model_run_dates": "approximately August\u2013September 2026",
     "service_commit": null,
     "original_sampling_seed": null,
     "tool_characters_visible_and_logged": 6000,
@@ -111,5 +112,18 @@
     "Complete reasoning provider/call mapping and serving configurations",
     "Complete grounding tool contexts",
     "Historical dependency environment and model/provider terms"
-  ]
+  ],
+  "archive": {
+    "source_commit": "4f81f12f6c2a8105516cf51524d3049fff1f373f",
+    "selection": "release/contents.json",
+    "metadata_generated_after_source_commit": [
+      "release/provenance.json",
+      "release/PROVENANCE.md",
+      "release/contents.json",
+      "release/SHA256SUMS"
+    ],
+    "git_history_included": false,
+    "status": "Superseded candidate built before the cleanup. It retains privacy findings the cleanup fixed and must not be published.",
+    "superseded": true
+  }
 }

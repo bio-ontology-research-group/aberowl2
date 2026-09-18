@@ -1,5 +1,40 @@
 # AberOWL2 changelog
 
+## 2026-09-18: Release preparation
+
+### Removed
+- The standalone LLM query parser services (`agents/query_parser.py`,
+  `agents/query_parser_v2.py`, `Dockerfile.llm`) and the worker interface's LLM
+  tab. Natural-language query parsing is no longer part of the worker. The MCP
+  server and the evaluation code are unaffected.
+- The legacy Manchester-syntax parser classes, the standalone Elasticsearch
+  indexer image and its entrypoint, the retired worker SPARQL servlet's tests,
+  and superseded derived scoring outputs. The scorers that regenerate those
+  outputs are retained.
+- Five fixed-port worker diagnostics, superseded by
+  `tests/test_servlet_integration.py`, which now asserts concrete IRIs, the
+  label-to-superclass contract and the spaced and quoted entity-name cases.
+
+### Fixed
+- `shutdown_docker.sh` wrote a Compose override for `elasticsearch` and
+  `indexer` services that no longer exist in the worker stack, and removed a
+  volume belonging to that retired layout. It now delegates to
+  `reload_docker.sh --stop`.
+- `start_docker.sh` read the wrong positional argument, so its documented
+  `central_es_url` parameter never took effect.
+- The README quick-start passed a file path where an ontology id is expected and
+  placed the ontology where the worker does not mount it. It now documents the
+  real `<ontologies_dir>/<id>/<id>_active.owl` convention.
+
+### Changed
+- `central_server/tests/` now runs in CI and is part of `testpaths`. It was
+  previously collected by neither.
+- The self-hosting privacy wording no longer claims unconditionally that
+  ontologies never leave the machine, since an external LLM provider receives
+  ontology terms and tool results.
+- Site-specific hosts, logins and paths were removed from retained scripts,
+  documentation and Compose comments.
+
 ## 2026-04-03 / 2026-04-04: Complete system overhaul
 
 ### Phase 1: Multi-ontology container architecture
@@ -83,8 +118,8 @@
 
 ### Phase 10: Deployment
 - **Live at https://beta.aber-owl.net** with HTTPS (Let's Encrypt).
-- 3-tier proxy: borg-server → frontend/frontend1 → onto (cbontsr01).
-- Central stack: FastAPI + Redis + Elasticsearch + Virtuoso on onto.
+- Three-tier reverse proxy for the hosted deployment.
+- Central stack: FastAPI + Redis + Elasticsearch + Virtuoso.
 - 14 worker containers hosting 81+ ontologies, 896,000+ classes.
 - See `deploy/README.md` for full deployment documentation.
 

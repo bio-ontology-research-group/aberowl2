@@ -193,9 +193,9 @@ CLAUDE.local.md
 /examples/selfhost/ontologies/sources.txt
 
 # --- Secrets: never commit ---
-# .aberowl_secret_key was tracked on a PUBLIC repo from 2026-03-05 and is baked
-# into the published worker image by Dockerfile.api. Treat it as compromised and
-# rotate; removing it from git does not undo the exposure.
+# A secret-key file was tracked here in the past. Rotate any key that was ever
+# committed: deleting it from the working tree does not undo the exposure, and
+# images built from that history may still carry it.
 .aberowl_secret_key
 *.secret_key
 *.pem
@@ -203,6 +203,11 @@ CLAUDE.local.md
 !*.pub
 
 # --- Local working notes and personal files: never pushed ---
+# These carry host addresses, logins and deploy paths that must not reach the
+# public repository.
+DEPLOY_FOLLOWUPS.md
+TODO.md
+tmp/
 *_PLAN.md
 CLAUDE.local.md*
 *.bak-rename
@@ -216,3 +221,6 @@ results/
 # do not belong in a public repository. AGENTS.md is a symlink to CLAUDE.md.
 CLAUDE.md
 AGENTS.md
+
+# --- Local email/correspondence PDFs: never pushed ---
+misc/*.pdf

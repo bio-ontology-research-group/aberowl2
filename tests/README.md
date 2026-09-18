@@ -7,8 +7,14 @@ The full suite includes Docker integration tests and live service calls. See
 
 ```bash
 # From the repository root
-uv run --extra test pytest tests/ -v
+uv run --extra test pytest tests/ central_server/tests/ -v
 ```
+
+The suite lives in two directories. `tests/` holds the integration and API
+tests; `central_server/tests/` holds the central-service regression tests.
+Both are in `testpaths`, so a bare `pytest` collects both, but an explicit
+`pytest tests/` collects only the first. `tests/aberowlapi/` is excluded from
+the default run: it needs gevent and reaches a worker while importing.
 
 ---
 
@@ -27,7 +33,7 @@ uv run --extra test pytest tests/ -v
 
 ```bash
 # Only fast tests (no Docker)
-uv run --extra test python -m pytest tests/ -v -m "not slow and not live and not bioportal"
+uv run --extra test python -m pytest tests/ central_server/tests/ -v -m "not slow and not live and not bioportal"
 
 # Only the BioPortal fetch test
 uv run --extra test pytest tests/ -v -m bioportal

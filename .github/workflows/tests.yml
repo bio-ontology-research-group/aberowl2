@@ -33,6 +33,6 @@ jobs:
       # project environment; `python -m pytest` always uses the venv's.
       - name: Run fast tests
         run: >
-          uv run --extra test python -m pytest tests/
+          uv run --extra test python -m pytest tests/ central_server/tests/
           -m "not slow and not live and not bioportal"
           -v --timeout=120
