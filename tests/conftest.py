@@ -181,9 +181,12 @@ def _make_ont_stack(ontology_id: str, owl_src: Path, nginx_port: int):
     - yields the base API URL
     - tears down the stack on exit
     """
-    ont_dir = ONT_HOST_PATH / ontology_id
-    ont_dir.mkdir(parents=True, exist_ok=True)
-    dest = ont_dir / f"{ontology_id}_active.owl"
+    # ONT_HOST_PATH is mounted at /data and docker-compose.yml starts the worker
+    # on /data/<id>_active.owl, so the file belongs directly in that directory.
+    # Staging it in a per-ontology subdirectory leaves the worker crash-looping
+    # on "Ontology file/directory not found".
+    ONT_HOST_PATH.mkdir(parents=True, exist_ok=True)
+    dest = ONT_HOST_PATH / f"{ontology_id}_active.owl"
     if not dest.exists():
         shutil.copy2(owl_src, dest)
 

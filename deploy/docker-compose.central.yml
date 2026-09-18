@@ -65,7 +65,6 @@ services:
       # (triggerIndexing / updateOntology). Must equal the workers' ABEROWL_SECRET_KEY.
       - ABEROWL_SECRET_KEY=${ABEROWL_SECRET_KEY}
       - ONTOLOGIES_HOST_PATH=${ONTOLOGIES_PATH:-/data/aberowl/ontologies}
-      - ABEROWL_REPO_PATH=/app
       - ENABLE_MCP=${ENABLE_MCP:-true}
       - ENABLE_MCP_ONTOLOGY=${ENABLE_MCP_ONTOLOGY:-true}
       - MCP_ONTOLOGY_PORT=${MCP_ONTOLOGY_PORT:-8766}

@@ -32,6 +32,11 @@ test = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 timeout = 900          # 15 min hard cap per test (GO classification can be slow)
+# Apply timeouts to the test body only. Docker fixtures build images and wait up
+# to 180 s (600 s for GO) for a worker to classify, and that setup is charged to
+# whichever test runs first; without this, a per-test marker shorter than the
+# fixture's own budget kills setup and the suite cannot start from cold.
+timeout_func_only = true
 testpaths = ["tests", "central_server/tests"]
 # Exclude pre-existing tests that require gevent (aberowlapi/). They also reach
 # a worker at import time, so they must stay out of the default run.

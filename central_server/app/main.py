@@ -89,7 +89,6 @@ ONTOLOGIES_BASE_PATH = os.getenv("ONTOLOGIES_HOST_PATH", "/data/ontologies")
 # /data/aberowl/ontologies while this process must open /data/ontologies.
 # Reading the host path from inside the container silently finds nothing.
 ONTOLOGIES_DIR = os.getenv("ONTOLOGIES_DIR", "/data/ontologies")
-ABEROWL_REPO_PATH = os.getenv("ABEROWL_REPO_PATH", "/opt/aberowl")
 
 
 def _require_admin(credentials: HTTPBasicCredentials = Depends(_security)):
@@ -3057,108 +3056,6 @@ async def admin_infrastructure(
     """Health status of Elasticsearch."""
     return {
         "elasticsearch": "ok" if await es_mgr.health_check() else "error",
-    }
-
-
-# ---------------------------------------------------------------------------
-# Provisioning endpoint – spin up a new OntologyServer container
-# ---------------------------------------------------------------------------
-
-class ProvisionRequest(BaseModel):
-    ontology_id: str
-    source_url: str
-    port: int
-    name: Optional[str] = None
-    description: Optional[str] = None
-    detach: bool = True
-
-
-@app.post("/admin/provision_ontology")
-async def admin_provision_ontology(
-    payload: ProvisionRequest,
-    credentials: HTTPBasicCredentials = Depends(_require_admin),
-):
-    """
-    Provision a new per-ontology Docker stack.
-
-    Downloads the OWL file from source_url, writes it to the shared
-    ontologies volume, then calls reload_docker.sh to start the container stack.
-    """
-    ontology_id = payload.ontology_id.lower()
-    reload_script = os.path.join(ABEROWL_REPO_PATH, "reload_docker.sh")
-
-    if not os.path.exists(reload_script):
-        raise HTTPException(
-            status_code=500,
-            detail=f"reload_docker.sh not found at {reload_script}",
-        )
-
-    # Download the OWL file into the shared ontologies volume
-    ont_dir = Path(ONTOLOGIES_BASE_PATH) / ontology_id
-    ont_dir.mkdir(parents=True, exist_ok=True)
-    owl_dest = str(ont_dir / f"{ontology_id}_active.owl")
-
-    logger.info("Provisioning %s: downloading from %s", ontology_id, payload.source_url)
-    async with aiohttp.ClientSession() as session:
-        dl = await update_pipeline.download_ontology(payload.source_url, owl_dest, session)
-    if "error" in dl:
-        raise HTTPException(status_code=502, detail=f"Download failed: {dl['error']}")
-
-    secret_key = secrets.token_hex(32)
-    cmd = [
-        "bash",
-        reload_script,
-        "--ontology-id", ontology_id,
-        "--source-url", payload.source_url,
-        "--central-es-url", ELASTICSEARCH_URL,
-    ]
-    if payload.detach:
-        cmd.append("-d")
-
-    # The OWL file is already in the shared volume; pass its container-internal path
-    owl_container_path = f"/data/{ontology_id}_active.owl"
-    cmd += [owl_container_path, str(payload.port)]
-
-    env = {**os.environ, "ABEROWL_SECRET_KEY": secret_key}
-
-    logger.info("Running: %s", " ".join(cmd))
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=300,
-            env=env,
-            cwd=ABEROWL_REPO_PATH,
-        )
-        if result.returncode != 0:
-            raise HTTPException(
-                status_code=500,
-                detail=f"reload_docker.sh failed: {result.stderr[-1000:]}",
-            )
-    except subprocess.TimeoutExpired:
-        raise HTTPException(status_code=504, detail="Provisioning timed out")
-
-    # Pre-register the ontology in the registry
-    entry = {
-        "ontology_id": ontology_id,
-        "name": payload.name or ontology_id,
-        "description": payload.description or "",
-        "source": "manual",
-        "source_url": payload.source_url,
-        "source_md5": dl.get("md5"),
-        "secret_key": secret_key,
-        "update_status": "provisioned",
-        "last_updated": datetime.now(timezone.utc).isoformat(),
-        "update_history": [],
-    }
-    await _save_registry_entry(ontology_id, entry)
-
-    return {
-        "status": "provisioned",
-        "ontology_id": ontology_id,
-        "port": payload.port,
-        "secret_key": secret_key,
     }
 
 
