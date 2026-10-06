@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "status": "Release cleanup merged to main. The selected bytes are those of the release commit, except the four packaging records regenerated afterwards. Deposited: version DOI 10.5281/zenodo.22837021.",
+  "status": "Release cleanup merged to main. The selected bytes are those of the release commit, except the four packaging records regenerated afterwards. Deposited: Zenodo version 2.0, version DOI 10.5281/zenodo.22837022; concept DOI 10.5281/zenodo.22837021.",
   "path_base": "repository root; preserve relative paths",
   "inspected_code_commit": "4f81f12f6c2a8105516cf51524d3049fff1f373f",
   "groups": {

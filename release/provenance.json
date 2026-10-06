@@ -22,7 +22,8 @@
     "included_in_software_package": false,
     "includes_uncommitted_edits": false
   },
-  "version_doi": "10.5281/zenodo.22837021",
+  "version_doi": "10.5281/zenodo.22837022",
+  "concept_doi": "10.5281/zenodo.22837021",
   "file_selection": "release/contents.json",
   "supported_reproduction": "Offline rescoring of saved responses with the released scorers.",
   "grounding": {

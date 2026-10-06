@@ -39,7 +39,10 @@ Four packaging records contain metadata generated after that commit:
 `release/provenance.json`, `release/PROVENANCE.md`, `release/contents.json` and
 `release/SHA256SUMS`. These records identify the source revisions, file selection
 and checksums of the exported bytes. The archive excludes local working changes
-and Git history. The version DOI is `10.5281/zenodo.22837021`, recorded in [provenance.json](provenance.json).
+and Git history. The Zenodo record is labelled version `2.0`, with version DOI
+`10.5281/zenodo.22837022` and concept DOI `10.5281/zenodo.22837021`, recorded
+in [provenance.json](provenance.json). It contains both
+`aberowl2-v2.0-release.zip` and `aberowl2-v2.0.1-release.zip`.
 
 [contents.json](contents.json) selects the package files. The release checksum
 inventory identifies the exported bytes; the reproduction report independently
