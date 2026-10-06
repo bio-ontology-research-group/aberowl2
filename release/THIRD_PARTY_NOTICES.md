@@ -153,18 +153,21 @@ The archive excludes model weights. We checked these primary sources:
   “Generative AI Services”: Google does not claim ownership of original generated
   content/new intellectual property in outputs; third-party rights still apply.
 
-Several provider terms support output use or ownership. Five hosting providers
-in the saved routing records have clauses on benchmark disclosure, platform
-testing or AI development:
+Several model-provider terms support output use or ownership. Five hosting
+providers in the saved routing records have clauses on benchmark disclosure,
+platform testing or AI development:
 [AtlasCloud AUP section 7](https://www.atlascloud.ai/acceptable-use),
 [Darkbloom section 7](https://www.darkbloom.ai/terms),
 [SiliconFlow section 3.4(l)](https://docs.siliconflow.com/en/legals/terms-of-service),
 [StreamLake international section 3.1(k)](https://www.streamlake.ai/document/DOC/mgkchnd89grpt1961fw),
 and [Parasail section 2.2(h,m)](https://www.parasail.io/legal/terms-of-service).
-Their scope varies, and the records leave some historical routes and contracting
-terms unidentified. Applicability of each provider's terms remains unconfirmed.
+Their scope varies. Applicability of each provider's terms remains unconfirmed.
 
-The experiments evaluate ontology-task accuracy of model agents using AberOWL;
-provider names document routing provenance. AtlasCloud's clause concerns
-benchmarks of its Services, whereas these experiments do not compare hosting
-providers. This scope assessment supports retaining the saved answers and results.
+The experiments benchmark how language models use AberOWL tools on ontology
+tasks, including task accuracy. They do not measure or compare hosting-provider
+features such as speed, latency, throughput or reliability. Provider routing is
+only partially recorded: grounding routes were not logged, three reasoning run
+files record per-run sets of provider names without a call-to-call mapping, and
+two reasoning run files record no provider field. This distinction does not
+establish which provider terms applied to the historical calls or whether those
+terms permit publication of the saved answers and results.
