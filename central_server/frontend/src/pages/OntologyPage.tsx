@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { getOntology, getClass, dlQuery } from '../api/client'
+import { getOntology, getClass, dlQuery, browseRoots } from '../api/client'
 import type { OntologyDetail, ClassResult } from '../api/types'
 import TreeNode from '../components/TreeNode'
 import OWLExpression from '../components/OWLExpression'
@@ -49,6 +49,10 @@ export default function OntologyPage() {
   const selectedIri = params.get('class')
 
   const [rootClasses, setRootClasses] = useState<ClassResult[] | null>(null)
+  // The tree starts from the ontology's declared root terms when it has
+  // usable ones; showAllRoots switches to every direct subclass of owl:Thing.
+  const [declaredRoots, setDeclaredRoots] = useState(false)
+  const [showAllRoots, setShowAllRoots] = useState(false)
   const [expandPath, setExpandPath] = useState<Set<string> | undefined>()
 
   // Selected class detail
@@ -74,20 +78,40 @@ export default function OntologyPage() {
   }, [id])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the tree when navigating between ontologies
+    setRootClasses(null)
+    setDeclaredRoots(false)
+    setShowAllRoots(false)
+  }, [id])
+
+  useEffect(() => {
     if (!id || tab !== 'browse' || rootClasses !== null) return
-    dlQuery('<http://www.w3.org/2002/07/owl#Thing>', 'subclass', id, true)
-      .then(d => {
-        const results = d.result || []
+    let cancelled = false
+    const thingRoots = () => dlQuery('<http://www.w3.org/2002/07/owl#Thing>', 'subclass', id, true)
+      .then(d => ({ result: d.result || [], source: 'owl:Thing' as const }))
+    // A central server without /api/browse_roots: the owl:Thing roots, as before.
+    const roots = showAllRoots ? thingRoots() : browseRoots(id).catch(thingRoots)
+    roots
+      .then(({ result, source }) => {
+        if (cancelled) return
+        const results = [...(result || [])]
         results.sort((a, b) => {
           const aObs = a.deprecated || /^obsolete /i.test(labelOf(a)) ? 1 : 0
           const bObs = b.deprecated || /^obsolete /i.test(labelOf(b)) ? 1 : 0
           if (aObs !== bObs) return aObs - bObs
           return labelOf(a).localeCompare(labelOf(b))
         })
+        if (source === 'declared') setDeclaredRoots(true)
         setRootClasses(results)
       })
-      .catch(() => setRootClasses([]))
-  }, [id, tab, rootClasses])
+      .catch(() => { if (!cancelled) setRootClasses([]) })
+    return () => { cancelled = true }
+  }, [id, tab, rootClasses, showAllRoots])
+
+  const toggleAllRoots = useCallback(() => {
+    setShowAllRoots(v => !v)
+    setRootClasses(null)
+  }, [])
 
   const setTab = useCallback((t: Tab) => {
     const next = new URLSearchParams(params)
@@ -209,8 +233,17 @@ export default function OntologyPage() {
       {tab === 'browse' && (
         <div className="flex gap-4" style={{ minHeight: '60vh' }}>
           <div className="w-[380px] shrink-0 bg-white border border-gray-200 rounded-lg shadow-sm flex flex-col">
-            <div className="px-3 py-2.5 border-b border-gray-100 bg-gray-50/60 rounded-t-lg">
+            <div className="px-3 py-2.5 border-b border-gray-100 bg-gray-50/60 rounded-t-lg flex items-center justify-between gap-2">
               <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Class Hierarchy</h3>
+              {declaredRoots && (
+                <button onClick={toggleAllRoots}
+                  className="text-[11px] text-indigo-600 hover:underline"
+                  title={showAllRoots
+                    ? 'Start from the root terms this ontology declares'
+                    : 'Show every top-level class, including those from imported ontologies'}>
+                  {showAllRoots ? 'Declared roots' : 'All top-level classes'}
+                </button>
+              )}
             </div>
             <div role="tree" aria-label="Class hierarchy"
               className="p-2 flex-1 overflow-y-auto text-[13px] font-mono max-h-[70vh]">

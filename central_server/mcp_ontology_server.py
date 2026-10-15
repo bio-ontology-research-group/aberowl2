@@ -489,12 +489,14 @@ async def find_iri(term: str, ontology: str | None = None, limit: int = 10) -> s
         "  - supeq: all superclasses plus the equivalent classes\n"
         "  - equivalent: equivalent classes only\n\n"
         "Answers are computed by the ELK reasoner over the OWL 2 EL fragment of each "
-        "ontology: axioms outside EL and imported ontologies, which workers do not "
-        "load, take no part in an answer, and a result set is capped at 100,000 "
-        "classes upstream, so at that size the reported count is a lower bound. "
+        "ontology: axioms outside EL take no part in an answer, and a result set is "
+        "capped at 100,000 classes upstream, so at that size the reported count is a "
+        "lower bound. By default workers do not load imported ontologies, so their "
+        "axioms take no part either; an ontology for which the operator has enabled "
+        "a local imports closure is classified with its imported ontologies. "
         "An ontology with 500 or more unsatisfiable classes is answered by a "
         "structural reasoner instead; get_ontology_info reports which reasoner "
-        "answers for an ontology.\n\n"
+        "answers for an ontology and whether its imports are loaded.\n\n"
         "Examples:\n"
         "  - query='cell', type='subclass' -> all subclasses of 'cell'\n"
         "  - query=\"'part of' some 'cell'\", type='subeq' -> classes that are part of a cell\n"
@@ -582,7 +584,11 @@ async def get_class_info(class_iri: str, ontology: str) -> str:
 
 def _reasoning_contract(data: dict) -> str:
     """One line saying which reasoner answers for this ontology, how it
-    classified, and that its imports were not loaded.
+    classified, and whether its imports take part in the answers.
+
+    Imports are suppressed by default (`imports_loaded: false`). An ontology
+    for which the operator enabled a local imports closure, or one that
+    declares no imports, reports `imports_loaded: true`.
 
     Every field is optional. A worker registered before these fields existed
     reports none of them, and the registry only picks them up on its next
@@ -603,12 +609,22 @@ def _reasoning_contract(data: dict) -> str:
     status = data.get("reasoner_status")
     if status:
         parts.append(f"status: {status}")
-    if data.get("imports_loaded") is False:
-        declared = data.get("imports_declared")
-        if isinstance(declared, int):
+    imports_loaded = data.get("imports_loaded")
+    declared = data.get("imports_declared")
+    # bool is a subclass of int, so it is excluded from the count explicitly
+    has_count = isinstance(declared, int) and not isinstance(declared, bool)
+    if imports_loaded is False:
+        if has_count:
             parts.append(f"imports: not loaded ({declared} declared)")
         else:
             parts.append("imports: not loaded")
+    elif imports_loaded is True:
+        if has_count and declared == 0:
+            parts.append("imports: none declared")
+        elif has_count:
+            parts.append(f"imports: loaded ({declared} declared, full closure)")
+        else:
+            parts.append("imports: loaded (full closure)")
     if not parts:
         return ""
     return "Reasoning contract: " + ", ".join(parts) + "."
@@ -621,8 +637,12 @@ def _reasoning_contract(data: dict) -> str:
         "and classification status. The last line states the reasoning "
         "contract: the reasoner actually answering DL queries for this "
         "ontology (it falls back to a structural reasoner when the ontology "
-        "is incoherent), its classification status, and how many owl:imports "
-        "it declares, none of which are loaded."
+        "is incoherent), its classification status, and whether its "
+        "owl:imports take part in the answers. By default imports are not "
+        "loaded (\"imports: not loaded\"); an ontology for which the operator "
+        "has enabled a local imports closure reports \"imports: loaded\" with "
+        "its whole closure classified, and one that declares no imports "
+        "reports \"imports: none declared\"."
     ),
 )
 async def get_ontology_info(ontology: str) -> str:

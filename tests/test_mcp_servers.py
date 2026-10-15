@@ -486,6 +486,58 @@ class TestLookupIRICalls:
         assert "status: incoherent" in text
         assert "imports: not loaded (0 declared)" in text
 
+    async def test_get_ontology_info_reports_loaded_imports_closure(self):
+        # An ontology whose operator enabled a local imports closure is
+        # classified with it, and the contract must say so (#126).
+        import mcp_ontology_server as srv
+        payload = {
+            "id": "flopo", "reasoner_configured": "elk", "reasoner_active": "elk",
+            "reasoner_status": "classified",
+            "imports_loaded": True, "imports_declared": 3,
+        }
+        with patch.object(srv, "_api_get", new=AsyncMock(return_value=payload)):
+            result = await srv.mcp.call_tool("get_ontology_info", {"ontology": "flopo"})
+        text = _text(result)
+        assert "imports: loaded (3 declared, full closure)" in text
+        assert "not loaded" not in text
+
+    async def test_get_ontology_info_reports_no_declared_imports(self):
+        # Nothing is missing from an ontology that declares no imports.
+        import mcp_ontology_server as srv
+        payload = {
+            "id": "pizza", "reasoner_active": "elk", "reasoner_status": "classified",
+            "imports_loaded": True, "imports_declared": 0,
+        }
+        with patch.object(srv, "_api_get", new=AsyncMock(return_value=payload)):
+            result = await srv.mcp.call_tool("get_ontology_info", {"ontology": "pizza"})
+        text = _text(result)
+        assert "imports: none declared" in text
+        assert "not loaded" not in text
+        assert "imports: loaded" not in text
+
+    async def test_get_ontology_info_loaded_without_a_count(self):
+        # A loaded flag with no usable count still states the coverage.
+        import mcp_ontology_server as srv
+        payload = {"id": "flopo", "reasoner_active": "elk", "imports_loaded": True}
+        with patch.object(srv, "_api_get", new=AsyncMock(return_value=payload)):
+            result = await srv.mcp.call_tool("get_ontology_info", {"ontology": "flopo"})
+        text = _text(result)
+        assert "imports: loaded (full closure)" in text
+
+    async def test_import_descriptions_distinguish_default_from_enabled_closure(self):
+        # Imports are suppressed by default but can be loaded per ontology, so
+        # no description may claim they are never loaded (#126).
+        from mcp_ontology_server import mcp
+        tools = {t.name: t for t in await mcp.list_tools()}
+        dl = tools["run_dl_query"].description.lower()
+        assert "by default" in dl
+        assert "imports closure" in dl
+        assert "whether its imports are loaded" in dl
+        info = tools["get_ontology_info"].description.lower()
+        assert "none of which are loaded" not in info
+        assert "by default imports are not loaded" in info
+        assert "imports: loaded" in info
+
     async def test_get_ontology_info_omits_absent_contract_fields(self):
         # A worker that has not been polled since the fields were added reports
         # none of them: the JSON must still render and no line is invented.

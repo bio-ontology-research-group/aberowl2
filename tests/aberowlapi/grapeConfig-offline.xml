@@ -1,0 +1,13 @@
+<!--
+  Grape settings that resolve only from the local Grapes cache, so running the
+  import catalogue harness can never download anything. See tests/README.md.
+-->
+<ivysettings>
+  <settings defaultResolver="downloadGrapes"/>
+  <resolvers>
+    <filesystem name="downloadGrapes">
+      <ivy pattern="${user.home}/.groovy/grapes/[organisation]/[module]/ivy-[revision].xml"/>
+      <artifact pattern="${user.home}/.groovy/grapes/[organisation]/[module]/jars/[artifact]-[revision](-[classifier]).[ext]"/>
+    </filesystem>
+  </resolvers>
+</ivysettings>

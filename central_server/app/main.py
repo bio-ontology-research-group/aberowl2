@@ -1220,6 +1220,75 @@ async def dl_query_all(request: Request):
     return body
 
 
+OWL_THING = "<http://www.w3.org/2002/07/owl#Thing>"
+BROWSE_ROOTS_TIMEOUT = 30
+
+
+def _tag_classes(items, server: dict) -> list:
+    """The class records in `items`, each tagged with its ontology as dlquery_all does."""
+    ontology_name = server.get("ontology")
+    tagged = []
+    for item in items if isinstance(items, list) else []:
+        if isinstance(item, dict):
+            item["ontology"] = ontology_name
+            item["ontology_title"] = server.get("title", ontology_name)
+            tagged.append(item)
+    return tagged
+
+
+@app.get("/api/browse_roots")
+async def browse_roots(ontology: str = Query(..., description="Ontology ID")):
+    """The classes a hierarchy browser should start from for one ontology.
+
+    An ontology can declare its own root terms with "has ontology root term"
+    (IAO_0000700) on its header. When at least one is a usable class, the
+    worker returns those (`source: "declared"`), so that classes brought in by
+    imports do not crowd the top of the tree. Otherwise, and with a worker that
+    predates browseRoots.groovy, the result is the direct subclasses of
+    owl:Thing (`source: "owl:Thing"`), which is what the browser showed before.
+
+    Only browsing changes: /api/dlquery_all, including an owl:Thing query,
+    still answers over the whole ontology and its loaded imports.
+    """
+    server = await _online_worker(ontology)
+    if server is None:
+        raise HTTPException(status_code=404, detail=f"Ontology not found or offline: {ontology}")
+    base = str(server.get("url", "")).rstrip("/")
+    ontology_id = server.get("ontology")
+    timeout = aiohttp.ClientTimeout(total=BROWSE_ROOTS_TIMEOUT)
+
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(f"{base}/api/browseRoots.groovy",
+                                   params={"ontologyId": ontology_id}, timeout=timeout) as resp:
+                data = await resp.json(content_type=None) if resp.status == 200 else None
+            if isinstance(data, dict) and isinstance(data.get("result"), list):
+                source = data.get("source") if data.get("source") in ("declared", "owl:Thing") else "owl:Thing"
+                return {
+                    "result": _tag_classes(data["result"], server),
+                    "source": source,
+                    "declared": [i for i in (data.get("declared") or []) if isinstance(i, str)],
+                    "ignored": [i for i in (data.get("ignored") or []) if isinstance(i, str)],
+                }
+        except Exception as e:
+            logger.info("browse_roots: browseRoots.groovy unavailable for %s: %r", ontology, e)
+
+        # A worker without browseRoots.groovy, or one that failed to answer:
+        # the owl:Thing roots, as the browser used to ask for them.
+        params = {"query": OWL_THING, "type": "subclass", "direct": "true", "labels": "true",
+                  "axioms": "false", "ontologyId": ontology_id}
+        try:
+            async with session.get(f"{base}/api/runQuery.groovy", params=params, timeout=timeout) as resp:
+                data = await resp.json(content_type=None) if resp.status == 200 else None
+        except Exception as e:
+            logger.warning("browse_roots: owl:Thing fallback failed for %s: %r", ontology, e)
+            data = None
+    if not isinstance(data, dict) or not isinstance(data.get("result"), list):
+        raise HTTPException(status_code=502, detail=f"Worker did not return root classes for {ontology}")
+    return {"result": _tag_classes(data["result"], server), "source": "owl:Thing",
+            "declared": [], "ignored": []}
+
+
 @app.get("/api/servers")
 async def get_servers():
     """Returns a list of registered servers and their public metadata.
