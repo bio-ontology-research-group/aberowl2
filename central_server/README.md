@@ -375,6 +375,7 @@ Returns a secret key for future updates.
 - `GET /api/servers` - List all registered servers
 - `GET /api/search_all?query=term` - Search across all ontologies
 - `GET /api/dlquery_all?query=expression&type=subclass` - Run DL queries (see "Reasoning contract" for what an answer covers)
+- `GET /api/getClass?query=<class IRI>&ontology=<id>` - Details of one class. Annotations (label, definition, synonyms, others) come from the Elasticsearch class document; the logical axioms asserted on that exact class (`SubClassOf`, `Equivalent`, `Disjoint`, in Manchester syntax) come from the ontology's online worker. The worker gets `GETCLASS_AXIOM_TIMEOUT_SECONDS` (default 5) to answer; if it is offline, slow, errors or does not return that IRI, the Elasticsearch document is returned without the worker's axioms. Axioms of an equivalent class are never shown in place of the requested class's. With no Elasticsearch document, the worker's record is returned instead. The axioms are the asserted (not inferred) ones in the ontology as the worker loaded it; which imports that covers follows the worker's import loading (see "Reasoning contract").
 
 ### FAIR API (MOD-API)
 

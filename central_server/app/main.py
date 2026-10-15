@@ -89,6 +89,10 @@ ONTOLOGIES_BASE_PATH = os.getenv("ONTOLOGIES_HOST_PATH", "/data/ontologies")
 # /data/aberowl/ontologies while this process must open /data/ontologies.
 # Reading the host path from inside the container silently finds nothing.
 ONTOLOGIES_DIR = os.getenv("ONTOLOGIES_DIR", "/data/ontologies")
+# /api/getClass adds a class's logical axioms from its worker on top of the ES
+# document, which holds annotations only. This bounds how long a class page
+# waits on that worker before it is served the ES document alone.
+GETCLASS_AXIOM_TIMEOUT = float(os.getenv("GETCLASS_AXIOM_TIMEOUT_SECONDS", "5"))
 
 
 def _require_admin(credentials: HTTPBasicCredentials = Depends(_security)):
@@ -1294,6 +1298,68 @@ async def query_ontologies_api(term: str = Query(...), size: int = Query(50, le=
     return {"result": results}
 
 
+# The fields RequestManager.toInfo fills only when a query asks for axioms. The
+# ES class documents are built without them.
+_LOGICAL_AXIOM_FIELDS = ("SubClassOf", "Equivalent", "Disjoint")
+
+
+def _bare_iri(iri: str) -> str:
+    iri = iri.strip()
+    if iri.startswith("<") and iri.endswith(">"):
+        return iri[1:-1]
+    return iri
+
+
+async def _online_worker(ontology: str) -> Optional[dict]:
+    server_data_json = await redis_client.hvals("registered_servers")
+    for raw in server_data_json:
+        s = json.loads(raw)
+        if s.get("ontology", "").lower() == ontology.lower() and s.get("status") == "online":
+            return s
+    return None
+
+
+async def _worker_class_record(session, server: dict, iri: str, timeout: float) -> Optional[dict]:
+    """The worker's own record for exactly `iri`, axioms included, or None.
+
+    An `equivalent` query on a named class answers its whole equivalence node,
+    so the record is picked by IRI: the record of an equivalent class carries
+    that class's axioms, not the queried one's.
+    """
+    params = {
+        "query": f"<{iri}>",
+        "type": "equivalent",
+        "direct": "true",
+        "labels": "true",
+        "axioms": "true",
+        # The registered id, which is what the worker keys its ontologies by;
+        # the caller's id may differ in case.
+        "ontologyId": server.get("ontology"),
+    }
+    url = f"{str(server.get('url', '')).rstrip('/')}/api/runQuery.groovy"
+    async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=timeout)) as resp:
+        if resp.status != 200:
+            return None
+        data = await resp.json()
+    results = data.get("result", []) if isinstance(data, dict) else []
+    return next((r for r in results if isinstance(r, dict) and r.get("class") == iri), None)
+
+
+def _with_worker_axioms(indexed: dict, record: dict) -> dict:
+    """The ES document with its logical axioms taken from the worker record.
+
+    Only the logical fields come from the worker: labels, definitions and every
+    other annotation stay as indexed. The worker answer replaces any logical
+    field the document carried, and a field the worker leaves out means the
+    class has no such axiom.
+    """
+    merged = {k: v for k, v in indexed.items() if k not in _LOGICAL_AXIOM_FIELDS}
+    for field in _LOGICAL_AXIOM_FIELDS:
+        if record.get(field):
+            merged[field] = record[field]
+    return merged
+
+
 @app.get("/api/getClass")
 async def get_class_api(
     query: str = Query(..., description="Class IRI"),
@@ -1301,15 +1367,20 @@ async def get_class_api(
 ):
     """Get detailed information about a specific ontology class.
 
-    Tries ES first (fast, has all indexed annotations).  Falls back to
-    querying the ontology worker's reasoner directly (always works if the
-    ontology is loaded, but slower and only returns what OWLAPI provides).
+    The ES document supplies the annotations, and the ontology's online worker
+    adds the logical axioms (SubClassOf, Equivalent, Disjoint) asserted on this
+    exact class. If the worker is offline, slow (GETCLASS_AXIOM_TIMEOUT) or does
+    not return the class, the ES document is served as it is. Without an ES
+    document the worker record alone is returned.
     """
+    iri = _bare_iri(query)
+    indexed = None
+
     # --- Try ES first ---
     try:
         alias = es_mgr._alias_name(ontology.lower())
         query_body = {
-            "query": {"bool": {"must": [{"term": {"class": query}}]}},
+            "query": {"bool": {"must": [{"term": {"class": iri}}]}},
             "size": 1,
         }
         async with aiohttp.ClientSession() as session:
@@ -1322,70 +1393,63 @@ async def get_class_api(
                     data = await resp.json(content_type=None)
                     hits = data.get("hits", {}).get("hits", [])
                     if hits:
-                        return hits[0].get("_source", {})
+                        indexed = hits[0].get("_source", {})
     except Exception as e:
         logger.debug("getClass ES lookup failed for %s/%s: %s", ontology, query, e)
 
+    if indexed is not None:
+        # --- Add the logical axioms from the worker, if it answers in time ---
+        try:
+            server = await _online_worker(ontology)
+            if server is None:
+                return indexed
+            async with aiohttp.ClientSession() as session:
+                record = await _worker_class_record(session, server, iri, GETCLASS_AXIOM_TIMEOUT)
+        except Exception as e:
+            logger.info("getClass axioms unavailable for %s/%s: %r", ontology, iri, e)
+            return indexed
+        return _with_worker_axioms(indexed, record) if record else indexed
+
     # --- Fall back to querying the ontology worker directly ---
-    server_data_json = await redis_client.hvals("registered_servers")
-    servers = [json.loads(s) for s in server_data_json]
-    server = next(
-        (s for s in servers if s.get("ontology", "").lower() == ontology.lower() and s.get("status") == "online"),
-        None,
-    )
+    server = await _online_worker(ontology)
     if not server:
         raise HTTPException(status_code=404, detail=f"Ontology not found or offline: {ontology}")
 
     worker_url = server.get("url", "").rstrip("/")
-    # Query the worker for this specific class with labels + axioms
-    iri_query = f"<{query}>" if not query.startswith("<") else query
-    params = {
-        "query": iri_query,
-        "type": "equivalent",
-        "direct": "true",
-        "labels": "true",
-        "axioms": "true",
-        "ontologyId": ontology,
-    }
     try:
         async with aiohttp.ClientSession() as session:
+            record = await _worker_class_record(session, server, iri, 30)
+            if record:
+                return record
+            # No record for this exact IRI (another member of its equivalence
+            # node is not a stand-in) — try superclass query to get class info
+            params = {
+                "query": f"<{iri}>",
+                "type": "superclass",
+                "direct": "true",
+                "labels": "true",
+                "axioms": "true",
+                "ontologyId": server.get("ontology"),
+            }
             async with session.get(
                 f"{worker_url}/api/runQuery.groovy",
                 params=params,
                 timeout=aiohttp.ClientTimeout(total=30),
-            ) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    results = data.get("result", [])
-                    # The query returns equivalent classes; find the one matching our IRI
-                    for r in results:
-                        if r.get("class") == query:
-                            return r
-                    # If exact match not found, return first result or query info
-                    if results:
-                        return results[0]
-
-                    # No equivalent found — try superclass query to get class info
-                    params["type"] = "superclass"
-                    async with session.get(
-                        f"{worker_url}/api/runQuery.groovy",
-                        params=params,
-                        timeout=aiohttp.ClientTimeout(total=30),
-                    ) as resp2:
-                        if resp2.status == 200:
-                            data2 = await resp2.json()
-                            supers = data2.get("result", [])
-                            if supers:
-                                # Class exists (has superclasses) — build info
-                                return {
-                                    "class": query,
-                                    "ontology": ontology,
-                                    "label": query.rsplit("#", 1)[-1].rsplit("/", 1)[-1],
-                                    "SubClassOf": [r.get("label", r.get("class")) for r in supers],
-                                }
-                        # No superclasses = class not in ontology
-                        elif resp2.status == 400:
-                            pass  # Query error = class not found
+            ) as resp2:
+                if resp2.status == 200:
+                    data2 = await resp2.json()
+                    supers = data2.get("result", [])
+                    if supers:
+                        # Class exists (has superclasses) — build info
+                        return {
+                            "class": iri,
+                            "ontology": ontology,
+                            "label": iri.rsplit("#", 1)[-1].rsplit("/", 1)[-1],
+                            "SubClassOf": [r.get("label", r.get("class")) for r in supers],
+                        }
+                # No superclasses = class not in ontology
+                elif resp2.status == 400:
+                    pass  # Query error = class not found
     except Exception as e:
         logger.error("getClass worker fallback error: %s", e)
 
