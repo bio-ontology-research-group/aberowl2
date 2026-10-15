@@ -58,9 +58,20 @@ public class RequestManager {
     final ConcurrentHashMap<String, String> reasonerTypes = new ConcurrentHashMap<>()
     final ConcurrentHashMap<String, String> loadStati = new ConcurrentHashMap<>()
     // Number of owl:imports declarations found in each loaded document. Recorded
-    // at load time because the merged ontology keeps no import declarations, and
-    // because none of those imports are ever resolved (see LocalImportIRIMapper).
+    // at load time because the merged ontology keeps no import declarations.
     final ConcurrentHashMap<String, Integer> importsDeclared = new ConcurrentHashMap<>()
+    // How imports were handled at load time: "suppressed" (the default, see
+    // LocalImportIRIMapper) or "catalogue" (see ImportCatalogue).
+    final ConcurrentHashMap<String, String> importsPolicies = new ConcurrentHashMap<>()
+    // Imported documents merged into the ontology, transitively.
+    final ConcurrentHashMap<String, Integer> importsResolved = new ConcurrentHashMap<>()
+    // Import IRIs reachable from the ontology whose document was not merged.
+    final ConcurrentHashMap<String, Integer> importsUnresolved = new ConcurrentHashMap<>()
+
+    // Directory that holds the ontologies and import_catalogues/. Only the
+    // tests point it elsewhere; every RequestManager, including the temporary
+    // one updateOntology.groovy creates, applies the same import policy.
+    final String dataRoot = System.getProperty("aberowl.dataRoot", "/data")
     final ConcurrentHashMap<String, String> exampleSuperclassLabels = new ConcurrentHashMap<>()
     final ConcurrentHashMap<String, String> exampleSubclassExpressions = new ConcurrentHashMap<>()
     final ConcurrentHashMap<String, String> exampleSubclassExpressionTexts = new ConcurrentHashMap<>()
@@ -68,6 +79,16 @@ public class RequestManager {
     // Pre-computed root classes (direct subclasses of owl:Thing) per ontology.
     // Populated during createReasoner to avoid the slow ELK traversal at query time.
     final ConcurrentHashMap<String, List> rootClassCache = new ConcurrentHashMap<>()
+
+    // Browsing roots the ontology declares for itself with "has ontology root
+    // term" (IAO_0000700) on its own header, read from the root document before
+    // any import is merged. Only browsing uses them: DL queries, including
+    // owl:Thing queries and rootClassCache, always answer over everything.
+    static final IRI ONTOLOGY_ROOT_TERM = IRI.create("http://purl.obolibrary.org/obo/IAO_0000700")
+    final ConcurrentHashMap<String, List<String>> declaredRootTerms = new ConcurrentHashMap<>()
+    // The declared roots that are usable classes, as class info sorted by label.
+    // Absent when the ontology declares none or none is usable.
+    final ConcurrentHashMap<String, List> browseRootCache = new ConcurrentHashMap<>()
 
     // Query result cache: "ontologyId|query|type|direct" -> [timestamp, result]
     // Entries expire after QUERY_CACHE_TTL_MS milliseconds.
@@ -162,6 +183,19 @@ public class RequestManager {
         reasonerTypes.put(ontId, reasonerType ?: "elk")
         ontologyPaths.put(ontId, ontIRI)
 
+        // Read before the root is parsed, so an invalid catalogue fails fast.
+        // null means the ontology has not opted in and keeps the default.
+        ImportCatalogue catalogue = ImportCatalogue.forOntology(ontId, dataRoot)
+        installOntology(ontId, readOntology(ontId, ontIRI, catalogue))
+    }
+
+    /**
+     * Parse an ontology, resolve its imports as the catalogue (or its absence)
+     * says, and merge them. Touches no per-ontology state, so a reload can read
+     * the new copy while the old one is still serving. Throws on any failure,
+     * including an ImportResolutionException for an incomplete closure.
+     */
+    private Map readOntology(String ontId, String ontIRI, ImportCatalogue catalogue) {
         OWLOntologyManager lManager = OWLManager.createOWLOntologyManager()
 
         // Stop remote import fetches. owl:imports of dead URLs hang for minutes
@@ -169,12 +203,12 @@ public class RequestManager {
         // heap, both observed to stall and OOM workers. The mapper performs no
         // lookup: it maps EVERY import IRI to a non-existent path under
         // /data/.noimport/, so OWLAPI never touches the network, and the SILENT
-        // strategy then drops the unresolvable import. Every ontology is
-        // therefore classified WITHOUT its imports closure, including imports
-        // that sit in the local corpus (#126). Whether to resolve imports
-        // against the corpus instead is a separate, open decision (it changes
-        // what a worker holds in heap), so the behaviour is unchanged here and
-        // only reported: see importsDeclared and getStatistics.groovy.
+        // strategy then drops the unresolvable import. By default an ontology
+        // is therefore classified WITHOUT its imports closure, including
+        // imports that sit in the local corpus (#126). An ontology opts in to
+        // resolving them from local files with an import catalogue; the
+        // catalogue, not OWLAPI, then decides which documents are loaded, and
+        // the mapper still guarantees that no import IRI is dereferenced.
         lManager.getIRIMappers().add(new LocalImportIRIMapper())
         OWLOntologyLoaderConfiguration loaderConfig = new OWLOntologyLoaderConfiguration()
             .setMissingImportHandlingStrategy(MissingImportHandlingStrategy.SILENT)
@@ -183,25 +217,99 @@ public class RequestManager {
         IRI originalOntologyIRI = originalOntology.getOntologyID().getOntologyIRI().orNull()
         Set<OWLAnnotation> originalAnnotations = originalOntology.getAnnotations().collect()
         // Count the declared imports before merging: the merged ontology carries
-        // no import declarations, and none of these were loaded (see above).
-        importsDeclared.put(ontId, originalOntology.getImportsDeclarations().size())
+        // no import declarations.
+        int declaredCount = originalOntology.getImportsDeclarations().size()
 
         // Merge imports closure into a single ontology.
         // The merged ontology must use a SYNTHETIC IRI rather than the
         // original's, because originalOntology is already registered in
         // lManager at its own IRI — creating a second ontology at that
         // same IRI in the same manager raises OWLOntologyAlreadyExists.
-        OWLOntologyImportsClosureSetProvider provider = new OWLOntologyImportsClosureSetProvider(lManager, originalOntology)
+        OWLOntologySetProvider provider
+        Set<String> resolvedIris = new HashSet<>()
+        if (catalogue == null) {
+            provider = new OWLOntologyImportsClosureSetProvider(lManager, originalOntology)
+        } else {
+            ImportClosure closure = catalogue.resolveClosure(lManager, originalOntology, ontIRI, loaderConfig)
+            resolvedIris = closure.resolvedIris
+            provider = { -> closure.ontologies } as OWLOntologySetProvider
+        }
+        Set<OWLOntology> sources = new LinkedHashSet<>(provider.getOntologies())
+        // An import resolved by a catalogue entry counts as satisfied even when
+        // the file declares a different ontology IRI.
+        List<String> unresolved = ImportCatalogue.unresolvedImports(sources, resolvedIris)
+        if (catalogue != null && !unresolved.isEmpty()) {
+            // resolveClosure follows every declaration, so this cannot happen
+            // unless OWLAPI and the catalogue disagree; never report it complete.
+            throw new ImportResolutionException("Imports of ${ontId} left unresolved: ${unresolved}")
+        }
         OWLOntologyMerger merger = new OWLOntologyMerger(provider, false)
         IRI mergedIRI = IRI.create("http://aberowl.local/merged/${ontId}")
         def mergedOntology = merger.createMergedOntology(lManager, mergedIRI)
 
+        if (catalogue != null) {
+            // The ontology's metadata (title, version, license, ...) is the
+            // root's: drop any header annotation of an imported document.
+            mergedOntology.getAnnotations().collect().each { annotation ->
+                lManager.applyChange(new RemoveOntologyAnnotation(mergedOntology, annotation))
+            }
+            // The merged copy holds every imported axiom; keeping the imported
+            // documents too would hold them in heap twice.
+            sources.each { source ->
+                if (!source.is(originalOntology)) {
+                    lManager.removeOntology(source)
+                }
+            }
+        }
         originalAnnotations.each { annotation ->
             lManager.applyChange(new AddOntologyAnnotation(mergedOntology, annotation))
         }
 
-        ontologies.put(ontId, mergedOntology)
-        oManagers.put(ontId, lManager)
+        if (catalogue != null) {
+            println "Resolved ${sources.size() - 1} imported documents for ${ontId} from ${catalogue.file}"
+        }
+        return [manager: lManager, ontology: mergedOntology, declared: declaredCount,
+                policy: catalogue == null ? "suppressed" : "catalogue",
+                resolved: sources.size() - 1, unresolved: unresolved.size(),
+                rootTerms: declaredRootIris(originalAnnotations)]
+    }
+
+    /**
+     * IRIs named by "has ontology root term" (IAO_0000700) annotations on an
+     * ontology header, sorted and without duplicates. An IRI value is taken as
+     * is, and so is a literal holding an absolute http(s) IRI; any other value
+     * (a CURIE, free text, an anonymous individual) is ignored.
+     */
+    static List<String> declaredRootIris(Collection<OWLAnnotation> header) {
+        Set<String> iris = new TreeSet<>()
+        header.each { OWLAnnotation a ->
+            if (a.getProperty().getIRI() != ONTOLOGY_ROOT_TERM) {
+                return
+            }
+            def value = a.getValue()
+            if (value instanceof IRI) {
+                iris.add(value.toString())
+            } else if (value instanceof OWLLiteral) {
+                String literal = value.getLiteral().trim()
+                if (literal ==~ /https?:\/\/\S+/) {
+                    iris.add(literal)
+                }
+            }
+        }
+        return new ArrayList<>(iris)
+    }
+
+    /**
+     * Make an ontology read by readOntology the one this manager serves.
+     */
+    private void installOntology(String ontId, Map loaded) {
+        importsDeclared.put(ontId, loaded.declared as Integer)
+        importsPolicies.put(ontId, loaded.policy as String)
+        importsResolved.put(ontId, loaded.resolved as Integer)
+        importsUnresolved.put(ontId, loaded.unresolved as Integer)
+        declaredRootTerms.put(ontId, (loaded.rootTerms ?: []) as List<String>)
+        ontologies.put(ontId, loaded.ontology as OWLOntology)
+        oManagers.put(ontId, loaded.manager as OWLOntologyManager)
         loadStati.put(ontId, "loaded")
         println "Loaded ontology ${ontId}"
     }
@@ -264,6 +372,7 @@ public class RequestManager {
 
         findExampleClassesAndExpressions(ontId)
         precomputeRootClasses(ontId)
+        precomputeBrowseRoots(ontId)
         println "Classification complete for ${ontId}"
     }
 
@@ -304,8 +413,27 @@ public class RequestManager {
 
     void reloadOntology(String ontId, String ontIRI, String reasonerType) {
         println "Reloading ontology ${ontId} from ${ontIRI}"
-        disposeOntology(ontId)
-        loadOntology(ontId, ontIRI, reasonerType)
+        // An invalid import catalogue fails here, before the serving copy is
+        // disposed.
+        ImportCatalogue catalogue = ImportCatalogue.forOntology(ontId, dataRoot)
+        if (catalogue == null) {
+            // Default policy: unchanged, dispose first so the worker never
+            // holds two copies.
+            disposeOntology(ontId)
+            loadOntology(ontId, ontIRI, reasonerType)
+        } else {
+            // Read and merge the new copy, imports and all, while the old one
+            // keeps serving, so a missing, unreadable, unparsable or conflicting
+            // import (direct or transitive) leaves the serving copy in place.
+            // The documents are parsed once. Only classification waits for the
+            // dispose: the peak holds the old copy and its reasoners plus the
+            // new root and merged ontology, never two reasoners.
+            Map loaded = readOntology(ontId, ontIRI, catalogue)
+            disposeOntology(ontId)
+            reasonerTypes.put(ontId, reasonerType ?: "elk")
+            ontologyPaths.put(ontId, ontIRI)
+            installOntology(ontId, loaded)
+        }
         createReasoner(ontId)
         println "Reloaded ontology ${ontId}"
     }
@@ -337,10 +465,15 @@ public class RequestManager {
         reasonerTypes.remove(ontId)
         loadStati.remove(ontId)
         importsDeclared.remove(ontId)
+        importsPolicies.remove(ontId)
+        importsResolved.remove(ontId)
+        importsUnresolved.remove(ontId)
         exampleSuperclassLabels.remove(ontId)
         exampleSubclassExpressions.remove(ontId)
         exampleSubclassExpressionTexts.remove(ontId)
         rootClassCache.remove(ontId)
+        declaredRootTerms.remove(ontId)
+        browseRootCache.remove(ontId)
         queryCache.keySet().removeIf { it.startsWith("${ontId}|") }
         println "Disposed all resources for ${ontId}"
     }
@@ -371,8 +504,10 @@ public class RequestManager {
                 reasonerType: reasonerTypes.get(ontId) ?: "unknown",
                 reasonerConfigured: reasonerTypes.get(ontId) ?: "unknown",
                 reasonerActive: getActiveReasonerType(ontId),
-                importsLoaded: false,
+                importsLoaded: isImportsLoaded(ontId),
                 importsDeclared: getImportsDeclaredCount(ontId),
+                importsPolicy: getImportsPolicy(ontId),
+                importsResolved: getImportsResolvedCount(ontId),
                 path: ontologyPaths.get(ontId) ?: "",
                 classCount: ontologies.get(ontId)?.getClassesInSignature(true)?.size() ?: 0
             ]
@@ -419,12 +554,36 @@ public class RequestManager {
     }
 
     /**
-     * Number of owl:imports declarations in the loaded document. None of them
-     * are resolved, so this counts the imported ontologies that take no part in
-     * any answer for this ontology.
+     * Number of owl:imports declarations in the loaded document itself (direct
+     * imports only). Under the default policy none of them are resolved.
      */
     int getImportsDeclaredCount(String ontId) {
         return importsDeclared.get(ontId) ?: 0
+    }
+
+    /**
+     * Whether the merged ontology holds its whole imports closure: true when
+     * every import reachable from the document was merged, which includes the
+     * case of a document that declares no imports. Computed at load time from
+     * the documents actually merged; false for an unknown ontology.
+     */
+    boolean isImportsLoaded(String ontId) {
+        def unresolved = importsUnresolved.get(ontId)
+        return unresolved != null && unresolved == 0
+    }
+
+    /**
+     * "suppressed" (default) or "catalogue"; null for an unknown ontology.
+     */
+    String getImportsPolicy(String ontId) {
+        return importsPolicies.get(ontId)
+    }
+
+    /**
+     * Number of imported documents merged into the ontology, transitively.
+     */
+    int getImportsResolvedCount(String ontId) {
+        return importsResolved.get(ontId) ?: 0
     }
 
     /**
@@ -906,6 +1065,69 @@ public class RequestManager {
         }
     }
 
+    /**
+     * Turn the ontology's declared root terms into browsing roots. A declared
+     * IRI is used when it is a class in the classified ontology (imports
+     * included), is neither owl:Thing nor owl:Nothing, is satisfiable, and is
+     * not deprecated; the others are ignored and logged. A declared root need
+     * not be a direct subclass of owl:Thing. When no declared root is usable,
+     * nothing is cached and browsing falls back to the owl:Thing roots.
+     */
+    void precomputeBrowseRoots(String ontId) {
+        browseRootCache.remove(ontId)
+        List<String> declared = declaredRootTerms.get(ontId) ?: []
+        def ontology = ontologies.get(ontId)
+        def reasoner = reasoners.get(ontId)
+        def sfp = shortFormProviders.get(ontId)
+        if (declared.isEmpty() || ontology == null || reasoner == null || sfp == null) return
+        try {
+            Set<OWLClass> signature = ontology.getClassesInSignature(true)
+            def bottomNode = reasoner.getBottomClassNode()
+            Set<OWLClass> candidates = new LinkedHashSet<>()
+            declared.each { iri ->
+                OWLClass c = df.getOWLClass(IRI.create(iri))
+                if (c.isOWLThing() || c.isOWLNothing() || !signature.contains(c) || bottomNode.contains(c)) return
+                candidates.add(c)
+            }
+            // classes2info drops deprecated classes
+            def roots = classes2info(ontId, candidates, false, sfp).sort { x, y -> x["label"].compareTo(y["label"]) }
+            if (!roots.isEmpty()) {
+                browseRootCache.put(ontId, roots)
+            }
+            Set used = roots.collect { it["class"] } as Set
+            def ignored = declared.findAll { !used.contains(it) }
+            if (!ignored.isEmpty()) {
+                println "Declared root terms of ${ontId} that are not usable classes, ignored for browsing: ${ignored}"
+            }
+            println "Browsing roots for ${ontId}: ${roots.isEmpty() ? 'owl:Thing (no usable declared root)' : used}"
+        } catch (Exception e) {
+            println "WARNING: could not compute browsing roots for ${ontId}: ${e.getMessage()}"
+        }
+    }
+
+    /**
+     * The classes a hierarchy browser should start from. Returns
+     * `[result: <class info>, source: "declared" | "owl:Thing", declared:
+     * <declared root IRIs>, ignored: <declared IRIs not used>]`. With usable
+     * declared roots, those are the result; otherwise the result is the direct
+     * subclasses of owl:Thing, exactly as a DL query answers them.
+     */
+    Map getBrowseRoots(String ontId) {
+        if (!hasOntology(ontId)) {
+            throw new IllegalArgumentException("Ontology not loaded: ${ontId}")
+        }
+        List<String> declared = declaredRootTerms.get(ontId) ?: []
+        def roots = browseRootCache.get(ontId)
+        if (roots != null) {
+            Set used = roots.collect { it["class"] } as Set
+            return [result: roots, source: "declared", declared: declared,
+                    ignored: declared.findAll { !used.contains(it) }]
+        }
+        def all = runQueryWithReport(ontId, "<http://www.w3.org/2002/07/owl#Thing>", "subclass",
+            true, true, false, null).result
+        return [result: all, source: "owl:Thing", declared: declared, ignored: declared]
+    }
+
     void findExampleClassesAndExpressions(String ontId) {
         def ontology = ontologies.get(ontId)
         def sfp = shortFormProviders.get(ontId)
@@ -1010,6 +1232,10 @@ public class RequestManager {
  * The path is unique per import IRI: a single shared stub would trigger
  * OWLOntologyDocumentAlreadyExistsException once an ontology declares two
  * imports (or a self-import resolving back to the main document).
+ *
+ * It stays installed when an ontology resolves its imports through an
+ * ImportCatalogue: the catalogue loads the listed files itself, and this mapper
+ * keeps OWLAPI from fetching anything on its own, including file: import IRIs.
  */
 class LocalImportIRIMapper implements OWLOntologyIRIMapper {
     IRI getDocumentIRI(IRI ontologyIRI) {

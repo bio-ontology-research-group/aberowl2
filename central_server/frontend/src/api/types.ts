@@ -48,6 +48,14 @@ export interface ClassResult {
   deprecated?: boolean
 }
 
+export interface BrowseRoots {
+  result: ClassResult[]
+  /** "declared": the ontology's own root terms (IAO_0000700); "owl:Thing": all top-level classes. */
+  source: 'declared' | 'owl:Thing'
+  declared: string[]
+  ignored: string[]
+}
+
 export interface DLQueryResult {
   time: number
   result: ClassResult[]

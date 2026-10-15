@@ -87,6 +87,7 @@ def startServer(def ontologyArg, def port) {
     context.addServlet(new ServletHolder(new GroovyServlet()), '/api/runQuery.groovy')
     context.addServlet(new ServletHolder(new GroovyServlet()), '/api/reloadOntology.groovy')
     context.addServlet(new ServletHolder(new GroovyServlet()), '/api/findRoot.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/browseRoots.groovy')
     context.addServlet(new ServletHolder(new GroovyServlet()), '/api/getObjectProperties.groovy')
     context.addServlet(new ServletHolder(new GroovyServlet()), '/api/retrieveRSuccessors.groovy')
     context.addServlet(new ServletHolder(new GroovyServlet()), '/api/retrieveAllLabels.groovy')

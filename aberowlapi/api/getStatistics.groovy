@@ -48,7 +48,8 @@ if (!ontologyId && manager.ontologies.size() == 1) {
         [ontologyId: info.ontologyId, status: info.status, classCount: info.classCount,
          reasonerType: info.reasonerType, reasonerConfigured: info.reasonerConfigured,
          reasonerActive: info.reasonerActive, importsLoaded: info.importsLoaded,
-         importsDeclared: info.importsDeclared]
+         importsDeclared: info.importsDeclared, importsPolicy: info.importsPolicy,
+         importsResolved: info.importsResolved]
     }
     out << JsonOutput.toJson([ontologies: allStats])
     return
@@ -218,13 +219,17 @@ def result = [
     // What the reasoning actually was, as opposed to what was requested:
     // reasoner_active comes from the reasoner instance answering queries, so it
     // shows the structural fallback taken by incoherent ontologies, and
-    // imports_* records that no imported ontology is part of any answer (#126).
+    // imports_loaded records whether the whole imports closure is part of the
+    // answers (#126).
     "reasoner_configured": manager.reasonerTypes.get(ontologyId) ?: "unknown",
     // Servlets are bind-mounted and reload hot while RequestManager reloads only on a
     // worker restart, so a servlet must never call a method the running class may lack.
+    // A RequestManager that predates import catalogues suppresses every import.
     "reasoner_active": manager.respondsTo("getActiveReasonerType") ? manager.getActiveReasonerType(ontologyId) : null,
-    "imports_loaded": false,
+    "imports_loaded": manager.respondsTo("isImportsLoaded") ? manager.isImportsLoaded(ontologyId) : false,
     "imports_declared": manager.respondsTo("getImportsDeclaredCount") ? manager.getImportsDeclaredCount(ontologyId) : null,
+    "imports_policy": manager.respondsTo("getImportsPolicy") ? manager.getImportsPolicy(ontologyId) : null,
+    "imports_resolved": manager.respondsTo("getImportsResolvedCount") ? manager.getImportsResolvedCount(ontologyId) : null,
     "status": manager.getStatus(ontologyId) ?: "unknown",
     "title": title,
     "description": description,

@@ -16,6 +16,38 @@ Both are in `testpaths`, so a bare `pytest` collects both, but an explicit
 `pytest tests/` collects only the first. `tests/aberowlapi/` is excluded from
 the default run: it needs gevent and reaches a worker while importing.
 
+### Worker import catalogue harness
+
+`tests/aberowlapi/import_catalogue_harness.groovy` is not a pytest test. It
+writes small synthetic ontologies to a temporary directory, loads them through
+`src.RequestManager` and classifies them with ELK. It then checks how imports
+are handled: suppressed by default, resolved through an import catalogue
+(including an import URL that differs from the imported file's ontology IRI),
+and rejected with an error when an import is missing, malformed, conflicting or
+outside the data root. It also checks that a failed reload keeps the serving
+copy, that no import IRI is fetched over the network, and that browsing starts
+from the roots an ontology declares (IAO_0000700) while `owl:Thing` queries
+still return every top-level class. It needs
+OWLAPI 4.5.29, ELK 0.4.3 and GPars 1.1.0 in the Grapes cache. The offline Grape
+settings make it fail rather than download anything:
+
+```bash
+# From the repository root
+JAVA_OPTS="-Dgrape.config=tests/aberowlapi/grapeConfig-offline.xml" \
+  groovy -cp aberowlapi tests/aberowlapi/import_catalogue_harness.groovy
+```
+
+To run it in a worker with these dependency versions already cached, copy
+`tests/aberowlapi/` into the container and run the same command from `/app`
+(`-cp aberowlapi` then names `/app/aberowlapi`). For a network-disabled test
+container, copy the populated cache from that worker and mount it under a
+neutral Java home, such as `/cache-home/.groovy/grapes`, adding
+`-Duser.home=/cache-home` to `JAVA_OPTS`. This avoids the image's managed
+`.groovy` path. The cache must contain the versions pinned in the harness;
+missing dependencies cause a failure rather than a download.
+The exit status is 0 when every
+check passes.
+
 ---
 
 ## What is tested

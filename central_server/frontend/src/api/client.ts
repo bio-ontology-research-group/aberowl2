@@ -1,4 +1,4 @@
-import type { OntologySummary, OntologyDetail, ClassResult, StatsAggregate, StatsSingle } from './types'
+import type { OntologySummary, OntologyDetail, ClassResult, BrowseRoots, StatsAggregate, StatsSingle } from './types'
 
 const BASE = ''  // same origin in production; Vite proxy in dev
 
@@ -50,6 +50,11 @@ export async function dlQuery(query: string, type: string, ontologies?: string, 
   if (ontologies) params.ontologies = ontologies
   if (direct) params.direct = 'true'
   return get('/api/dlquery_all', params)
+}
+
+/** Where the class hierarchy starts: the ontology's declared roots, or the owl:Thing roots. */
+export async function browseRoots(ontology: string): Promise<BrowseRoots> {
+  return get('/api/browse_roots', { ontology })
 }
 
 export async function getClass(classIri: string, ontology: string): Promise<ClassResult> {
