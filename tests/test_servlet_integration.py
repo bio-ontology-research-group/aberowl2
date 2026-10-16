@@ -347,24 +347,159 @@ def test_list_loaded_ontologies(pizza_stack):
 @pytest.mark.slow
 @pytest.mark.timeout(120)
 def test_validate_ontology(pizza_stack):
-    """validateOntology validates an OWL file."""
-    r = _get(f"{pizza_stack}/validateOntology.groovy", params={
+    """validateOntology validates an OWL file with the ontology's import policy."""
+    r = _post(f"{pizza_stack}/validateOntology.groovy", json_body={
+        "secretKey": TEST_SECRET_KEY,
         "owlPath": "/data/pizza_active.owl",
+        "ontologyId": "pizza",
     })
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "ok"
     assert body["classCount"] > 0
+    assert body["importsPolicy"] == "suppressed"
+    assert isinstance(body["declaredImports"], list)
+    assert "exportPath" not in body
 
 
 @pytest.mark.slow
 @pytest.mark.timeout(120)
-def test_validate_ontology_bad_path(pizza_stack):
-    """validateOntology rejects paths outside /data/."""
-    r = _get(f"{pizza_stack}/validateOntology.groovy", params={
-        "owlPath": "/etc/passwd",
-    })
+def test_validate_ontology_requires_the_secret(pizza_stack):
+    """Validation parses a whole ontology in the worker's heap."""
+    r = _post(f"{pizza_stack}/validateOntology.groovy", json_body={
+        "owlPath": "/data/pizza_active.owl", "secretKey": "test-wrong_key"})
+    assert r.status_code == 401
+
+
+@pytest.mark.slow
+@pytest.mark.timeout(120)
+@pytest.mark.parametrize("path", ["/etc/passwd", "/data/../etc/passwd", "/data", "data/pizza_active.owl"])
+def test_validate_ontology_bad_path(pizza_stack, path):
+    """validateOntology accepts only existing regular files under /data."""
+    r = _post(f"{pizza_stack}/validateOntology.groovy", json_body={
+        "secretKey": TEST_SECRET_KEY, "owlPath": path})
     assert r.status_code == 400
+
+
+def _es_count(index):
+    base = f"http://localhost:{PORT_ES}"
+    requests.post(f"{base}/{index}/_refresh", timeout=30).raise_for_status()
+    r = requests.get(f"{base}/{index}/_count", timeout=30)
+    r.raise_for_status()
+    return r.json()["count"]
+
+
+@pytest.mark.slow
+@pytest.mark.timeout(600)
+def test_validation_export_is_indexed_and_then_deleted(pizza_stack):
+    """The update pipeline's indexing contract: validation exports the merged
+    ontology, triggerIndexing indexes exactly its classes and deletes it."""
+    txn = f"t{int(time.time())}-a1"
+    r = _post(f"{pizza_stack}/validateOntology.groovy", json_body={
+        "secretKey": TEST_SECRET_KEY, "owlPath": "/data/pizza_active.owl",
+        "ontologyId": "pizza", "exportId": txn})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    export = body["exportPath"]
+    assert export.endswith(f"/{txn}/pizza.owl") and not export.startswith("/data/")
+
+    again = _post(f"{pizza_stack}/validateOntology.groovy", json_body={
+        "secretKey": TEST_SECRET_KEY, "owlPath": "/data/pizza_active.owl",
+        "ontologyId": "pizza", "exportId": txn})
+    assert again.status_code == 400 and "already exists" in again.json()["message"]
+
+    index = f"aberowl_pizza_classes_{txn}"
+    r = _post(f"{pizza_stack}/triggerIndexing.groovy", json_body={
+        "secretKey": TEST_SECRET_KEY, "ontologyId": "pizza", "owlPath": export,
+        "classIndexName": index, "name": "pizza", "freshIndex": "false"})
+    assert r.status_code == 200, r.text
+    result = _poll_task(pizza_stack, r.json()["taskId"], timeout=540)
+    assert result["status"] == "success", result
+    assert _es_count(index) == body["classCount"]
+
+    gone = _post(f"{pizza_stack}/triggerIndexing.groovy", json_body={
+        "secretKey": TEST_SECRET_KEY, "ontologyId": "pizza", "owlPath": export,
+        "classIndexName": index})
+    assert gone.status_code == 400, "the export is deleted once its indexer exited"
+    requests.delete(f"http://localhost:{PORT_ES}/{index}", timeout=30)
+
+
+@pytest.mark.slow
+@pytest.mark.timeout(120)
+def test_discard_export(pizza_stack):
+    r = _post(f"{pizza_stack}/finalizeUpdate.groovy", json_body={
+        "secretKey": TEST_SECRET_KEY, "ontologyId": "pizza", "action": "discardExport",
+        "exportId": "t0-none"})
+    assert r.status_code == 200 and r.json() == {"status": "ok", "deleted": False}
+
+
+@pytest.mark.slow
+@pytest.mark.timeout(120)
+def test_finalize_requires_the_secret(pizza_stack):
+    r = _post(f"{pizza_stack}/finalizeUpdate.groovy", json_body={
+        "secretKey": "test-wrong_key", "ontologyId": "pizza", "action": "finalize",
+        "owlPath": "/data/x.owl", "servedPath": "/data/pizza_active.owl"})
+    assert r.status_code == 401
+
+
+@pytest.mark.slow
+@pytest.mark.timeout(600)
+def test_hot_swap_from_a_staged_copy_then_finalize(pizza_stack):
+    """After a swap from a staged copy the worker records the staged path;
+    finalize puts the served path back, only in place of that staged path."""
+    staged_dir = ONT_HOST_PATH / "pizza_updates" / "t1"
+    staged_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(ONT_HOST_PATH / "pizza_active.owl", staged_dir / "pizza.owl")
+    staged = "/data/pizza_updates/t1/pizza.owl"
+    served = "/data/pizza_active.owl"
+    try:
+        r = _post(f"{pizza_stack}/updateOntology.groovy", json_body={
+            "secretKey": TEST_SECRET_KEY, "ontologyId": "pizza",
+            "owlPath": staged, "servedPath": served})
+        assert r.status_code == 200, r.text
+        task_id = r.json()["taskId"]
+        result = _poll_task(pizza_stack, task_id, timeout=240)
+        assert result["status"] == "success", result
+        assert result["serving"] is True and result["servedFrom"] == staged
+
+        def recorded():
+            loaded = _get(f"{pizza_stack}/listLoadedOntologies.groovy").json()["ontologies"]
+            return next(o["path"] for o in loaded if o["ontologyId"] == "pizza")
+
+        assert recorded() == staged
+
+        wrong = _post(f"{pizza_stack}/finalizeUpdate.groovy", json_body={
+            "secretKey": TEST_SECRET_KEY, "ontologyId": "pizza", "action": "finalize",
+            "owlPath": "/data/other.owl", "servedPath": served})
+        assert wrong.status_code == 409 and wrong.json()["path"] == staged
+
+        ok = _post(f"{pizza_stack}/finalizeUpdate.groovy", json_body={
+            "secretKey": TEST_SECRET_KEY, "ontologyId": "pizza", "action": "finalize",
+            "owlPath": staged, "servedPath": served})
+        assert ok.status_code == 200 and ok.json()["path"] == served
+        assert recorded() == served
+    finally:
+        shutil.rmtree(ONT_HOST_PATH / "pizza_updates", ignore_errors=True)
+
+
+@pytest.mark.slow
+@pytest.mark.timeout(600)
+def test_one_task_per_ontology(pizza_stack):
+    """A second hot-swap of an ontology is refused while the first is pending."""
+    r = _post(f"{pizza_stack}/updateOntology.groovy", json_body={
+        "secretKey": TEST_SECRET_KEY, "ontologyId": "pizza", "owlPath": "/data/pizza_active.owl"})
+    assert r.status_code == 200, r.text
+    first = r.json()["taskId"]
+    second = _post(f"{pizza_stack}/updateOntology.groovy", json_body={
+        "secretKey": TEST_SECRET_KEY, "ontologyId": "pizza", "owlPath": "/data/pizza_active.owl"})
+    first_state = requests.get(f"{pizza_stack}/updateStatus.groovy", params={"taskId": first}, timeout=10).json()
+    if second.status_code == 200:
+        _poll_task(pizza_stack, second.json()["taskId"], timeout=240)
+    _poll_task(pizza_stack, first, timeout=240)
+    if second.status_code == 200:
+        assert first_state["status"] != "pending", "a second swap started while the first was pending"
+        pytest.skip("the first swap finished before the second request; the guard was not exercised")
+    assert second.status_code == 409 and second.json()["taskId"] == first
 
 
 # ---------------------------------------------------------------------------

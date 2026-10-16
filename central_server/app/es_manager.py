@@ -19,6 +19,12 @@ logger = logging.getLogger(__name__)
 
 ONTOLOGIES_INDEX = "aberowl_ontologies"
 
+
+class ESUnavailable(RuntimeError):
+    """Elasticsearch answered with an error, or not at all: its state is
+    unknown. Raised by the strict methods the update pipeline uses, where
+    reading "no index" into an outage could delete a live index."""
+
 CLASS_INDEX_SETTINGS = {
     "settings": {
         "number_of_shards": 1,
@@ -188,6 +194,55 @@ class CentralESManager:
         for index_name in data:
             return index_name
         return None
+
+    @staticmethod
+    def transaction_index_name(ontology_id: str, txn: str) -> str:
+        """A class index unique to one update or reindex transaction. It does
+        not match the search pattern aberowl_*_classes; only the alias does."""
+        return f"aberowl_{ontology_id}_classes_{txn}"
+
+    async def _strict(self, method: str, path: str) -> tuple:
+        """(status, json body) of a request, raising ESUnavailable when there
+        is no answer."""
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.request(
+                    method, f"{self.es_url}{path}",
+                    timeout=aiohttp.ClientTimeout(total=60),
+                ) as resp:
+                    try:
+                        data = await resp.json(content_type=None)
+                    except Exception:
+                        data = None
+                    return resp.status, data
+        except Exception as e:
+            raise ESUnavailable(f"{method} {path}: {str(e) or type(e).__name__}") from e
+
+    async def get_alias_target(self, ontology_id: str) -> Optional[str]:
+        """The index the ontology's alias points to; None only when ES says
+        the alias does not exist (404). Raises ESUnavailable otherwise, and
+        when the alias is on more than one index."""
+        alias = self._alias_name(ontology_id)
+        status, data = await self._strict("GET", f"/_alias/{alias}")
+        if status == 404:
+            return None
+        if status != 200 or not isinstance(data, dict):
+            raise ESUnavailable(f"GET /_alias/{alias}: HTTP {status}")
+        indices = sorted(data)
+        if len(indices) > 1:
+            raise ESUnavailable(f"alias {alias} is on several indices: {indices}")
+        return indices[0] if indices else None
+
+    async def count_documents(self, index_name: str) -> int:
+        """Refresh an index, then count its documents. Raises ESUnavailable
+        on any error."""
+        status, _ = await self._strict("POST", f"/{index_name}/_refresh")
+        if status != 200:
+            raise ESUnavailable(f"POST /{index_name}/_refresh: HTTP {status}")
+        status, data = await self._strict("GET", f"/{index_name}/_count")
+        if status != 200 or not isinstance(data, dict) or not isinstance(data.get("count"), int):
+            raise ESUnavailable(f"GET /{index_name}/_count: HTTP {status}")
+        return data["count"]
 
     async def get_next_index_name(self, ontology_id: str) -> str:
         """Return the next versioned index name (v1 if first time, else current+1)."""

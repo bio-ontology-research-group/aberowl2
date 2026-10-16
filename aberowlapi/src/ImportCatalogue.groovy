@@ -210,18 +210,35 @@ class ImportCatalogue {
      */
     ImportClosure resolveClosure(OWLOntologyManager manager, OWLOntology root, String rootPath,
                                  OWLOntologyLoaderConfiguration loaderConfig) throws ImportResolutionException {
+        return resolveClosure(manager, root, rootPath, null, loaderConfig)
+    }
+
+    /**
+     * As above, for a root read from a staged copy (an update) of the file it
+     * is served from, servedRootPath. The root is then that file as well: an
+     * entry listing the served file, for the root's own IRI or for an alias
+     * that loops back to it, names the root, and the served file is never
+     * loaded beside its staged copy. Every other identity check is unchanged.
+     */
+    ImportClosure resolveClosure(OWLOntologyManager manager, OWLOntology root, String rootPath,
+                                 String servedRootPath, OWLOntologyLoaderConfiguration loaderConfig)
+            throws ImportResolutionException {
         String where = "Imports of ${ontologyId} (catalogue ${file})"
         Set<OWLOntology> closure = new LinkedHashSet<>([root])
         Map<String, OWLOntology> byIri = [:]
         Map<Path, OWLOntology> byPath = [:]
         Map<OWLOntology, Path> pathOf = new IdentityHashMap<>()
-        Path rootReal
-        try {
-            rootReal = Paths.get(rootPath).toRealPath()
-        } catch (IOException ignored) {
-            rootReal = Paths.get(rootPath).toAbsolutePath().normalize()
+        Path rootReal = realOrNormal(rootPath)
+        Set<Path> rootPaths = new LinkedHashSet<>([rootReal])
+        if (servedRootPath) {
+            rootPaths.add(realOrNormal(servedRootPath))
         }
-        register(where, root, rootReal, null, byIri, byPath, pathOf)
+        register(where, root, rootReal, null, byIri, byPath, pathOf, rootPaths)
+        rootPaths.each { byPath.put(it, root) }
+        // Whether path is a file of document o: its own, or for the root, its served file too.
+        Closure<Boolean> fileOf = { OWLOntology o, Path path ->
+            path == pathOf.get(o) || (o.is(root) && rootPaths.contains(path))
+        }
 
         Deque<OWLOntology> queue = new ArrayDeque<>([root])
         while (!queue.isEmpty()) {
@@ -233,7 +250,7 @@ class ImportCatalogue {
                 Path path = entries.get(iri)
                 OWLOntology named = byIri.get(iri)
                 if (named != null) {
-                    if (path != null && path != pathOf.get(named)) {
+                    if (path != null && !fileOf(named, path)) {
                         throw new ImportResolutionException(
                             "${where}: <${iri}> names ${pathOf.get(named)}, but the catalogue maps it to ${path}")
                     }
@@ -255,7 +272,7 @@ class ImportCatalogue {
                         throw new ImportResolutionException(
                             "${where}: ${path} (for <${iri}>) could not be loaded: ${e.getClass().getSimpleName()}: ${firstLine(e.getMessage())}", e)
                     }
-                    register(where, imported, path, iri, byIri, byPath, pathOf)
+                    register(where, imported, path, iri, byIri, byPath, pathOf, [path] as Set)
                     closure.add(imported)
                     queue.add(imported)
                 }
@@ -266,13 +283,23 @@ class ImportCatalogue {
         return new ImportClosure(closure, new HashSet<>(byIri.keySet()))
     }
 
+    private static Path realOrNormal(String path) {
+        try {
+            return Paths.get(path).toRealPath()
+        } catch (IOException ignored) {
+            return Paths.get(path).toAbsolutePath().normalize()
+        }
+    }
+
     /**
      * Record a loaded document under its real path and under the IRIs it
      * declares, refusing an IRI that already names, or is listed for, a
-     * different file.
+     * file other than ownPaths (the document's path, and for a staged root
+     * also its served file).
      */
     private void register(String where, OWLOntology o, Path path, String viaIri, Map<String, OWLOntology> byIri,
-                          Map<Path, OWLOntology> byPath, Map<OWLOntology, Path> pathOf) throws ImportResolutionException {
+                          Map<Path, OWLOntology> byPath, Map<OWLOntology, Path> pathOf,
+                          Set<Path> ownPaths) throws ImportResolutionException {
         String source = viaIri == null ? "the root ${path}" : "${path} (for <${viaIri}>)"
         for (String id : idsOf(o).sort()) {
             OWLOntology other = byIri.get(id)
@@ -281,7 +308,7 @@ class ImportCatalogue {
                     "${where}: ${source} declares <${id}>, which already names ${pathOf.get(other)}")
             }
             Path listed = entries.get(id)
-            if (listed != null && listed != path) {
+            if (listed != null && !ownPaths.contains(listed)) {
                 throw new ImportResolutionException(
                     "${where}: ${source} declares <${id}>, which the catalogue maps to ${listed}")
             }

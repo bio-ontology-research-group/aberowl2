@@ -108,7 +108,7 @@ class ImportCatalogueHarness {
     final ClassLoader loader
     final Class RM
     final Class IRI_CLASS
-    Path tmp, data, outside, catalogues
+    Path tmp, data, outside, catalogues, exports
     Map<String, String> files = [:]
     ServerSocket listener
     int passed = 0
@@ -127,7 +127,9 @@ class ImportCatalogueHarness {
         data = Files.createDirectory(tmp.resolve("data"))
         outside = Files.createDirectory(tmp.resolve("outside"))
         catalogues = Files.createDirectory(data.resolve("import_catalogues"))
+        exports = Files.createDirectory(tmp.resolve("exports"))
         System.setProperty("aberowl.dataRoot", data.toString())
+        System.setProperty("aberowl.exportRoot", exports.toString())
         listener = new ServerSocket(0, 50, InetAddress.getLoopbackAddress())
         writeFixtures()
 
@@ -147,6 +149,11 @@ class ImportCatalogueHarness {
             "no network and no file: dereferencing"          : this.&noNetworkNoFileIri,
             "reload, hot-swap manager and dispose"           : this.&reloadAndDispose,
             "failed reload keeps the serving copy"           : this.&failedReloadKeepsServingCopy,
+            "validating a staged update loads like a load"   : this.&validateStagedLikeALoad,
+            "staged root: entries naming the served file"    : this.&stagedRootServedIdentity,
+            "validation export: merged, no imports"          : this.&validationExport,
+            "finalize: served path replaces the staged one"  : this.&finalizeServedPath,
+            "update servlets: paths and the task guard"      : this.&updateFilesHelpers,
             "browse: declared roots of a merged ontology"    : this.&declaredBrowseRoots,
             "browse: owl:Thing fallback"                     : this.&browseRootsFallback,
             "browse: reload and dispose"                     : this.&browseRootsLifecycle,
@@ -808,5 +815,185 @@ ${body}
         check(m.getStatus("chainroot") == "classified" && ORGANISM in superclasses(m, "chainroot", TERRIER),
             "a valid reload afterwards succeeds")
         check(m.getoManager("chainroot").getOntologies().size() == 2, "the reloaded manager holds no duplicates")
+    }
+
+    // validateOntology.groovy, which the update pipeline calls on a download
+    // staged next to the served file before indexing or hot-swapping it.
+    void validateStagedLikeALoad() {
+        Path staged = data.resolve("r/r_staging.owl")
+        Files.copy(new File(files.r).toPath(), staged)
+        try {
+            writeCatalogue("rootont", [(B): files.b, (C): files.c])
+            def m = newManager()
+            def summary = m.validateOntologyFile("rootont", staged.toString())
+            check(summary.importsPolicy == "catalogue" && summary.importsResolved == 2 && summary.importsUnresolved == 0,
+                "the root's catalogue resolves the staged copy's closure: ${summary}")
+            check(summary.declaredImports == [B, C, R], "the staged root's own imports are reported: ${summary.declaredImports}")
+            def withImports = summary.classCount
+            check(!m.hasOntology("rootont"), "validation installs nothing")
+
+            // A release that needs an import the catalogue lacks fails here,
+            // as its load would, before anything is indexed or swapped.
+            writeCatalogue("rootont", [(B): files.b])
+            expectImportFailure("validation with an unlisted import", ["is not listed in the catalogue"]) {
+                m.validateOntologyFile("rootont", staged.toString())
+            }
+
+            // Without a catalogue, or without an id, imports stay suppressed.
+            clearCatalogues()
+            summary = m.validateOntologyFile("rootont", staged.toString())
+            check(summary.importsPolicy == "suppressed" && summary.importsResolved == 0,
+                "no catalogue: suppressed: ${summary}")
+            check(withImports > summary.classCount,
+                "the imported classes were counted with the catalogue: ${withImports} vs ${summary.classCount}")
+            def net = m.validateOntologyFile(null, files.net)
+            check(net.importsPolicy == "suppressed" && net.importsDeclared == 2, "no id: suppressed: ${net}")
+            checkNoConnection()
+        } finally {
+            Files.deleteIfExists(staged)
+        }
+    }
+
+    // B5. The update pipeline validates and hot-swaps a staged copy,
+    // /data/<id>/updates/<txn>/<id>.owl, of the served file. Catalogue entries
+    // naming the served file (a cycle back to the root through a URL alias,
+    // or the root's own IRI) must name the staged root, not load the served
+    // file beside it.
+    void stagedRootServedIdentity() {
+        Path staged = data.resolve("aliasroot/updates/t1/aliasroot.owl")
+        Files.createDirectories(staged.getParent())
+        Files.copy(Path.of(files.aliasroot), staged)
+        try {
+            Map aliasCatalogue = [(MODULE_URL): files.module, (MODULE_MIRROR): files.module, (MODULE): files.module,
+                                  (ROOT_URL): files.aliasroot, (MODULE2): files.module2]
+            writeCatalogue("aliasroot", aliasCatalogue)
+            def servedManager = newManager()
+            servedManager.loadOntology("aliasroot", files.aliasroot, "elk")
+            int servedCount = servedManager.getOntology("aliasroot").getClassesInSignature(true).size()
+
+            // The defect: without the served path, the loop through ROOT_URL
+            // loads the served file next to its staged copy and fails.
+            expectImportFailure("a staged root without its served path", [files.aliasroot]) {
+                newManager().validateOntologyFile("aliasroot", staged.toString())
+            }
+
+            def summary = newManager().validateOntologyFile("aliasroot", staged.toString(), files.aliasroot)
+            check(summary.importsPolicy == "catalogue" && summary.importsResolved == 2 && summary.importsUnresolved == 0,
+                "the loop through the served file resolves to the staged root: ${summary}")
+            check(summary.classCount == servedCount, "the same closure as the served load: ${summary.classCount} vs ${servedCount}")
+
+            writeCatalogue("aliasroot", aliasCatalogue + [(ALIAS_ROOT): files.aliasroot])
+            summary = newManager().validateOntologyFile("aliasroot", staged.toString(), files.aliasroot)
+            check(summary.importsResolved == 2, "the root's own IRI listed with the served file names the staged root")
+
+            // The hot-swap reads the staged copy the same way.
+            def m = load(newManager(), "aliasroot", "aliasroot")
+            m.reloadOntology("aliasroot", staged.toString(), "elk", files.aliasroot)
+            check(m.isServing("aliasroot") && CELLULAR_PROCESS in superclasses(m, "aliasroot", WILTING),
+                "the swapped-in copy is classified with the module")
+            check(m.getoManager("aliasroot").getOntologies().size() == 2, "no duplicate documents left behind")
+
+            // Still strict: the root's IRI listed with any other file fails.
+            writeCatalogue("aliasroot", aliasCatalogue + [(ALIAS_ROOT): files.plain])
+            expectImportFailure("the root's IRI listed with another file",
+                    ["declares <${ALIAS_ROOT}>", "the catalogue maps to ${files.plain}"]) {
+                newManager().validateOntologyFile("aliasroot", staged.toString(), files.aliasroot)
+            }
+            checkNoConnection()
+        } finally {
+            data.resolve("aliasroot/updates").toFile().deleteDir()
+        }
+    }
+
+    // B3. Indexing reads the merged ontology a hot-swap classifies, written by
+    // validation with no owl:imports left, so the standalone indexer (plain
+    // OWLAPI, default import handling) fetches nothing and sees every class.
+    void validationExport() {
+        def UF = loader.loadClass("src.UpdateFiles")
+        writeCatalogue("rootont", [(B): files.b, (C): files.c])
+        Path target = UF.exportFile("rootont", "txn-1")
+        check(target.startsWith(exports), "the export goes under the export root: ${target}")
+        def summary = newManager().validateOntologyFile("rootont", files.r, null, target)
+        check(summary.exportPath == target.toString() && Files.isRegularFile(target), "the export is written: ${summary}")
+        check(!target.text.contains("Import("), "the export declares no imports")
+
+        def plain = loader.loadClass("org.semanticweb.owlapi.apibinding.OWLManager").createOWLOntologyManager()
+        def exported = plain.loadOntologyFromOntologyDocument(target.toFile())
+        def classes = exported.getClassesInSignature(true).collect { it.getIRI().toString() } as Set
+        check(exported.getImportsDeclarations().isEmpty(), "the reloaded export has no imports")
+        check(classes.size() == summary.classCount,
+            "the indexer sees exactly the validated classes: ${classes.size()} vs ${summary.classCount}")
+        check(ORGANISM in classes && DOG in classes, "imported classes are in the export")
+
+        String before = target.text
+        try {
+            newManager().validateOntologyFile("rootont", files.r, null, target)
+            failures << "${current}: an existing export was replaced"
+        } catch (Exception expected) {
+            passed++
+        }
+        check(target.text == before, "the existing export is unchanged")
+        check(!Files.exists(target.resolveSibling(target.getFileName().toString() + ".part")), "no partial file is left")
+
+        // Suppressed imports are left out of the export, so nothing is fetched.
+        clearCatalogues()
+        Path suppressed = UF.exportFile("netroot", "txn-2")
+        def s = newManager().validateOntologyFile("netroot", files.net, null, suppressed)
+        def reread = plain.loadOntologyFromOntologyDocument(suppressed.toFile())
+        check(s.importsPolicy == "suppressed" && reread.getImportsDeclarations().isEmpty(),
+            "a suppressed ontology exports without its imports")
+        checkNoConnection()
+
+        check(UF.deleteExport(target) && UF.deleteExport(suppressed), "exports are deleted")
+        check(!Files.exists(target.getParent()), "the transaction directory goes with its export")
+    }
+
+    // B7. After a hot-swap from a staged file and its promotion, the worker
+    // records the served file again, and only in place of that staged file.
+    void finalizeServedPath() {
+        Path staged = data.resolve("plain/updates/t1/plain.owl")
+        Files.createDirectories(staged.getParent())
+        Files.copy(Path.of(files.plain), staged)
+        try {
+            def m = load(newManager(), "plain", "plain")
+            m.reloadOntology("plain", staged.toString(), "elk", files.plain)
+            check(listing(m, "plain").path == staged.toString(), "after the hot-swap the staged path is recorded")
+            check(m.finalizeServedPath("plain", data.resolve("other.owl").toString(), files.plain) == staged.toString(),
+                "another expected path changes nothing")
+            check(m.finalizeServedPath("plain", staged.toString(), files.plain) == files.plain, "the served path is recorded")
+            check(listing(m, "plain").path == files.plain, "listLoadedOntologies reports the served file")
+            check(m.finalizeServedPath("missing", staged.toString(), files.plain) == null
+                    && !m.ontologyPaths.containsKey("missing"), "an unloaded ontology stays unloaded")
+            check(m.isServing("plain"), "the classified ontology is serving")
+            try {
+                m.reloadOntology("plain", files.garbage, "elk", files.plain)
+            } catch (Exception expected) {
+            }
+            check(!m.isServing("plain"), "a failed dispose-first reload reports the ontology not serving")
+        } finally {
+            data.resolve("plain/updates").toFile().deleteDir()
+        }
+    }
+
+    void updateFilesHelpers() {
+        def UF = loader.loadClass("src.UpdateFiles")
+        check(UF.dataFile(files.b) == Path.of(files.b), "a file under the data root is accepted")
+        [outside  : files.outsideB, traversal: data.toString() + "/../outside/b.owl",
+         symlink  : data.resolve("escape.owl").toString(), directory: data.resolve("dir.owl").toString(),
+         missing  : data.resolve("missing.owl").toString(), relative: "b/b.owl", root: data.toString(), empty: ""
+        ].each { name, p ->
+            check(UF.dataFile(p) == null, "${name} is refused: ${p}")
+        }
+        ["../x", "TXN", "", "a/b", "-x"].each { id ->
+            check(UF.exportFile("rootont", id) == null, "transaction id '${id}' is refused")
+        }
+        check(UF.exportFile("../r", "t1") == null, "an unsafe ontology id is refused")
+        check(UF.existingExport(files.b) == null, "a data file is not an export")
+        def tasks = [a: [status: 'success', ontologyId: 'go', owlPath: '/x'],
+                     b: [status: 'pending', ontologyId: 'go', owlPath: '/y']]
+        check(UF.activeTask(tasks, 'go') == 'b' && UF.activeTask(tasks, 'hp') == null,
+            "a pending task blocks its ontology only")
+        check(UF.taskReading(tasks, '/y') == 'b' && UF.taskReading(tasks, '/x') == null,
+            "only a pending task holds its file")
     }
 }

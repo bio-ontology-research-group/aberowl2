@@ -217,13 +217,22 @@ def deleteOntologyData(ontology) {
 	}
 }
 
+// Documents that could not be written. Any failure fails the run (exit 1),
+// so a caller never promotes an index with documents missing.
+indexed = 0
+failedDocs = 0
+
 def index(def indexName, def obj) {
 	try {
 		request = new IndexRequest(indexName)
 		request.source(new JsonBuilder(obj).toString(), XContentType.JSON);
 		esClient.index(request, RequestOptions.DEFAULT);
+		indexed++
     } catch (Exception e) {
-		e.printStackTrace()
+		failedDocs++
+		if (failedDocs <= 5) {
+			e.printStackTrace()
+		}
     }
 }
 
@@ -386,7 +395,11 @@ void indexOntology(String fileName, def data) {
 
     } // End of classes loop
 
-	println('Finished indexing :' + acronym)
+	if (failedDocs > 0) {
+	    println "ERROR: ${failedDocs} documents could not be indexed (${indexed} written) for ${acronym}"
+	    System.exit(1)
+	}
+	println("Finished indexing :" + acronym + " (" + indexed + " documents)")
     } catch (Exception e) {
         println "ERROR: Failed during ontology processing: ${e.message}"
         e.printStackTrace()
