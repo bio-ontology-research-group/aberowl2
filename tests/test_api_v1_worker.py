@@ -175,6 +175,7 @@ class TestServiceApiAllowList:
     @pytest.mark.parametrize("script", [
         "addOntology.groovy", "removeOntology.groovy", "updateOntology.groovy",
         "reloadOntology.groovy", "triggerIndexing.groovy", "elastic.groovy",
+        "validateOntology.groovy", "finalizeUpdate.groovy", "updateStatus.groovy",
     ])
     async def test_mutating_servlets_are_refused(self, client, stub_worker, script):
         """The whole point of the allow-list: these must never be proxied."""
