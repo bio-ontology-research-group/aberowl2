@@ -1,0 +1,49 @@
+# systemd unit for the AberOWL ontology transfer service, an alternative to
+# deploy/docker-compose.transfer.yml. Install the service into a virtual
+# environment owned by root, e.g. /opt/aberowl-transfer, with
+#   python3 -m venv /opt/aberowl-transfer/venv
+#   /opt/aberowl-transfer/venv/bin/pip install -r transfer_service/requirements.txt
+#   cp transfer_service/aberowl_transfer.py /opt/aberowl-transfer/
+# and adjust the paths, user and address below. See transfer_service/README.md.
+
+[Unit]
+Description=AberOWL ontology transfer service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# A dedicated user that owns the ontology directory and the state directory.
+User=aberowl-transfer
+Group=aberowl-transfer
+WorkingDirectory=/opt/aberowl-transfer
+Environment=ABEROWL_TRANSFER_CONFIG=/etc/aberowl-transfer/config.json
+# The token file is readable by this user only (chmod 600).
+Environment=ABEROWL_TRANSFER_TOKEN_FILE=/etc/aberowl-transfer/token
+# Bind to a private address of this host that central can reach.
+ExecStart=/opt/aberowl-transfer/venv/bin/uvicorn aberowl_transfer:create_app_from_env --factory \
+    --host 192.0.2.10 --port 18443 --no-server-header --no-access-log \
+    --ssl-certfile /etc/aberowl-transfer/tls/tls.crt --ssl-keyfile /etc/aberowl-transfer/tls/tls.key
+Restart=on-failure
+RestartSec=5
+
+# Writable: the ontology directory and the journal, nothing else.
+ProtectSystem=strict
+ReadWritePaths=/srv/aberowl/ontologies /var/lib/aberowl-transfer
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+SystemCallArchitectures=native
+UMask=0022
+
+[Install]
+WantedBy=multi-user.target

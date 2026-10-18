@@ -37,6 +37,17 @@ recovery_required, and every later update, reindex, source change or batch
 check of that ontology is refused until an operator reconciles the state
 and resolves it (POST /admin/ontology/{id}/resolve_update). Nothing a
 running task may still use is deleted. See deploy/README.md.
+
+Transport. By default central and the worker share the ontology tree, as
+above. A worker mapped in UPDATE_TRANSFER_CONFIG (see transfer.py) is on
+another host: central downloads into its own ONTOLOGIES_DIR/.update-downloads/
+and the transfer service on the worker's host stages the release at the same
+/data/<id>/updates/<txn>/<id>.owl, promotes it (compare and set on the served
+file's SHA-256) and removes the stage after finalize. Decisions about the
+served file use what the service reports for the worker's host, never
+central's copy, and the version markers are recorded only after the service
+shows the served file holding the new release. Any outcome the service
+cannot confirm leaves the transaction for recovery, as above.
 """
 
 import asyncio
@@ -56,6 +67,7 @@ from urllib.parse import urlsplit
 import aiohttp
 
 from app.es_manager import CentralESManager, ESUnavailable
+from app.intake import transfer as update_transfer
 
 logger = logging.getLogger(__name__)
 
@@ -128,8 +140,12 @@ def new_txn_id() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dt%H%M%S") + "-" + secrets.token_hex(3)
 
 
-def ontology_paths(ontologies_dir: str, ontology_id: str, txn: Optional[str] = None) -> Dict[str, Any]:
-    """Where the pipeline reads and writes, as central and as the worker see it."""
+def ontology_paths(ontologies_dir: str, ontology_id: str, txn: Optional[str] = None,
+                   remote: bool = False) -> Dict[str, Any]:
+    """Where the pipeline reads and writes, as central and as the worker see it.
+    With remote transport, central's download is its own, outside the
+    ontology's directory; the transfer service puts the stage at
+    worker_staging on the worker's host."""
     ont_dir = Path(ontologies_dir) / ontology_id
     paths = {
         "dir": ont_dir,
@@ -138,7 +154,10 @@ def ontology_paths(ontologies_dir: str, ontology_id: str, txn: Optional[str] = N
         "worker_served": f"/data/{ontology_id}/{ontology_id}.owl",
     }
     if txn:
-        paths["txn_dir"] = ont_dir / "updates" / txn
+        if remote:
+            paths["txn_dir"] = Path(ontologies_dir) / ".update-downloads" / ontology_id / txn
+        else:
+            paths["txn_dir"] = ont_dir / "updates" / txn
         paths["staging"] = paths["txn_dir"] / f"{ontology_id}.owl"
         paths["worker_staging"] = f"/data/{ontology_id}/updates/{txn}/{ontology_id}.owl"
     return paths
@@ -750,7 +769,7 @@ async def _record_check(redis_client, ontology_id, check_status, error, message)
     await _save_entry(redis_client, ontology_id, entry)
 
 
-async def _record_unchanged(redis_client, ontology_id, version_info, md5, txn=None) -> None:
+async def _record_unchanged(redis_client, ontology_id, version_info, md5, txn=None, warnings=None) -> None:
     """The served release is the upstream one: store the version markers so
     the next check is a HEAD request only."""
     entry = await _load_entry(redis_client, ontology_id)
@@ -766,8 +785,37 @@ async def _record_unchanged(redis_client, ontology_id, version_info, md5, txn=No
         entry["source_resolved_url"] = version_info["permanent_redirect"]
     if txn and (entry.get("update_txn") or {}).get("id") == txn:
         entry.pop("update_txn")
+    if warnings:
+        entry["update_warnings"] = warnings
+    else:
+        entry.pop("update_warnings", None)
     _set_update_status(entry, "ok", None)
     await _save_entry(redis_client, ontology_id, entry)
+
+
+async def _set_fields(redis_client, ontology_id, **fields) -> None:
+    """Set (or, with None, remove) fields of the registry entry as it is now."""
+    entry = await _load_entry(redis_client, ontology_id)
+    for key, value in fields.items():
+        if value is None:
+            entry.pop(key, None)
+        else:
+            entry[key] = value
+    await _save_entry(redis_client, ontology_id, entry)
+
+
+def _unfinished_since_success(entry: Dict[str, Any]) -> bool:
+    """Whether a run stopped for recovery after the last complete update.
+    Such a run may have replaced the served file without moving the search
+    alias or recording dependents, so the served file then says nothing
+    about what the rest of the system holds."""
+    for item in reversed(entry.get("update_history") or []):
+        status = item.get("status")
+        if status == "success":
+            return False
+        if status in ("recovery_required", "resolved_by_operator"):
+            return True
+    return False
 
 
 async def _txn_begin(redis_client, ontology_id, record: Dict[str, Any]) -> None:
@@ -1048,8 +1096,14 @@ async def _update(ontology_id, redis_client, es_mgr, ontologies_dir, force):
         return await skip("no_source_url", "no source_url is configured for this ontology")
     if not server_url:
         return await skip("no_server_url", "no worker is registered for this ontology")
+    try:
+        target = update_transfer.target_for(server_url)
+    except update_transfer.TransferConfigError as e:
+        # Never fall back to the shared directory when the mapping is broken.
+        return await skip("transfer_config_invalid", str(e))
+    remote = update_transfer.RemoteTransfer(target, ontology_id) if target else None
     paths = ontology_paths(ontologies_dir, ontology_id)
-    if not paths["served"].is_file():
+    if remote is None and not paths["served"].is_file():
         # Either the ontology is not stored as /data/<id>/<id>.owl, or this
         # process does not see the ontology tree (ONTOLOGIES_DIR).
         return await skip("served_file_missing", f"{paths['served']} does not exist on the central server")
@@ -1071,6 +1125,39 @@ async def _update(ontology_id, redis_client, es_mgr, ontologies_dir, force):
                           f"the worker serves {ontology_id} from {served['path'] or 'an unknown path'}, "
                           f"not {paths['worker_served']}")
 
+    # Remote transport: the served file on the worker's host, as its
+    # transfer service hashes it now. Central's own copy is never consulted.
+    remote_served = None
+    if remote is not None:
+        remote_served = await remote.served()
+        if remote_served["state"] == "unreachable":
+            return await skip("transfer_unreachable", remote_served["message"])
+        if remote_served["state"] == "missing":
+            return await skip("served_file_missing",
+                              f"the transfer service reports no {paths['worker_served']} on the worker's host")
+        if remote_served["state"] != "ok":
+            return await skip("transfer_refused", remote_served["message"])
+        if remote_served.get("worker_path") != paths["worker_served"]:
+            return await skip("transfer_path_mismatch",
+                              f"the transfer service serves {remote_served.get('worker_path')}, "
+                              f"not {paths['worker_served']}")
+        # A stage kept after an earlier complete update is removed before
+        # anything new starts on the host.
+        pending = entry.get("transfer_release_pending")
+        if pending:
+            reason = await _release_pending(redis_client, ontology_id, remote, remote_served, pending)
+            if reason:
+                return await skip("transfer_cleanup_pending", reason)
+            entry.pop("transfer_release_pending", None)
+            remote_served["open_transactions"] = [
+                t for t in remote_served.get("open_transactions") or [] if t != pending.get("txn")]
+        open_txns = remote_served.get("open_transactions") or []
+        if open_txns:
+            return await skip("transfer_transaction_open",
+                              f"the transfer service has unfinished transactions of {ontology_id}: "
+                              f"{', '.join(map(str, open_txns))}; finish or abort them as described in "
+                              "transfer_service/README.md (Recovery)")
+
     try:
         has_index = bool(await es_mgr.get_alias_target(ontology_id))
     except ESUnavailable as e:
@@ -1085,23 +1172,37 @@ async def _update(ontology_id, redis_client, es_mgr, ontologies_dir, force):
     if version_info.get("error"):
         return await _fail(redis_client, ontology_id, "check_failed", version_info["error"],
                            f"version check of the source failed: {version_info['error']}")
-    if not force and not version_info.get("changed") and has_index:
+    # The stored markers describe the last complete update. With remote
+    # transport they are trusted only while the worker's host still serves
+    # the file that update recorded, and central's own copy, if it keeps
+    # one, holds it too; otherwise the download below repairs it.
+    markers_current = True
+    if remote_served is not None:
+        markers_current = remote_served["md5"] == entry.get("source_md5")
+        if markers_current and not force and not version_info.get("changed") and has_index:
+            central_md5 = await asyncio.to_thread(_central_copy_md5, paths)
+            markers_current = central_md5 in (None, entry.get("source_md5"))
+    if not force and not version_info.get("changed") and has_index and markers_current:
         logger.info("%s: source unchanged (ETag/Last-Modified), no update needed", ontology_id)
         await _record_unchanged(redis_client, ontology_id, version_info, entry.get("source_md5"))
         return _outcome("unchanged", message="source ETag/Last-Modified unchanged")
 
     txn = new_txn_id()
-    paths = ontology_paths(ontologies_dir, ontology_id, txn)
-    await _txn_begin(redis_client, ontology_id, {
-        "id": txn, "kind": "update", "phase": "download", "worker": server_url,
-        "staging": paths["worker_staging"]})
+    paths = ontology_paths(ontologies_dir, ontology_id, txn, remote=remote is not None)
+    record = {"id": txn, "kind": "update", "phase": "download", "worker": server_url,
+              "staging": paths["worker_staging"]}
+    if remote is not None:
+        record.update(transport="remote", transfer=remote.target.transfer_url,
+                      base_sha256=remote_served["sha256"])
+    await _txn_begin(redis_client, ontology_id, record)
     return await _guarded(redis_client, ontology_id, txn, lambda: _update_txn(
         ontology_id, entry, redis_client, es_mgr, ontologies_dir, force, txn, paths,
-        server_url, source_url, headers, version_info, has_index))
+        server_url, source_url, headers, version_info, has_index, remote, remote_served))
 
 
 async def _update_txn(ontology_id, entry, redis_client, es_mgr, ontologies_dir, force, txn, paths,
-                      server_url, source_url, headers, version_info, has_index):
+                      server_url, source_url, headers, version_info, has_index,
+                      remote=None, remote_served=None):
     secret_key = _secret(entry)
     # The reasoner the worker reports it was configured with (status poll).
     reasoner = entry.get("reasoner_configured") or entry.get("reasoner_type")
@@ -1110,9 +1211,16 @@ async def _update_txn(ontology_id, entry, redis_client, es_mgr, ontologies_dir, 
     staging_host = str(paths["staging"])
     staging_worker = paths["worker_staging"]
     served_worker = paths["worker_served"]
+    remote_stage = {"sent": False}
 
     async def fail(update_status, error, message):
         # Only for failures where nothing in use remains: clean up and end.
+        if remote is not None and remote_stage["sent"]:
+            aborted = await remote.abort(txn)
+            if not aborted["ok"]:
+                return await recover("transfer_cleanup_unknown",
+                                     f"{error}: {message}; the transfer service did not confirm removing "
+                                     f"{staging_worker}: {aborted['message']}")
         _remove_txn_dir(paths)
         return await _fail(redis_client, ontology_id, update_status, error, message, txn=txn)
 
@@ -1126,16 +1234,50 @@ async def _update_txn(ontology_id, entry, redis_client, es_mgr, ontologies_dir, 
         return await fail("download_failed", f"download: {dl_result['error']}", dl_result["error"])
     new_md5 = dl_result["md5"]
 
-    # Unchanged by content. With no recorded hash yet (first check after a
+    # Unchanged by content: the download is the release of the last complete
+    # update (recorded MD5). With no recorded hash yet (first check after a
     # source was configured), compare with the served file, so configuring a
-    # source does not reclassify an ontology that is already current. A never
-    # indexed ontology still goes through, to get its index.
-    baseline_md5 = entry.get("source_md5") or await asyncio.to_thread(file_md5, str(paths["served"]))
-    if not force and new_md5 == baseline_md5 and has_index:
+    # source does not reclassify an ontology that is already current; but not
+    # after a run stopped for recovery, which may have replaced the served
+    # file without finishing. A never indexed ontology still goes through,
+    # to get its index. With remote transport the worker's host must also
+    # serve that release; a host or registry that disagrees gets the full
+    # update, even with identical bytes, which also moves the search alias.
+    recorded_md5 = entry.get("source_md5")
+    if remote is None:
+        if recorded_md5:
+            unchanged = new_md5 == recorded_md5
+        else:
+            unchanged = (not _unfinished_since_success(entry)
+                         and new_md5 == await asyncio.to_thread(file_md5, str(paths["served"])))
+    else:
+        unchanged = new_md5 == remote_served["md5"] and (
+            new_md5 == recorded_md5 if recorded_md5 else not _unfinished_since_success(entry))
+    if not force and unchanged and has_index:
         logger.info("%s: MD5 unchanged (%s), no update needed", ontology_id, new_md5)
+        warnings: List[str] = []
+        if remote is not None:
+            # Central's own copy follows the verified release here too.
+            mirror = await asyncio.to_thread(_refresh_central_copy, paths, staging_host, new_md5)
+            if mirror:
+                warnings.append(mirror)
         _remove_txn_dir(paths)
-        await _record_unchanged(redis_client, ontology_id, version_info, new_md5, txn=txn)
-        return _outcome("unchanged", message="downloaded file identical to the served one", new_md5=new_md5)
+        await _record_unchanged(redis_client, ontology_id, version_info, new_md5, txn=txn, warnings=warnings)
+        extra = {"warnings": warnings} if warnings else {}
+        return _outcome("unchanged", message="downloaded file identical to the served one", new_md5=new_md5,
+                        **extra)
+
+    new_sha256 = None
+    if remote is not None:
+        # Put the release where the worker will look for it, on its host.
+        new_sha256, size = await asyncio.to_thread(update_transfer.sha256_file, staging_host)
+        await _txn_set(redis_client, ontology_id, txn, phase="transfer", sha256=new_sha256)
+        remote_stage["sent"] = True
+        staged = await remote.stage(txn, staging_host, new_sha256, size, remote_served["sha256"])
+        if staged["state"] == "unknown":
+            return await recover("transfer_unknown", staged["message"])
+        if staged["state"] != "staged":
+            return await fail("transfer_failed", "transfer_failed", staged["message"])
 
     async with _worker_lock(server_url):
         blocked = await worker_recovery_blocker(redis_client, server_url, txn)
@@ -1226,14 +1368,24 @@ async def _update_txn(ontology_id, entry, redis_client, es_mgr, ontologies_dir, 
         # From here the worker serves the new release from the staging file.
         # A failure leaves the transaction for recovery; nothing is undone.
         await _txn_set(redis_client, ontology_id, txn, phase="promote", task_id=None)
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-        try:
-            archived = _archive_served(paths, ontology_id, timestamp)
-            _promote(paths)
-        except OSError as e:
-            return await recover("promote_failed",
-                                 f"the worker serves the new release from {staging_worker}, "
-                                 f"but {paths['served']} was not replaced: {e}")
+        promoted = None
+        if remote is None:
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+            try:
+                archived = _archive_served(paths, ontology_id, timestamp)
+                _promote(paths)
+            except OSError as e:
+                return await recover("promote_failed",
+                                     f"the worker serves the new release from {staging_worker}, "
+                                     f"but {paths['served']} was not replaced: {e}")
+        else:
+            promoted = await remote.promote(txn, new_sha256, remote_served["sha256"])
+            if promoted["state"] != "promoted":
+                return await recover(
+                    "promote_failed" if promoted["state"] == "refused" else "promote_unknown",
+                    f"the worker serves the new release from {staging_worker}, but the transfer service "
+                    f"did not confirm that {served_worker} holds it: {promoted['message']}")
+            archived = f"/data/{promoted['archive']}" if promoted.get("archive") else None
 
         await _txn_set(redis_client, ontology_id, txn, phase="finalize")
         final = await finalize_served_path(server_url, secret_key, ontology_id, staging_worker, served_worker)
@@ -1243,6 +1395,20 @@ async def _update_txn(ontology_id, entry, redis_client, es_mgr, ontologies_dir, 
                                  f"{final.get('path') or staging_worker}: {final['message']}")
 
     # The worker no longer refers to the staging file.
+    warnings = []
+    if remote is not None:
+        released = await remote.release(txn, new_sha256)
+        if not released["ok"]:
+            # The worker no longer reads the stage, but the service keeps
+            # the transaction open, which blocks the next one on the host.
+            # Recorded now, so the next run removes it first.
+            warnings.append(f"the transfer service kept {staging_worker}: {released['message']}; "
+                            "the next update removes it first")
+            await _set_fields(redis_client, ontology_id, transfer_release_pending={
+                "txn": txn, "sha256": new_sha256, "transfer": remote.target.transfer_url, "since": _now()})
+        mirror = await asyncio.to_thread(_refresh_central_copy, paths, staging_host)
+        if mirror:
+            warnings.append(mirror)
     _remove_txn_dir(paths)
 
     await _txn_set(redis_client, ontology_id, txn, phase="alias")
@@ -1255,11 +1421,17 @@ async def _update_txn(ontology_id, entry, redis_client, es_mgr, ontologies_dir, 
     current = await _load_entry(redis_client, ontology_id)
     await _retire_previous(es_mgr, ontology_id, current, [new_index, old_index])
 
-    dependents = find_catalogue_dependents(ontologies_dir, served_worker)
+    if remote is None:
+        dependents = find_catalogue_dependents(ontologies_dir, served_worker)
+    else:
+        # The catalogues the worker reads are on its host.
+        dependents = sorted(d for d in promoted.get("catalogue_dependents") or [] if isinstance(d, str))
     await _record_update(
         redis_client, ontology_id, txn=txn, version_info=version_info, new_md5=new_md5,
         new_index=new_index, old_index=old_index, worker_path=served_worker,
         archived=str(archived) if archived else None, validation=validation, dependents=dependents,
+        warnings=warnings,
+        transport={"transport": "remote", "sha256": new_sha256} if remote is not None else None,
     )
     if dependents:
         await _mark_dependents_stale(redis_client, ontology_id, dependents)
@@ -1267,8 +1439,11 @@ async def _update_txn(ontology_id, entry, redis_client, es_mgr, ontologies_dir, 
             "%s updated; ontologies whose import catalogue lists it keep the old copy until reloaded: %s",
             ontology_id, ", ".join(dependents),
         )
+    for warning in warnings:
+        logger.warning("%s: %s", ontology_id, warning)
     logger.info("Update pipeline complete for %s", ontology_id)
-    return _outcome("updated", new_md5=new_md5, es_index=new_index, dependents=dependents, txn=txn)
+    extra = {"warnings": warnings} if warnings else {}
+    return _outcome("updated", new_md5=new_md5, es_index=new_index, dependents=dependents, txn=txn, **extra)
 
 
 # ---------------------------------------------------------------------------
@@ -1310,6 +1485,102 @@ def _promote(paths: Dict[str, Any]) -> None:
     os.replace(part, served)
 
 
+def _central_copy_md5(paths: Dict[str, Any]) -> Optional[str]:
+    """MD5 of central's own copy of the served file, None when it keeps none."""
+    served = paths["served"]
+    if served.is_symlink() or not served.is_file():
+        return None
+    return file_md5(str(served))
+
+
+def _refresh_central_copy(paths: Dict[str, Any], download: str, md5: Optional[str] = None) -> Optional[str]:
+    """Remote transport, once the worker's host was seen to serve the
+    release in download: central's own copy (what central offers for
+    download) follows it. Only an existing regular file is replaced, and
+    with md5 given only when it differs; nothing is archived here, the
+    worker's host keeps the archive. Returns a warning, or None. A copy left
+    behind is retried by the next check, which compares it again."""
+    served = paths["served"]
+    if served.is_symlink() or not served.is_file():
+        return None
+    if md5 is not None and file_md5(str(served)) == md5:
+        return None
+    part = served.with_name(served.name + ".promote")
+    try:
+        try:
+            os.unlink(part)
+        except FileNotFoundError:
+            pass
+        try:
+            os.link(download, part)
+        except OSError:
+            shutil.copyfile(download, part)
+        os.replace(part, served)
+    except OSError as e:
+        try:
+            os.unlink(part)
+        except OSError:
+            pass
+        return f"central's copy {served} still holds the previous release: {e}; the next check retries"
+    return None
+
+
+async def _release_pending(redis_client, ontology_id: str, remote, remote_served: Dict[str, Any],
+                           pending: Dict[str, Any]) -> Optional[str]:
+    """Remove the stage an earlier complete update could not remove
+    (transfer_release_pending). Safe because the caller has just seen the
+    worker report the served path for the ontology (it no longer records the
+    stage), and the service removes it only while the served file holds
+    that transaction's release. Returns why it was not removed, or None."""
+    txn, sha256 = pending.get("txn"), pending.get("sha256")
+    remedy = ("After reconciling the worker and the transfer service, POST resolve_update with "
+              "clear_transfer_cleanup=true, the matching txn_id, reconciled=true and a note; "
+              "this clears only the marker and deletes no files.")
+    if pending.get("transfer") != remote.target.transfer_url:
+        return f"transaction {txn} belongs to a different transfer service. {remedy}"
+    current = await remote.status(txn)
+    if current["state"] != "ok":
+        return f"transaction {txn} cleanup status is {current['state']}: {current.get('message', '')}. {remedy}"
+    if current.get("sha256") != sha256:
+        return f"transaction {txn} has different release parameters on the service. {remedy}"
+    if current.get("record_state") == "finalized":
+        # An operator may have finalized before rolling back, or with the
+        # explicit served_changed_ok override. There is nothing left to delete.
+        await _set_fields(redis_client, ontology_id, transfer_release_pending=None)
+        return None
+    if remote_served.get("sha256") != sha256:
+        return (f"transaction {txn} kept its stage after its update, and the worker's host no longer serves "
+                f"that release ({remote_served.get('sha256')}, not {sha256}); it is not removed automatically. "
+                f"{remedy}")
+    if current.get("observed") != "promoted":
+        return f"transaction {txn} is {current.get('observed')}, not a confirmed promotion. {remedy}"
+    released = await remote.release(txn, sha256)
+    if not released["ok"]:
+        return f"the stage of transaction {txn} could not be removed: {released['message']}"
+    await _set_fields(redis_client, ontology_id, transfer_release_pending=None)
+    logger.info("%s: removed the stage kept by transaction %s", ontology_id, txn)
+    return None
+
+
+async def resolve_transfer_cleanup(redis_client, ontology_id: str, txn: str, note: str) -> bool:
+    """Clear only a reconciled cleanup marker. Never delete host files or
+    resolve an active update transaction; preserve a separate audit event."""
+    lock = _lock_for(ontology_id)
+    if lock.locked():
+        return False
+    async with lock:
+        entry = await _load_entry(redis_client, ontology_id)
+        pending = entry.get("transfer_release_pending")
+        if entry.get("update_txn") or not pending or pending.get("txn") != txn or not note.strip():
+            return False
+        entry.pop("transfer_release_pending")
+        _append_history(entry, {"timestamp": _now(), "status": "transfer_cleanup_resolved",
+                                "txn": txn, "note": note, "transfer": pending.get("transfer")})
+        await _save_entry(redis_client, ontology_id, entry)
+        return True
+
+
+
 # ---------------------------------------------------------------------------
 # Registry records of a successful update
 # ---------------------------------------------------------------------------
@@ -1327,7 +1598,7 @@ def _imports_change(previous: Optional[List[str]], current: Optional[List[str]])
 
 
 async def _record_update(redis_client, ontology_id, *, txn, version_info, new_md5, new_index, old_index,
-                         worker_path, archived, validation, dependents) -> None:
+                         worker_path, archived, validation, dependents, warnings=None, transport=None) -> None:
     # Re-read: the status poller may have written the entry during the update.
     entry = await _load_entry(redis_client, ontology_id)
     now = _now()
@@ -1367,6 +1638,13 @@ async def _record_update(redis_client, ontology_id, *, txn, version_info, new_md
             "documents": validation.get("classCount")}
     if change and not change.get("baseline"):
         item["imports_changed"] = change
+    if transport:
+        item.update(transport)
+    if warnings:
+        entry["update_warnings"] = warnings
+        item["warnings"] = warnings
+    else:
+        entry.pop("update_warnings", None)
     _append_history(entry, item)
     await _save_entry(redis_client, ontology_id, entry)
 

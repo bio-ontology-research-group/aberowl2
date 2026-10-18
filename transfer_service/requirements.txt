@@ -1,0 +1,5 @@
+# The transfer service needs only these two; both are already dependencies of
+# central (central_server/requirements.txt). uvicorn without [standard]: h11 is
+# enough, and the image stays small.
+fastapi
+uvicorn

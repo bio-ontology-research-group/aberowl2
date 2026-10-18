@@ -227,6 +227,8 @@ def fresh_state(monkeypatch):
     monkeypatch.setattr(updater, "_worker_locks", {})
     ids = (f"txn-{i}" for i in itertools.count(1))
     monkeypatch.setattr(updater, "new_txn_id", lambda: next(ids))
+    # The shared-directory default; tests/test_update_transfer.py covers the rest.
+    monkeypatch.delenv("UPDATE_TRANSFER_CONFIG", raising=False)
 
 
 @pytest.fixture
@@ -340,6 +342,16 @@ class TestDetection:
         e = redis.entry("flopo")
         assert e["source_etag"] == '"up-1"' and e["source_md5"] == md5(OLD)
         assert_clean_end(redis)
+
+    async def test_an_unfinished_run_is_not_taken_for_a_baseline(self, corpus, worker, es):
+        """No MD5 recorded yet, and the last run stopped for recovery, possibly
+        after replacing the served file: matching it proves nothing about the
+        search index, so the update runs in full."""
+        (corpus / "flopo" / "flopo.owl").write_bytes(NEW)
+        history = [{"status": "recovery_required", "txn": "txn-0"}, {"status": "resolved_by_operator", "txn": "txn-0"}]
+        redis = FakeRedis({"flopo": flopo_entry(source_etag=None, source_md5=None, update_history=history)})
+        result = await run(corpus, redis, es)
+        assert result["status"] == "updated" and es.aliases["flopo"] == NEW_INDEX
 
     async def test_force_updates_an_unchanged_source(self, corpus, worker, es):
         worker.version.update(changed=False, etag='"v1"')
@@ -1384,6 +1396,45 @@ class TestResolve:
         async with client(main_module) as c:
             r = await c.post("/admin/ontology/flopo/resolve_update", json={"txn_id": "x", "reconciled": True})
         assert r.status_code == 409
+
+
+    @pytest.mark.parametrize("body,code", [
+        ({"txn_id": "kept", "clear_transfer_cleanup": True}, 422),
+        ({"txn_id": "kept", "clear_transfer_cleanup": True, "reconciled": True}, 422),
+        ({"txn_id": "wrong", "clear_transfer_cleanup": True, "reconciled": True, "note": "checked"}, 409),
+        ({"txn_id": "kept", "clear_transfer_cleanup": True, "reconciled": True, "note": "checked"}, 200),
+    ])
+    async def test_cleanup_marker_resolution_is_explicit_and_audited(self, main_module, body, code):
+        pending = {"txn": "kept", "sha256": "a" * 64, "transfer": "https://host.example"}
+        redis = FakeRedis({"flopo": flopo_entry(transfer_release_pending=pending)})
+        main_module.redis_client = redis
+        async with client(main_module) as c:
+            response = await c.post("/admin/ontology/flopo/resolve_update", json=body)
+        assert response.status_code == code, response.text
+        if code == 200:
+            assert response.json()["left_in_place"] == pending
+            assert "transfer_release_pending" not in redis.entry("flopo")
+            assert redis.entry("flopo")["update_history"][-1]["note"] == "checked"
+        else:
+            assert redis.entry("flopo")["transfer_release_pending"] == pending
+
+    async def test_cleanup_resolution_cannot_bypass_an_update_transaction(self, main_module):
+        main_module.redis_client = FakeRedis({"flopo": flopo_entry(
+            update_txn=TXN, transfer_release_pending={"txn": "kept"})})
+        async with client(main_module) as c:
+            response = await c.post("/admin/ontology/flopo/resolve_update", json={
+                "txn_id": "kept", "clear_transfer_cleanup": True, "reconciled": True, "note": "checked"})
+        assert response.status_code == 409
+        assert main_module.redis_client.entry("flopo")["update_txn"] == TXN
+
+
+    async def test_cleanup_resolution_holds_the_ontology_update_guard(self, main_module):
+        redis = FakeRedis({"flopo": flopo_entry(transfer_release_pending={"txn": "kept"})})
+        pipeline = main_module.update_pipeline
+        async with pipeline._lock_for("flopo"):
+            assert not await pipeline.resolve_transfer_cleanup(redis, "flopo", "kept", "checked")
+        assert redis.entry("flopo")["transfer_release_pending"] == {"txn": "kept"}
+        assert await pipeline.resolve_transfer_cleanup(redis, "flopo", "kept", "checked")
 
 
 @pytest.mark.unit

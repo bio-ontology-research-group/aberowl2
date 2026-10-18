@@ -1,0 +1,21 @@
+# Override for deploy/docker-compose.central.yml: ontology updates of workers
+# on other hosts go through the transfer service on each host. Use it with
+# the central stack:
+#
+#   docker compose -p deploy -f deploy/docker-compose.central.yml \
+#     -f deploy/docker-compose.central-transfer.yml --env-file deploy/.env up -d --no-deps central-server
+#
+# UPDATE_TRANSFER_DIR (in the private env file) is a host directory, readable
+# by the container user, that holds exactly:
+#   transfers.json   the mapping (deploy/update-transfers.example.json), with
+#                    token_file and ca_file paths under /run/aberowl-transfer/
+#   <token files>    one per worker host, mode 0400/0440
+#   <CA file>        the CA that signed the transfer services' certificates
+# It is mounted read-only. See transfer_service/README.md.
+
+services:
+  central-server:
+    environment:
+      - UPDATE_TRANSFER_CONFIG=/run/aberowl-transfer/transfers.json
+    volumes:
+      - ${UPDATE_TRANSFER_DIR:?set UPDATE_TRANSFER_DIR to the directory holding transfers.json}:/run/aberowl-transfer:ro
