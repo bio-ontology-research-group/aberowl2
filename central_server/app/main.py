@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import secrets
+import socket
 import subprocess
 import sys
 import uuid
@@ -31,6 +32,7 @@ from app.auth import (
 from app.intake.obofoundry import fetch_obofoundry_ontologies
 from app.intake.bioportal import fetch_bioportal_ontologies, fetch_bioportal_metadata
 from app.intake import updater as update_pipeline
+from app.intake import update_jobs
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -52,6 +54,7 @@ REGISTRY_KEY = "registered_servers"
 
 # Redis client instance will be managed in the lifespan context
 redis_client: redis.Redis = None
+REDIS_URL = os.getenv("REDIS_URL", "redis://redis")
 catalogue_config: Dict[str, Any] = {}
 ELASTICSEARCH_URL = os.getenv("CENTRAL_ES_URL", "http://elasticsearch:9200")
 mcp_process: Optional[asyncio.subprocess.Process] = None
@@ -77,6 +80,11 @@ ENABLE_AUTO_SYNC = os.getenv("ENABLE_AUTO_SYNC", "false").lower() in ("1", "true
 # and POST /admin/check_updates without `ontologies`): comma-separated
 # ontology ids. Empty means every registered ontology with a source_url.
 UPDATE_ONTOLOGIES = [o.strip() for o in os.getenv("UPDATE_ONTOLOGIES", "").split(",") if o.strip()]
+# Where updates, reindexes and batch checks run (UPDATE_EXECUTION): in this
+# process ("inline", the default) or in the separate update runner
+# ("queued"), one at a time either way; see app/intake/update_jobs.py.
+UPDATE_SETTINGS = update_jobs.load_settings()
+_inline_gate = update_jobs.InlineGate(f"{socket.gethostname()}:{os.getpid()}")
 # Worker status polling. The sweep used to run unbounded over every registered
 # ontology, which made browsing slow and eventually exhausted the Redis pool.
 # Interval 0 disables the sweep; refresh explicitly via POST /admin/refresh_status.
@@ -129,6 +137,28 @@ async def _save_registry_entry(ontology_id: str, entry: Dict[str, Any]) -> None:
     await redis_client.hset(REGISTRY_KEY, ontology_id, json.dumps(entry))
 
 
+async def _merge_entry(ontology_id: str, change, create: bool = False):
+    """Apply change(entry) to the newest registry entry; change may return
+    False to leave it unwritten. Returns (entry, written); entry is None when
+    there is none and create is false.
+
+    Outside inline mode the update runner writes the registry from another
+    process (update_txn, quarantine, version markers), so this is a WATCH
+    transaction retried when the entry changed between read and write: a
+    stale copy never overwrites what the runner wrote. Inline mode keeps the
+    plain read and write, with no await between change and write."""
+    if UPDATE_SETTINGS.mode != "inline":
+        return await _update_queue().mutate_entry(ontology_id, change, create=create)
+    raw = await redis_client.hget(REGISTRY_KEY, ontology_id)
+    entry = json.loads(raw) if raw else ({} if create else None)
+    if entry is None:
+        return None, False
+    if change(entry) is False:
+        return entry, False
+    await redis_client.hset(REGISTRY_KEY, ontology_id, json.dumps(entry))
+    return entry, True
+
+
 async def _load_manual_ontologies() -> List[Dict[str, Any]]:
     if not os.path.exists(MANUAL_ONTOLOGIES_PATH):
         return []
@@ -164,32 +194,28 @@ async def _upsert_registry_from_source(
     the ontology deliberately.
 
     Returns True when the entry was written, False when it was skipped.
+    The fields are merged into the newest entry (_merge_entry).
     """
-    existing = await _get_registry_entry(ontology_id)
-    if existing is None:
-        if not create_missing:
-            return False
-        existing = {}
+    def merge(existing: Dict[str, Any]) -> None:
+        # Only overwrite source fields if they come from the canonical source
+        if overwrite_source or "source" not in existing:
+            existing.update(fields)
+        else:
+            # Preserve existing source if it is higher priority (manual > obofoundry > bioportal)
+            priority = {"manual": 3, "obofoundry": 2, "bioportal": 1}
+            existing_p = priority.get(existing.get("source", ""), 0)
+            new_p = priority.get(fields.get("source", ""), 0)
+            if new_p >= existing_p:
+                for k, v in fields.items():
+                    if k not in ("server_url", "secret_key", "update_status", "update_error",
+                                 "last_checked", "last_updated", "update_history",
+                                 "active_owl_path", "active_es_index", "source_etag",
+                                 "source_last_modified", "source_md5"):
+                        existing[k] = v
+        existing.setdefault("ontology_id", ontology_id)
 
-    # Only overwrite source fields if they come from the canonical source
-    if overwrite_source or "source" not in existing:
-        existing.update(fields)
-    else:
-        # Preserve existing source if it is higher priority (manual > obofoundry > bioportal)
-        priority = {"manual": 3, "obofoundry": 2, "bioportal": 1}
-        existing_p = priority.get(existing.get("source", ""), 0)
-        new_p = priority.get(fields.get("source", ""), 0)
-        if new_p >= existing_p:
-            for k, v in fields.items():
-                if k not in ("server_url", "secret_key", "update_status", "update_error",
-                             "last_checked", "last_updated", "update_history",
-                             "active_owl_path", "active_es_index", "source_etag",
-                             "source_last_modified", "source_md5"):
-                    existing[k] = v
-
-    existing.setdefault("ontology_id", ontology_id)
-    await _save_registry_entry(ontology_id, existing)
-    return True
+    _, written = await _merge_entry(ontology_id, merge, create=create_missing)
+    return written
 
 
 # ---------------------------------------------------------------------------
@@ -257,86 +283,115 @@ async def daily_source_sync_task() -> None:
 # Update check task (runs daily; triggers update pipeline for changed ontologies)
 # ---------------------------------------------------------------------------
 
-async def _check_and_update_all(only: Optional[List[str]] = None) -> Dict[str, Any]:
-    """Run the update pipeline over the selected ontologies.
+def _update_queue() -> update_jobs.JobQueue:
+    return update_jobs.JobQueue(redis_client, UPDATE_SETTINGS)
+
+
+def _require_inline() -> None:
+    """Heavy work runs in this process only in inline mode. In queued mode
+    every trigger queues a job instead, and an invalid setting refuses
+    everything: neither ever falls back to running here."""
+    if UPDATE_SETTINGS.mode == "inline":
+        return
+    if UPDATE_SETTINGS.mode == "queued":
+        raise update_jobs.QueueError(409, "updates run in the update runner (UPDATE_EXECUTION=queued); "
+                                          "this process does not run them")
+    raise update_jobs.QueueError(503, f"update execution is misconfigured, so no update runs: "
+                                      f"{UPDATE_SETTINGS.error}")
+
+
+async def _inline_start(kind: str, ontologies: List[str]):
+    """Reserve this process's single heavy-job slot and write its marker
+    (inline mode). Returns (reservation, marker)."""
+    _require_inline()
+    reservation = _inline_gate.reserve()
+    return reservation, await _inline_gate.begin(_update_queue(), reservation, kind, ontologies)
+
+
+async def _check_and_update_all(only: Optional[List[str]] = None, started=None) -> Dict[str, Any]:
+    """Run the update pipeline over the selected ontologies, one after
+    another, in this process (inline mode only).
 
     `only` selects ontologies by id; without it, UPDATE_ONTOLOGIES does, and
     when that is empty too, every registered ontology. Returns a summary with
-    every selected id under exactly one outcome.
+    every selected id under exactly one outcome. An outcome that leaves the
+    global slot held stops the batch: that id is `held_by`, and the ids not
+    reached are under `not_run`. started is the (reservation, marker) of a
+    caller that already started the job.
     """
     selected = only or UPDATE_ONTOLOGIES
-    all_keys = await redis_client.hkeys(REGISTRY_KEY)
-    summary: Dict[str, Any] = {"updated": [], "unchanged": [], "failed": {}, "skipped": {}}
-    if selected:
-        known = set(all_keys)
-        keys = [k for k in dict.fromkeys(selected) if k in known]
-        for k in dict.fromkeys(selected):
-            if k not in known:
-                summary["skipped"][k] = "not_registered"
-    else:
-        keys = list(all_keys)
+    reservation, marker = started or await _inline_start("check", [])
+    try:
+        keys, unknown = await update_jobs.select(redis_client, selected)
+    except BaseException:
+        # Nothing ran: the job ends here.
+        _inline_gate.release(reservation)
+        await _update_queue().set_inline(None)
+        raise
+    summary = update_jobs.new_summary()
+    for k in unknown:
+        summary["skipped"][k] = "not_registered"
     logger.info("Starting update check for %d ontologies (%s)…",
                 len(keys), "selected" if selected else "all registered")
 
-    # Run checks concurrently (but limit parallelism to avoid hammering servers)
-    sem = asyncio.Semaphore(5)
+    async def body(marker):
+        queue = _update_queue()
 
-    async def check_one(ontology_id: str) -> None:
-        async with sem:
-            entry = await _get_registry_entry(ontology_id)
-            if not entry or not entry.get("source_url"):
-                summary["skipped"][ontology_id] = "no_source_url"
-                return
-            if entry.get("update_status") == "disabled":
-                summary["skipped"][ontology_id] = "disabled"
-                return
-            if entry.get("update_txn"):
-                summary["skipped"][ontology_id] = "recovery_required"
-                return
-            if update_pipeline.update_in_progress(ontology_id):
-                summary["skipped"][ontology_id] = "update_in_progress"
-                return
-            logger.info("Checking update for %s", ontology_id)
-            try:
-                result = await update_pipeline.execute_update_pipeline(
-                    ontology_id=ontology_id,
-                    registry_entry=entry,
-                    redis_client=redis_client,
-                    es_mgr=es_mgr,
-                    ontologies_base_path=ONTOLOGIES_DIR,
-                    es_url=ELASTICSEARCH_URL,
-                )
-            except Exception as e:
-                logger.exception("Unhandled error updating %s", ontology_id)
-                summary["failed"][ontology_id] = f"unhandled: {e}"
-                return
-            status = result.get("status")
-            if status in ("updated", "unchanged"):
-                summary[status].append(ontology_id)
-            elif status == "skipped":
-                summary["skipped"][ontology_id] = result.get("error")
-            else:
-                summary["failed"][ontology_id] = result.get("error")
-            logger.info("%s: update check %s %s", ontology_id, status, result.get("error") or "")
+        async def before(oid):
+            await update_jobs.InlineGate.note_current(queue, marker, oid)
+            return True
+        outcome = await update_jobs.run_check(keys, summary, redis_client, es_mgr, ONTOLOGIES_DIR,
+                                              ELASTICSEARCH_URL, before=before)
+        if outcome["held_by"]:
+            summary["held_by"] = outcome["held_by"]
+        return summary, outcome["held_by"]
 
-    await asyncio.gather(*[check_one(k) for k in keys])
+    await _inline_gate.run(_update_queue(), marker, body)
     # Entries without a source are many when the whole registry is checked;
     # count them rather than list each in the log.
     logger.info(
-        "Update check complete: %d updated, %d unchanged, %d failed, %d skipped",
+        "Update check complete: %d updated, %d unchanged, %d failed, %d skipped, %d not run",
         len(summary["updated"]), len(summary["unchanged"]),
-        len(summary["failed"]), len(summary["skipped"]),
+        len(summary["failed"]), len(summary["skipped"]), len(summary["not_run"]),
     )
     return summary
 
 
+async def _scheduled_update_check() -> None:
+    """One scheduled check of UPDATE_ONTOLOGIES (all registered when unset).
+    Inline mode runs it here, after any heavy job running now. Queued mode
+    queues it, at most once per UPDATE_CHECK_INTERVAL across restarts and
+    API processes."""
+    if UPDATE_SETTINGS.mode == "queued":
+        keys, unknown = await update_jobs.select(redis_client, UPDATE_ONTOLOGIES)
+        job, duplicate = await _update_queue().enqueue(
+            "check", keys, source="scheduled", requested=UPDATE_ONTOLOGIES or "all",
+            skipped={k: "not_registered" for k in unknown},
+            schedule_interval=max(0, UPDATE_CHECK_INTERVAL - 300))
+        if job is None:
+            logger.info("Scheduled update check already queued within the interval")
+        else:
+            logger.info("Scheduled update check %s %s", job["id"], "already queued" if duplicate else "queued")
+        return
+    _require_inline()
+    reservation = await _inline_gate.reserve_waiting()
+    try:
+        marker = await _inline_gate.begin(_update_queue(), reservation, "check", [])
+    except update_jobs.QueueError as e:
+        logger.error("Scheduled update check not run: %s", e.detail)
+        return
+    await _check_and_update_all(started=(reservation, marker))
+
+
 async def daily_update_check_task() -> None:
-    """Background task: check for ontology updates daily."""
+    """Background task (ENABLE_AUTO_SYNC=true only): the daily update check."""
     await asyncio.sleep(300)  # stagger 5 min after source sync
-    await _check_and_update_all()
     while True:
+        try:
+            await _scheduled_update_check()
+        except Exception:
+            logger.exception("Scheduled update check failed")
         await asyncio.sleep(UPDATE_CHECK_INTERVAL)
-        await _check_and_update_all()
 
 
 async def _load_catalogue_config():
@@ -488,11 +543,16 @@ async def fetch_and_update_server_metadata(
     # now. A sweep reads every entry first and polls workers for up to 30 s
     # each, so writing the whole copy back undid anything written meanwhile,
     # such as an update's version markers and transaction record.
+    # In queued mode that write is a transaction (_merge_entry), so even the
+    # round trip between reading and writing cannot drop the update runner's
+    # writes.
     changed = {k: v for k, v in server.items() if k not in before or before[k] != v}
-    raw = await redis_client.hget("registered_servers", ontology)
-    current = json.loads(raw) if raw else server
-    current.update(changed)
-    await redis_client.hset("registered_servers", ontology, json.dumps(current))
+
+    def merge(current: Dict[str, Any]) -> None:
+        if not current:
+            current.update(server)
+        current.update(changed)
+    await _merge_entry(ontology, merge, create=True)
 
 
 async def start_mcp_servers():
@@ -645,16 +705,14 @@ async def _reapply_registry_fallbacks_to_all():
     entry whose fields changed. Cheap: touches only Redis, no worker polling."""
     server_keys = await redis_client.hkeys("registered_servers")
     updated = 0
-    for key in server_keys or []:
-        raw = await redis_client.hget("registered_servers", key)
-        if not raw:
-            continue
-        server = json.loads(raw)
+
+    def reapply(server: Dict[str, Any]) -> bool:
         snapshot = {f: server.get(f) for f in ("title", "description", "home_page", "license", "contact")}
         _apply_registry_fallbacks(server)
-        if any(server.get(f) != snapshot[f] for f in snapshot):
-            await redis_client.hset("registered_servers", key, json.dumps(server))
-            updated += 1
+        return any(server.get(f) != snapshot[f] for f in snapshot)
+    for key in server_keys or []:
+        _, written = await _merge_entry(key, reapply)
+        updated += written
     if updated:
         await _write_servers_to_file()
         logger.info(f"Re-applied registry fallbacks; updated {updated} server entries")
@@ -817,23 +875,21 @@ async def _migrate_unify_registries() -> None:
             src = json.loads(raw)
         except Exception:
             continue
-        existing_raw = await redis_client.hget(REGISTRY_KEY, oid)
-        if not existing_raw:
-            # Only ENRICH ontologies that are actually hosted (already have a
-            # worker entry). Do NOT create worker-less entries for source-only
-            # ontologies — they never get served, and the periodic metadata
-            # fetch (which fans out to every registry entry) then fails on them
-            # every cycle, degrading browsing.
-            continue
-        entry = json.loads(existing_raw)
-        changed = False
-        for k in source_fields:
-            if k in src and not entry.get(k):
-                entry[k] = src[k]
-                changed = True
-        if changed:
-            await redis_client.hset(REGISTRY_KEY, oid, json.dumps(entry))
-            migrated += 1
+
+        def fold(entry: Dict[str, Any]) -> bool:
+            changed = False
+            for k in source_fields:
+                if k in src and not entry.get(k):
+                    entry[k] = src[k]
+                    changed = True
+            return changed
+        # Only ENRICH ontologies that are actually hosted (already have a
+        # worker entry). Do NOT create worker-less entries for source-only
+        # ontologies — they never get served, and the periodic metadata
+        # fetch (which fans out to every registry entry) then fails on them
+        # every cycle, degrading browsing.
+        _, written = await _merge_entry(oid, fold)
+        migrated += written
     logger.info("Registry unification: folded source fields for %d ontologies into %s", migrated, REGISTRY_KEY)
 
 
@@ -877,9 +933,16 @@ def _public_ontology_view(entry: dict) -> dict:
 async def lifespan(app: FastAPI):
     # Startup
     global redis_client, es_mgr
-    redis_client = redis.from_url("redis://redis", decode_responses=True)
+    redis_client = redis.from_url(REDIS_URL, decode_responses=True)
     await redis_client.ping()
     logger.info("Successfully connected to Redis.")
+    if UPDATE_SETTINGS.mode == "invalid":
+        logger.error("Update execution is misconfigured; every update request is refused: %s",
+                     UPDATE_SETTINGS.error)
+    else:
+        logger.info("Update execution: %s (%s)", UPDATE_SETTINGS.mode,
+                    "the update runner runs queued jobs" if UPDATE_SETTINGS.mode == "queued"
+                    else "this process runs them, one at a time")
 
     es_mgr = CentralESManager()
     await es_mgr.ensure_ontologies_index()
@@ -1003,65 +1066,61 @@ async def register_server(payload: RegistrationRequest):
     server_url = str(payload.url)
     secret_key = payload.secret_key
 
-    existing_server_json = await redis_client.hget("registered_servers", ontology_name)
-    
-    new_key_issued = False
-    new_secret_key = None
+    # Decided on the newest entry and written in one step (_merge_entry), so a
+    # registration never overwrites what the update runner wrote meanwhile.
+    outcome: Dict[str, Any] = {}
 
-    if existing_server_json:
-        # Existing registration, check for update
-        server_data = json.loads(existing_server_json)
-        stored_key = server_data.get("secret_key")
+    def register(server_data: Dict[str, Any]) -> None:
+        outcome.clear()
+        if server_data:
+            # Existing registration, check for update
+            stored_key = server_data.get("secret_key")
 
-        # Security: require secret_key for updates to prevent hijacking.
-        # If no key is stored (legacy or reset), we allow a new registration.
-        if stored_key:
-            if secret_key == stored_key:
-                # Valid update from existing server
-                server_data["url"] = server_url
-                server_data["status"] = "online"
-                message = f"Server for {ontology_name} updated."
-                logger.info(f"Updated server URL for ontology: {ontology_name} at {server_url}")
+            # Security: require secret_key for updates to prevent hijacking.
+            # If no key is stored (legacy or reset), we allow a new registration.
+            if stored_key:
+                if secret_key == stored_key:
+                    # Valid update from existing server
+                    server_data["url"] = server_url
+                    server_data["status"] = "online"
+                    outcome["message"] = f"Server for {ontology_name} updated."
+                else:
+                    # Key mismatch - REJECT hijacking
+                    logger.warning(f"Registration hijacking attempt blocked for ontology: {ontology_name}. Invalid secret key.")
+                    raise HTTPException(status_code=403, detail="Invalid secret key for this ontology.")
             else:
-                # Key mismatch - REJECT hijacking
-                logger.warning(f"Registration hijacking attempt blocked for ontology: {ontology_name}. Invalid secret key.")
-                raise HTTPException(status_code=403, detail="Invalid secret key for this ontology.")
+                # No key stored, allow registration and issue a new key.
+                # Merge into the existing entry (unified registry) so we don't drop
+                # source/intake fields that may already be present.
+                outcome["key"] = str(uuid.uuid4())
+                server_data.update({
+                    "ontology": ontology_name,
+                    "url": server_url,
+                    "status": "online",
+                    "secret_key": outcome["key"],
+                })
+                outcome["message"] = f"Server for {ontology_name} registered (new key issued)."
         else:
-            # No key stored, allow registration and issue a new key.
-            # Merge into the existing entry (unified registry) so we don't drop
-            # source/intake fields that may already be present.
-            new_secret_key = str(uuid.uuid4())
-            new_key_issued = True
+            # New registration
+            outcome["key"] = str(uuid.uuid4())
             server_data.update({
                 "ontology": ontology_name,
                 "url": server_url,
                 "status": "online",
-                "secret_key": new_secret_key,
+                "secret_key": outcome["key"],
             })
-            message = f"Server for {ontology_name} registered (new key issued)."
-            logger.info(f"Registered server for ontology: {ontology_name} (no previous key). New key issued.")
-    else:
-        # New registration
-        new_secret_key = str(uuid.uuid4())
-        new_key_issued = True
-        server_data = {
-            "ontology": ontology_name,
-            "url": server_url,
-            "status": "online",
-            "secret_key": new_secret_key
-        }
-        message = f"Server for {ontology_name} registered."
-        logger.info(f"Registered new server for ontology: {ontology_name} at {server_url}")
+            outcome["message"] = f"Server for {ontology_name} registered."
 
-    await redis_client.hset("registered_servers", ontology_name, json.dumps(server_data))
+    server_data, _ = await _merge_entry(ontology_name, register, create=True)
+    logger.info("%s (%s)", outcome["message"], server_url)
     await _write_servers_to_file()
-    
+
     # Trigger an immediate metadata fetch for the newly registered/updated server
     asyncio.create_task(fetch_and_update_server_metadata(server_data))
 
-    response_payload = {"status": "ok", "message": message}
-    if new_key_issued:
-        response_payload["secret_key"] = new_secret_key
+    response_payload = {"status": "ok", "message": outcome["message"]}
+    if outcome.get("key"):
+        response_payload["secret_key"] = outcome["key"]
 
     return response_payload
 
@@ -2967,7 +3026,7 @@ async def _reset_all_data():
     """Connects to Redis, flushes the database, and removes the servers.json cache file."""
     logger.info("Connecting to Redis to reset data...")
     try:
-        redis_client_local = redis.from_url("redis://redis", decode_responses=True)
+        redis_client_local = redis.from_url(REDIS_URL, decode_responses=True)
         await redis_client_local.ping()
         await redis_client_local.flushdb()
         await redis_client_local.aclose()
@@ -3074,20 +3133,114 @@ def _update_preflight(ontology_id: str, entry: Dict[str, Any]) -> None:
     _transaction_guard(ontology_id, entry)
 
 
-async def _run_update(ontology_id: str, entry: Dict[str, Any], force: bool = False) -> Dict[str, Any]:
+def _queue_http(e: update_jobs.QueueError) -> HTTPException:
+    return HTTPException(status_code=e.status, detail=e.detail)
+
+
+def _update_mode() -> str:
+    """The update execution mode; 503 when its configuration is invalid."""
+    if UPDATE_SETTINGS.mode == "invalid":
+        raise HTTPException(status_code=503,
+                            detail=f"Update execution is misconfigured, so no update runs: {UPDATE_SETTINGS.error}")
+    return UPDATE_SETTINGS.mode
+
+
+async def _ownership_guard(ontology_id: str) -> None:
+    """Refuse to change an ontology's update state while a job, in any
+    process, is running on it: the global slot's holder is visible to every
+    API process, unlike update_in_progress."""
+    holder = await _update_queue().holder_for(ontology_id)
+    if holder and holder.get("state") == update_jobs.RUNNING:
+        raise HTTPException(status_code=409,
+                            detail=f"{ontology_id}: job {holder.get('job')} is running on it; wait until it ends")
+
+
+async def _run_inline(kind: str, ontology_id: str, force: bool = False, started=None) -> Dict[str, Any]:
+    """One update or reindex in this process (inline mode only), as its only
+    heavy job. started is the (reservation, marker) of a caller that already
+    started the job."""
+    reservation, marker = started or await _inline_start(kind, [ontology_id])
+
+    async def body(marker):
+        result = await update_jobs.run_one(kind, ontology_id, redis_client, es_mgr, ONTOLOGIES_DIR,
+                                           ELASTICSEARCH_URL, force=force)
+        return result, ontology_id if update_jobs.holds_ownership(result) else None
+    return await _inline_gate.run(_update_queue(), marker, body)
+
+
+async def _run_update(ontology_id: str, force: bool = False, started=None) -> Dict[str, Any]:
+    return await _run_inline("update", ontology_id, force, started)
+
+
+async def _run_reindex(ontology_id: str, started=None) -> Dict[str, Any]:
+    return await _run_inline("reindex", ontology_id, started=started)
+
+
+async def _start_or_409(kind: str, ontologies: List[str]):
     try:
-        return await update_pipeline.execute_update_pipeline(
-            ontology_id=ontology_id,
-            registry_entry=entry,
-            redis_client=redis_client,
-            es_mgr=es_mgr,
-            ontologies_base_path=ONTOLOGIES_DIR,
-            es_url=ELASTICSEARCH_URL,
-            force=force,
-        )
-    except Exception as e:
-        logger.exception("Update of %s failed", ontology_id)
-        return {"success": False, "status": "failed", "error": f"unhandled: {e}"}
+        return await _inline_start(kind, ontologies)
+    except update_jobs.QueueError as e:
+        raise _queue_http(e)
+
+
+async def _wait_for_job(queue: update_jobs.JobQueue, job_id: str, timeout: float) -> Optional[Dict[str, Any]]:
+    """Poll a job until it ends, holds the slot for recovery, or timeout
+    passes. Never blocks the event loop; a client that disconnects only
+    stops this wait, the job goes on."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    delay = 0.2
+    while True:
+        job = await queue.get(job_id)
+        remaining = deadline - loop.time()
+        if job is None or job.get("state") not in (update_jobs.QUEUED, update_jobs.RUNNING) or remaining <= 0:
+            return job
+        await asyncio.sleep(min(delay, remaining))
+        delay = min(delay * 2, 2.0)
+
+
+async def _submit(kind: str, ontologies: List[str], *, label: str, wait: bool, extra: Dict[str, Any],
+                  outcome, force: bool = False, source: str = "admin", requested: Any = None,
+                  skipped: Optional[Dict[str, str]] = None, public: bool = False):
+    """Queue a job (queued mode) and answer 202 with its id. With wait, poll
+    it for up to UPDATE_WAIT_SECONDS: an ended job answers 200 with its
+    outcome (outcome(job)); otherwise 202 with the job id and state, which
+    is neither success nor failure."""
+    queue = _update_queue()
+    try:
+        job, duplicate = await queue.enqueue(kind, ontologies, force=force, source=source, requested=requested,
+                                             skipped=skipped)
+    except update_jobs.QueueError as e:
+        raise _queue_http(e)
+    body = {"status": f"{label}_queued", **extra, "job_id": job["id"], "job_state": job["state"],
+            "duplicate": duplicate}
+    if public:
+        return JSONResponse(status_code=202, content=body)
+    if wait:
+        final = await _wait_for_job(queue, job["id"], UPDATE_SETTINGS.wait_seconds)
+        state = (final or {}).get("state")
+        if state in (update_jobs.DONE, update_jobs.RECOVERY_REQUIRED):
+            return {**outcome(final), "job_id": job["id"], "job_state": state}
+        if state in update_jobs.ENDED:
+            return {**extra, "status": f"{label}_{state}", "job_id": job["id"], "job_state": state}
+        body["job_state"] = state or job["state"]
+        body["detail"] = (f"not finished after {UPDATE_SETTINGS.wait_seconds:g}s; the job goes on. "
+                          f"Follow GET /admin/update_jobs/{job['id']}")
+    if not await queue.fresh_runners():
+        body["warning"] = "no update runner has sent a heartbeat recently; the job waits until one runs"
+    return JSONResponse(status_code=202, content=body)
+
+
+def _single_outcome(ontology_id: str):
+    def outcome(job):
+        result = job.get("result") or {"success": False, "status": "failed", "error": job.get("error"),
+                                       "recovery_required": job.get("state") == update_jobs.RECOVERY_REQUIRED}
+        return {"ontology_id": ontology_id, **result}
+    return outcome
+
+
+def _check_status(summary: Dict[str, Any]) -> str:
+    return "update_check_stopped" if summary.get("held_by") else "update_check_complete"
 
 
 @app.post("/admin/ontology/{ontology_id}/trigger_update")
@@ -3107,16 +3260,25 @@ async def admin_trigger_update(
     Refused with 409 when the ontology has no source_url, is being updated,
     or has an unresolved transaction. Follow a background run with
     GET /admin/ontology/{id}/update_status.
+
+    With UPDATE_EXECUTION=queued the update is queued for the update runner
+    (202 with `job_id`; an equal queued or running request returns its job,
+    `duplicate: true`). `wait` then waits up to UPDATE_WAIT_SECONDS: an
+    ended job answers with its outcome, otherwise 202 with the job's state.
     """
     entry = await _get_registry_entry(ontology_id)
     if not entry:
         raise HTTPException(status_code=404, detail="Ontology not in registry")
     _update_preflight(ontology_id, entry)
 
+    if _update_mode() == "queued":
+        return await _submit("update", [ontology_id], label="update", wait=wait, force=force,
+                             extra={"ontology_id": ontology_id}, outcome=_single_outcome(ontology_id))
+    started = await _start_or_409("update", [ontology_id])
     if wait:
-        result = await _run_update(ontology_id, entry, force)
+        result = await _run_update(ontology_id, force, started)
         return {"ontology_id": ontology_id, **result}
-    asyncio.create_task(_run_update(ontology_id, entry, force))
+    asyncio.create_task(_run_update(ontology_id, force, started))
     return {"status": "update_triggered", "ontology_id": ontology_id}
 
 
@@ -3136,7 +3298,9 @@ async def admin_set_source(
     override. Changing the URL clears the stored ETag and Last-Modified (they
     belonged to the old URL); the stored MD5 still describes the served file.
     BioPortal download links need BIOPORTAL_API_KEY in the central process
-    environment; never put credentials in the URL.
+    environment; never put credentials in the URL. With
+    UPDATE_EXECUTION=queued refused (409) while a queued, running or held job
+    covers the ontology; cancel a queued job first.
     """
     entry = await _get_registry_entry(ontology_id)
     if not entry:
@@ -3148,16 +3312,40 @@ async def admin_set_source(
     if parts.username or parts.password or "apikey=" in parts.query.lower():
         raise HTTPException(status_code=422, detail="source_url must not carry credentials")
     _transaction_guard(ontology_id, entry)
-    # No await between this read and the write below: the change applies to
-    # the entry as it is now, and nothing else is overwritten.
-    if entry.get("source_url") != url:
-        entry["source_etag"] = None
-        entry["source_last_modified"] = None
-        entry.pop("source_resolved_url", None)
-    entry["source_url"] = url
-    entry["source"] = "manual"
-    await _save_registry_entry(ontology_id, entry)
+
+    def change(current: Dict[str, Any]) -> None:
+        _transaction_guard(ontology_id, current)
+        if current.get("source_url") != url:
+            current["source_etag"] = None
+            current["source_last_modified"] = None
+            current.pop("source_resolved_url", None)
+        current["source_url"] = url
+        current["source"] = "manual"
+    if await _change_entry(ontology_id, change) is None:
+        raise HTTPException(status_code=404, detail="Ontology not in registry")
     return {"status": "source_set", "ontology_id": ontology_id, "source_url": url}
+
+
+async def _change_entry(ontology_id: str, change, guard: str = "jobs") -> Optional[Dict[str, Any]]:
+    """An operator's change to an ontology's update settings: change(entry)
+    on the newest entry, unless a job covers the ontology. None when the
+    ontology is not registered.
+
+    Outside inline mode the check and the write are one transaction that
+    also watches the queue (JobQueue.mutate_entry): a claim or submission
+    landing between them makes it retry, and then refuse. guard "jobs"
+    refuses while any queued, running or held job covers the ontology;
+    "running" only while one runs on it. Inline mode has one process: it
+    refuses while that process runs a job on the ontology."""
+    if UPDATE_SETTINGS.mode != "inline":
+        try:
+            entry, _ = await _update_queue().mutate_entry(ontology_id, change, guard=guard)
+        except update_jobs.QueueError as e:
+            raise _queue_http(e)
+        return entry
+    await _ownership_guard(ontology_id)
+    entry, _ = await _merge_entry(ontology_id, change)
+    return entry
 
 
 _UPDATE_STATUS_FIELDS = (
@@ -3176,13 +3364,18 @@ async def admin_update_status(
     credentials: HTTPBasicCredentials = Depends(_require_admin),
 ):
     """Update state of one ontology: source, version markers, last outcome
-    and history, and whether an update is running now."""
+    and history, and whether an update is running now. `update_job` is the
+    job holding the global update slot when it concerns this ontology."""
     entry = await _get_registry_entry(ontology_id)
     if not entry:
         raise HTTPException(status_code=404, detail="Ontology not in registry")
     view = {k: entry.get(k) for k in _UPDATE_STATUS_FIELDS}
     view["ontology_id"] = ontology_id
-    view["in_progress"] = update_pipeline.update_in_progress(ontology_id)
+    holder = await _update_queue().holder_for(ontology_id)
+    view["in_progress"] = (update_pipeline.update_in_progress(ontology_id)
+                           or (holder or {}).get("state") == update_jobs.RUNNING)
+    view["update_job"] = ({k: holder.get(k) for k in ("job", "kind", "state", "where", "claim")}
+                          if holder else None)
     return view
 
 
@@ -3204,11 +3397,13 @@ async def admin_resolve_update(
     (deploy/README.md, "Recovery"). Deletes nothing.
 
     Body: {"txn_id": <the record's id>, "reconciled": true, "note": "..."}.
-    Refused while the transaction's worker task is still pending.
+    Refused while the transaction's worker task is still pending, and while
+    a job in any process is running on this ontology.
     """
     entry = await _get_registry_entry(ontology_id)
     if not entry:
         raise HTTPException(status_code=404, detail="Ontology not in registry")
+    await _ownership_guard(ontology_id)
     if payload.clear_transfer_cleanup:
         pending = entry.get("transfer_release_pending")
         if update_pipeline.update_in_progress(ontology_id) or entry.get("update_txn"):
@@ -3217,7 +3412,13 @@ async def admin_resolve_update(
             raise HTTPException(status_code=409, detail="No matching transfer cleanup marker; read update_status again")
         if not payload.reconciled or not payload.note.strip():
             raise HTTPException(status_code=422, detail="Confirm reconciled=true and provide a recovery note")
-        if not await update_pipeline.resolve_transfer_cleanup(redis_client, ontology_id, payload.txn_id, payload.note):
+        if UPDATE_SETTINGS.mode != "inline":
+            cleared = await _resolve_in_registry(ontology_id, lambda e: update_pipeline.clear_transfer_cleanup_entry(
+                e, payload.txn_id, payload.note))
+        else:
+            cleared = await update_pipeline.resolve_transfer_cleanup(redis_client, ontology_id, payload.txn_id,
+                                                                     payload.note)
+        if not cleared:
             raise HTTPException(status_code=409, detail="The cleanup marker changed; read update_status again")
         return {"status": "transfer_cleanup_resolved", "ontology_id": ontology_id,
                 "txn_id": payload.txn_id, "left_in_place": pending}
@@ -3235,12 +3436,28 @@ async def admin_resolve_update(
         task_state = await update_pipeline.task_status_once(txn.get("worker"), txn["task_id"])
         if task_state == "pending":
             raise HTTPException(status_code=409, detail=f"worker task {txn['task_id']} is still pending")
-    if not await update_pipeline.resolve_transaction(redis_client, ontology_id, payload.txn_id,
-                                                     payload.note, task_state):
+    if UPDATE_SETTINGS.mode != "inline":
+        resolved = await _resolve_in_registry(ontology_id, lambda e: update_pipeline.resolve_entry(
+            e, payload.txn_id, payload.note, task_state))
+    else:
+        resolved = await update_pipeline.resolve_transaction(redis_client, ontology_id, payload.txn_id,
+                                                             payload.note, task_state)
+    if not resolved:
         raise HTTPException(status_code=409, detail="the transaction record changed; read it again")
     return {"status": "resolved", "ontology_id": ontology_id, "txn_id": payload.txn_id,
             "task_state": task_state, "left_in_place": {
                 k: txn.get(k) for k in ("staging", "index", "export", "worker", "transfer") if txn.get(k)}}
+
+
+async def _resolve_in_registry(ontology_id: str, apply) -> bool:
+    """A resolution outside inline mode: apply(entry) on the newest entry in
+    one transaction that refuses while a job runs on the ontology. True when
+    it applied."""
+    try:
+        _, written = await _update_queue().mutate_entry(ontology_id, apply, guard="running")
+    except update_jobs.QueueError as e:
+        raise _queue_http(e)
+    return written
 
 
 @app.post("/admin/ontology/{ontology_id}/reindex")
@@ -3252,30 +3469,21 @@ async def admin_reindex(
     """Re-index an ontology into ES from the OWL the worker already serves —
     no download/validate/hot-swap. Builds a new class index, moves the alias
     and keeps the previous index for rollback. Refused with 409 like an
-    update; `wait` answers with the outcome."""
+    update; `wait` answers with the outcome. Queued like an update with
+    UPDATE_EXECUTION=queued."""
     entry = await _get_registry_entry(ontology_id)
     if not entry:
         raise HTTPException(status_code=404, detail="Ontology not in registry")
     _transaction_guard(ontology_id, entry)
 
-    async def _run():
-        try:
-            return await update_pipeline.execute_reindex(
-                ontology_id=ontology_id,
-                registry_entry=entry,
-                redis_client=redis_client,
-                es_mgr=es_mgr,
-                ontologies_base_path=ONTOLOGIES_DIR,
-                es_url=ELASTICSEARCH_URL,
-            )
-        except Exception as e:
-            logger.exception("Manual reindex failed for %s", ontology_id)
-            return {"success": False, "status": "failed", "error": f"unhandled: {e}"}
-
+    if _update_mode() == "queued":
+        return await _submit("reindex", [ontology_id], label="reindex", wait=wait,
+                             extra={"ontology_id": ontology_id}, outcome=_single_outcome(ontology_id))
+    started = await _start_or_409("reindex", [ontology_id])
     if wait:
-        result = await _run()
+        result = await _run_reindex(ontology_id, started)
         return {"ontology_id": ontology_id, **result}
-    asyncio.create_task(_run())
+    asyncio.create_task(_run_reindex(ontology_id, started))
     return {"status": "reindex_triggered", "ontology_id": ontology_id}
 
 
@@ -3333,14 +3541,31 @@ async def admin_check_updates(
     - `wait`: answer with the per-ontology summary instead of running in the
       background.
 
+    Ontologies are checked one after another. Every selected id is reported
+    once: updated, unchanged, failed, skipped (with the reason, including
+    `not_registered`), or `not_run` when an earlier outcome was unknown and
+    stopped the batch (`held_by`, status `update_check_stopped`).
+
+    With UPDATE_EXECUTION=queued the selection is fixed now and queued as
+    one job for the update runner; `wait` behaves as for trigger_update.
     Auto-runs only when ENABLE_AUTO_SYNC=true.
     """
     only = [o.strip() for o in ontologies.split(",") if o.strip()] if ontologies else None
     requested = only or UPDATE_ONTOLOGIES or "all"
+    if _update_mode() == "queued":
+        keys, unknown = await update_jobs.select(redis_client, only or UPDATE_ONTOLOGIES)
+
+        def outcome(job):
+            summary = {**job.get("summary", {}), **({"held_by": job["held_by"]} if job.get("held_by") else {})}
+            return {"status": _check_status(summary), "requested": requested, **summary}
+        return await _submit("check", keys, label="update_check", wait=wait, extra={"requested": requested},
+                             outcome=outcome, requested=requested,
+                             skipped={k: "not_registered" for k in unknown})
+    started = await _start_or_409("check", [])
     if wait:
-        summary = await _check_and_update_all(only)
-        return {"status": "update_check_complete", "requested": requested, **summary}
-    asyncio.create_task(_check_and_update_all(only))
+        summary = await _check_and_update_all(only, started)
+        return {"status": _check_status(summary), "requested": requested, **summary}
+    asyncio.create_task(_check_and_update_all(only, started))
     return {"status": "update_check_triggered", "requested": requested}
 
 
@@ -3354,6 +3579,9 @@ async def webhook_trigger_update(ontology_id: str, request: Request):
 
     Headers:
         X-Webhook-Secret: the secret key for this ontology
+
+    With UPDATE_EXECUTION=queued the update is queued (202 with job_id);
+    repeated calls while it is queued or running return the same job.
     """
     entry = await _get_registry_entry(ontology_id)
     if not entry:
@@ -3368,7 +3596,11 @@ async def webhook_trigger_update(ontology_id: str, request: Request):
         raise HTTPException(status_code=401, detail="Invalid webhook secret")
     _update_preflight(ontology_id, entry)
 
-    asyncio.create_task(_run_update(ontology_id, entry))
+    if _update_mode() == "queued":
+        return await _submit("update", [ontology_id], label="update", wait=False, source="webhook",
+                             extra={"ontology_id": ontology_id, "source": "webhook"}, outcome=None, public=True)
+    started = await _start_or_409("update", [ontology_id])
+    asyncio.create_task(_run_update(ontology_id, started=started))
     return {"status": "update_triggered", "ontology_id": ontology_id, "source": "webhook"}
 
 
@@ -3377,12 +3609,11 @@ async def admin_disable_ontology(
     ontology_id: str,
     credentials: HTTPBasicCredentials = Depends(_require_admin),
 ):
-    """Pause automatic updates for an ontology."""
-    entry = await _get_registry_entry(ontology_id)
-    if not entry:
+    """Pause automatic updates for an ontology. With UPDATE_EXECUTION=queued
+    refused (409) while a queued, running or held job covers it; cancel a
+    queued job first."""
+    if await _change_entry(ontology_id, lambda e: e.update(update_status="disabled")) is None:
         raise HTTPException(status_code=404, detail="Ontology not in registry")
-    entry["update_status"] = "disabled"
-    await _save_registry_entry(ontology_id, entry)
     return {"status": "disabled", "ontology_id": ontology_id}
 
 
@@ -3391,14 +3622,86 @@ async def admin_enable_ontology(
     ontology_id: str,
     credentials: HTTPBasicCredentials = Depends(_require_admin),
 ):
-    """Re-enable automatic updates for an ontology."""
-    entry = await _get_registry_entry(ontology_id)
-    if not entry:
+    """Re-enable automatic updates for an ontology. Refused like /disable."""
+    if await _change_entry(ontology_id, lambda e: e.update(update_status="ok", update_error=None)) is None:
         raise HTTPException(status_code=404, detail="Ontology not in registry")
-    entry["update_status"] = "ok"
-    entry["update_error"] = None
-    await _save_registry_entry(ontology_id, entry)
     return {"status": "enabled", "ontology_id": ontology_id}
+
+
+@app.get("/admin/update_jobs")
+async def admin_update_jobs(
+    credentials: HTTPBasicCredentials = Depends(_require_admin),
+):
+    """Update execution: the mode, the job or inline run holding the global
+    update slot (with the claim recovery needs), queued and recent jobs, and
+    the update runners' heartbeats. See deploy/README.md, "Queued update
+    execution"."""
+    status = {"mode": UPDATE_SETTINGS.mode, "error": UPDATE_SETTINGS.error, "queue": UPDATE_SETTINGS.prefix,
+              "stale_seconds": UPDATE_SETTINGS.stale_seconds, "inline_job_here": _inline_gate.job}
+    status.update(await _update_queue().status())
+    return status
+
+
+@app.get("/admin/update_jobs/{job_id}")
+async def admin_update_job(
+    job_id: str,
+    credentials: HTTPBasicCredentials = Depends(_require_admin),
+):
+    """One job: its request, state, claim, events and outcome (per ontology
+    for a batch)."""
+    job = await _update_queue().get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"No job {job_id}; ended jobs are kept up to UPDATE_JOB_RETAIN")
+    return job
+
+
+class JobNotePayload(BaseModel):
+    note: str = ""
+
+
+@app.post("/admin/update_jobs/{job_id}/cancel")
+async def admin_cancel_update_job(
+    job_id: str,
+    payload: Optional[JobNotePayload] = None,
+    credentials: HTTPBasicCredentials = Depends(_require_admin),
+):
+    """Cancel a queued job, or stop a running batch before its next
+    ontology. A running update or reindex cannot be cancelled."""
+    try:
+        job = await _update_queue().cancel(job_id, (payload.note if payload else ""))
+    except update_jobs.QueueError as e:
+        raise _queue_http(e)
+    return {"status": "cancelled" if job["state"] == update_jobs.CANCELLED else "cancel_requested",
+            "job_id": job_id, "job_state": job["state"]}
+
+
+class RecoverPayload(BaseModel):
+    claim: str
+    reconciled: bool = False
+    runner_stopped: bool = False
+    note: str = ""
+
+
+@app.post("/admin/update_jobs/{job_id}/recover")
+async def admin_recover_update_job(
+    job_id: str,
+    payload: RecoverPayload,
+    credentials: HTTPBasicCredentials = Depends(_require_admin),
+):
+    """Release the global update slot held by a job (or an inline run) whose
+    outcome was unknown, after reconciliation. Deletes nothing.
+
+    Body: {"claim": <from GET /admin/update_jobs>, "reconciled": true,
+    "note": "..."}, plus "runner_stopped": true for a job still marked
+    running, whose runner must be stopped and silent for
+    UPDATE_RUNNER_STALE_SECONDS. Every transaction the job left
+    (update_txn) is resolved first with resolve_update; until then the
+    answer lists them and the slot stays held."""
+    try:
+        return await _update_queue().recover(job_id, payload.claim, payload.note, payload.reconciled,
+                                             payload.runner_stopped, local_inline_job=_inline_gate.job)
+    except update_jobs.QueueError as e:
+        raise _queue_http(e)
 
 
 @app.get("/admin/infrastructure")
@@ -3468,7 +3771,15 @@ async def update_result_callback(payload: UpdateResultPayload):
     """
     Callback endpoint that OntologyServer POSTs to after completing a hot-swap.
     Updates the registry status in Redis.
+
+    The update pipeline no longer asks workers for this callback; it polls
+    the task and records the outcome itself. Outside inline mode the
+    endpoint is refused (409) and writes nothing: it is unauthenticated, and
+    its status would compete with the update runner's records.
     """
+    if UPDATE_SETTINGS.mode != "inline":
+        raise HTTPException(status_code=409, detail="update outcomes are recorded by the update runner; "
+                                                    "this callback is not used with UPDATE_EXECUTION=queued")
     entry = await _get_registry_entry(payload.ontology_id)
     if not entry:
         return {"status": "ignored", "reason": "not in registry"}

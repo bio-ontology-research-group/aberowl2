@@ -75,6 +75,13 @@ uv run --extra test pytest tests/ -v -m "not bioportal"
 
 # A single test by name
 uv run --extra test pytest tests/ -v -k test_ontology_update_hotswap
+
+# The update queue across processes, against a throwaway Redis (skipped
+# without ABEROWL_TEST_REDIS_URL; never point it at a deployment's Redis)
+docker run --rm -d --name aberowl-queue-test -p 127.0.0.1:16379:6379 redis:7-alpine
+ABEROWL_TEST_REDIS_URL=redis://127.0.0.1:16379/0 \
+    uv run --extra test python -m pytest tests/test_update_jobs_redis.py -v
+docker rm -f aberowl-queue-test
 ```
 
 ---

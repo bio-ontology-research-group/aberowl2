@@ -150,6 +150,11 @@ as an encrypted tunnel between the hosts; the token travels in every request.
      up -d --no-deps central-server
    ```
 
+   With queued update execution (`deploy/README.md`, "Queued update
+   execution") the update runner is the only process that uses the mapping:
+   use `deploy/docker-compose.central-queued-transfer.yml` in place of this
+   override, with the same `UPDATE_TRANSFER_DIR`.
+
 Workers not listed keep the shared-directory behaviour; that is deliberate,
 so a mixed installation needs no extra configuration. A worker URL that does
 not match its registry `url` is therefore not an error: its updates use the

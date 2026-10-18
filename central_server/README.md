@@ -422,6 +422,9 @@ See the web interface documentation for full API details.
 
 - `CENTRAL_SERVER_URL`: URL where the central server is accessible (for MCP server)
 - `REDIS_URL`: Redis connection URL (default: `redis://redis`)
+- `UPDATE_EXECUTION`: where ontology updates run, `inline` (this process,
+  the default) or `queued` (the update runner, `python -m app.update_runner`);
+  see `deploy/README.md`, "Queued update execution"
 - `ELASTICSEARCH_URL`: Elasticsearch URL (default: `http://elasticsearch:9200`)
 
 ### Configuration files

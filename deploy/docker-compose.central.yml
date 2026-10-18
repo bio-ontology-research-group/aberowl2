@@ -65,6 +65,12 @@ services:
       # (triggerIndexing / updateOntology). Must equal the workers' ABEROWL_SECRET_KEY.
       - ABEROWL_SECRET_KEY=${ABEROWL_SECRET_KEY}
       - ONTOLOGIES_HOST_PATH=${ONTOLOGIES_PATH:-/data/aberowl/ontologies}
+      - REDIS_URL=redis://redis
+      # Ontology updates run in this container, one at a time. To run them
+      # in a separate, resource-limited runner instead, add
+      # deploy/docker-compose.central-queued.yml (see deploy/README.md,
+      # "Queued update execution"). Never mix the two.
+      - UPDATE_EXECUTION=inline
       # Ontology updates of workers on other hosts go through each host's
       # transfer service: add deploy/docker-compose.central-transfer.yml,
       # which sets UPDATE_TRANSFER_CONFIG and mounts the mapping. Without it,
