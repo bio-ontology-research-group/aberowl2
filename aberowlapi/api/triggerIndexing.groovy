@@ -6,7 +6,8 @@
  * updateStatus.groovy.
  *
  * POST parameters (JSON body or query string):
- *   owlPath          - path to OWL file inside container (must start with /data/)
+ *   owlPath          - the file to index: an existing regular file under
+ *                      /data, or a validation export (see validateOntology)
  *   ontologyId       - lowercase ontology identifier / acronym
  *   classIndexName   - ES index to write classes into  (e.g. aberowl_hp_classes_v2)
  *   ontologyIndexName - ES ontologies index (default: aberowl_ontologies)
@@ -14,10 +15,15 @@
  *   description      - description (optional)
  *   freshIndex       - "true" to skip deleteOntologyData (writing to a new index)
  *   secretKey        - must match ABEROWL_SECRET_KEY env var
+ *
+ * Answers 409 while a hot-swap or indexing task for the same ontology is
+ * pending. A validation export is deleted once the indexer has exited,
+ * whatever its outcome: it belongs to one transaction and is read once.
  */
 
 import groovy.json.*
 import src.util.Util
+import src.UpdateFiles
 import java.util.concurrent.ConcurrentHashMap
 
 def params = Util.extractParams(request)
@@ -41,19 +47,15 @@ if (!expectedKey || secretKey != expectedKey) {
 }
 
 // ---- Validate inputs -----------------------------------------------------
-if (!owlPath || !owlPath.startsWith("/data/")) {
+def export = owlPath ? UpdateFiles.existingExport(owlPath) : null
+if (!owlPath || (export == null && UpdateFiles.dataFile(owlPath) == null)) {
     response.setStatus(400)
-    println new JsonBuilder([status: 'error', message: 'owlPath must be within /data/'])
+    println new JsonBuilder([status: 'error', message: "owlPath must be an existing regular file under ${UpdateFiles.dataRoot()} or a validation export: ${owlPath}"])
     return
 }
 if (!ontologyId || !classIndexName) {
     response.setStatus(400)
     println new JsonBuilder([status: 'error', message: 'ontologyId and classIndexName are required'])
-    return
-}
-if (!new File(owlPath).exists()) {
-    response.setStatus(400)
-    println new JsonBuilder([status: 'error', message: "File not found: ${owlPath}"])
     return
 }
 
@@ -65,7 +67,19 @@ synchronized (application) {
 }
 def updateTasks = application.getAttribute("updateTasks")
 def taskId = "idx_${UUID.randomUUID()}"
-updateTasks[taskId] = [status: 'pending', started: new Date().toString()]
+def busy = null
+synchronized (updateTasks) {
+    busy = UpdateFiles.activeTask(updateTasks, ontologyId)
+    if (!busy) {
+        updateTasks[taskId] = [status: 'pending', kind: 'index', ontologyId: ontologyId,
+                               owlPath: owlPath, started: new Date().toString()]
+    }
+}
+if (busy) {
+    response.setStatus(409)
+    println new JsonBuilder([status: 'error', taskId: busy, message: "task ${busy} for ${ontologyId} is still pending"])
+    return
+}
 
 // ---- Resolve ES connection params from environment ----------------------
 def esUrl  = System.getenv("CENTRAL_ES_URL") ?: System.getenv("ELASTICSEARCH_URL") ?: "http://elasticsearch:9200"
@@ -110,14 +124,24 @@ Thread.start {
             finalStatus = 'success'
             message = "Indexing completed for ${ontologyId} into ${classIndexName}"
         } else {
-            message = "Indexer exited ${proc.exitValue()}: ${output?.take(500)}"
+            message = "Indexer exited ${proc.exitValue()}: ${output?.takeRight(500)}"
         }
-    } catch (Exception e) {
+    } catch (Throwable e) {
         message = e.getMessage() ?: e.getClass().getName()
         e.printStackTrace()
+    } finally {
+        // The indexer has exited (or never started): nothing reads the export now.
+        if (export != null) {
+            try {
+                UpdateFiles.deleteExport(export)
+            } catch (Exception e) {
+                println "WARNING: could not delete export ${export}: ${e.getMessage()}"
+            }
+        }
     }
 
-    updateTasks[taskId] = [status: finalStatus, message: message, completed: new Date().toString()]
+    updateTasks[taskId] = [status: finalStatus, kind: 'index', ontologyId: ontologyId, owlPath: owlPath,
+                           message: message, completed: new Date().toString()]
 }
 
 println new JsonBuilder([status: 'accepted', taskId: taskId])

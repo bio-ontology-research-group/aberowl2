@@ -98,6 +98,7 @@ def startServer(def ontologyArg, def port) {
     context.addServlet(new ServletHolder(new GroovyServlet()), '/api/updateStatus.groovy')
     context.addServlet(new ServletHolder(new GroovyServlet()), '/api/validateOntology.groovy')
     context.addServlet(new ServletHolder(new GroovyServlet()), '/api/triggerIndexing.groovy')
+    context.addServlet(new ServletHolder(new GroovyServlet()), '/api/finalizeUpdate.groovy')
     // Dynamic ontology management endpoints
     context.addServlet(new ServletHolder(new GroovyServlet()), '/api/addOntology.groovy')
     context.addServlet(new ServletHolder(new GroovyServlet()), '/api/removeOntology.groovy')

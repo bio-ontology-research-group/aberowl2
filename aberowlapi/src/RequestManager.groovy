@@ -195,7 +195,7 @@ public class RequestManager {
      * the new copy while the old one is still serving. Throws on any failure,
      * including an ImportResolutionException for an incomplete closure.
      */
-    private Map readOntology(String ontId, String ontIRI, ImportCatalogue catalogue) {
+    private Map readOntology(String ontId, String ontIRI, ImportCatalogue catalogue, String servedPath = null) {
         OWLOntologyManager lManager = OWLManager.createOWLOntologyManager()
 
         // Stop remote import fetches. owl:imports of dead URLs hang for minutes
@@ -219,6 +219,8 @@ public class RequestManager {
         // Count the declared imports before merging: the merged ontology carries
         // no import declarations.
         int declaredCount = originalOntology.getImportsDeclarations().size()
+        List<String> declaredImports = originalOntology.getImportsDeclarations()
+            .collect { it.getIRI().toString() }.sort()
 
         // Merge imports closure into a single ontology.
         // The merged ontology must use a SYNTHETIC IRI rather than the
@@ -230,7 +232,8 @@ public class RequestManager {
         if (catalogue == null) {
             provider = new OWLOntologyImportsClosureSetProvider(lManager, originalOntology)
         } else {
-            ImportClosure closure = catalogue.resolveClosure(lManager, originalOntology, ontIRI, loaderConfig)
+            // servedPath: ontIRI is a staged copy of that file (an update).
+            ImportClosure closure = catalogue.resolveClosure(lManager, originalOntology, ontIRI, servedPath, loaderConfig)
             resolvedIris = closure.resolvedIris
             provider = { -> closure.ontologies } as OWLOntologySetProvider
         }
@@ -269,9 +272,80 @@ public class RequestManager {
             println "Resolved ${sources.size() - 1} imported documents for ${ontId} from ${catalogue.file}"
         }
         return [manager: lManager, ontology: mergedOntology, declared: declaredCount,
+                declaredImports: declaredImports,
                 policy: catalogue == null ? "suppressed" : "catalogue",
                 resolved: sources.size() - 1, unresolved: unresolved.size(),
                 rootTerms: declaredRootIris(originalAnnotations)]
+    }
+
+    /**
+     * Check that a candidate file for ontId loads the way a hot-swap of ontId
+     * from path would load it: the same parser and the same import policy (its
+     * import catalogue if it has one, otherwise imports suppressed), so no
+     * import IRI is dereferenced. servedPath names the file path is a staged
+     * copy of (see ImportCatalogue.resolveClosure). The update pipeline calls
+     * this on a staged download. Nothing served is touched. Throws as a load
+     * would.
+     *
+     * With exportTo, the merged ontology (the one a hot-swap would classify,
+     * imports merged in, no owl:imports left) is also written there in OWL
+     * functional syntax, for indexing. An existing file is never replaced.
+     */
+    Map validateOntologyFile(String ontId, String path, String servedPath = null,
+                             java.nio.file.Path exportTo = null) {
+        ImportCatalogue catalogue = ImportCatalogue.forOntology(ontId, dataRoot)
+        Map loaded = readOntology(ontId ?: "validation", path, catalogue, servedPath)
+        OWLOntologyManager lManager = loaded.manager as OWLOntologyManager
+        OWLOntology merged = loaded.ontology as OWLOntology
+        try {
+            Map summary = [classCount: merged.getClassesInSignature(true).size(),
+                           importsPolicy: loaded.policy, importsDeclared: loaded.declared,
+                           importsResolved: loaded.resolved, importsUnresolved: loaded.unresolved,
+                           declaredImports: loaded.declaredImports]
+            if (exportTo != null) {
+                exportMerged(lManager, merged, exportTo)
+                summary.exportPath = exportTo.toString()
+            }
+            return summary
+        } finally {
+            lManager.getOntologies().collect().each { lManager.removeOntology(it) }
+        }
+    }
+
+    private static void exportMerged(OWLOntologyManager m, OWLOntology merged, java.nio.file.Path target) {
+        // Without owl:imports, whatever reads the export resolves none.
+        merged.getImportsDeclarations().collect().each { m.applyChange(new RemoveImport(merged, it)) }
+        java.nio.file.Files.createDirectories(target.getParent())
+        java.nio.file.Path part = target.resolveSibling(target.getFileName().toString() + ".part")
+        try {
+            part.toFile().withOutputStream { out ->
+                m.saveOntology(merged, new org.semanticweb.owlapi.formats.FunctionalSyntaxDocumentFormat(), out)
+            }
+            // No REPLACE_EXISTING: an existing export is never overwritten.
+            java.nio.file.Files.move(part, target)
+        } finally {
+            java.nio.file.Files.deleteIfExists(part)
+        }
+    }
+
+    /**
+     * Whether ontId is loaded and classified, so queries are answered. A
+     * failed hot-swap reports this, so the caller knows whether the previous
+     * copy is still serving.
+     */
+    boolean isServing(String ontId) {
+        return hasOntology(ontId) && getStatus(ontId) in ["classified", "incoherent"]
+    }
+
+    /**
+     * After a hot-swap from a staged file, central promotes the staged file
+     * to the served path. This records the served path as the ontology's file
+     * in place of the staged one, only if the staged one is still recorded
+     * (compare and set). Returns the path recorded afterwards.
+     */
+    String finalizeServedPath(String ontId, String stagedPath, String servedPath) {
+        ontologyPaths.replace(ontId, stagedPath, servedPath)
+        return ontologyPaths.get(ontId)
     }
 
     /**
@@ -412,6 +486,14 @@ public class RequestManager {
     }
 
     void reloadOntology(String ontId, String ontIRI, String reasonerType) {
+        reloadOntology(ontId, ontIRI, reasonerType, null)
+    }
+
+    /**
+     * servedPath: ontIRI is a staged copy of that file (an update), which
+     * import catalogue entries may name; see ImportCatalogue.resolveClosure.
+     */
+    void reloadOntology(String ontId, String ontIRI, String reasonerType, String servedPath) {
         println "Reloading ontology ${ontId} from ${ontIRI}"
         // An invalid import catalogue fails here, before the serving copy is
         // disposed.
@@ -428,7 +510,7 @@ public class RequestManager {
             // The documents are parsed once. Only classification waits for the
             // dispose: the peak holds the old copy and its reasoners plus the
             // new root and merged ontology, never two reasoners.
-            Map loaded = readOntology(ontId, ontIRI, catalogue)
+            Map loaded = readOntology(ontId, ontIRI, catalogue, servedPath)
             disposeOntology(ontId)
             reasonerTypes.put(ontId, reasonerType ?: "elk")
             ontologyPaths.put(ontId, ontIRI)
