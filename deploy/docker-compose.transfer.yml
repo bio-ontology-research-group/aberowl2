@@ -1,0 +1,61 @@
+# AberOWL ontology transfer service, for a worker host that does not share its
+# ontology directory with central. One per worker host, next to the worker
+# containers and separate from them. See transfer_service/README.md.
+#
+# Usage, on the worker host, from the repository root:
+#   docker compose -p aberowl-transfer -f deploy/docker-compose.transfer.yml \
+#     --env-file deploy/transfer.env up -d --build
+#
+# deploy/transfer.env (private, not committed) sets:
+#   ONTOLOGIES_PATH       the host directory the workers mount read-only at /data
+#   TRANSFER_STATE_PATH   a host directory for the journal, outside ONTOLOGIES_PATH
+#   TRANSFER_CONFIG       the service configuration (deploy/transfer-config.example.json)
+#   TRANSFER_TOKEN_FILE   a file holding the bearer token (at least 32 characters),
+#                         mode 0400 and owned by TRANSFER_UID: it is bind-mounted,
+#                         so the container user reads the host file directly
+#   TRANSFER_TLS_DIR      a directory with tls.crt and tls.key, readable by TRANSFER_UID
+#   TRANSFER_BIND         a private address of this host that central can reach (no default)
+#   TRANSFER_UID, TRANSFER_GID   the owner of ONTOLOGIES_PATH, every configured
+#                         ontology directory in it, and TRANSFER_STATE_PATH
+
+services:
+  ontology-transfer:
+    build:
+      context: ..
+      dockerfile: transfer_service/Dockerfile
+    image: aberowl-transfer
+    restart: unless-stopped
+    user: "${TRANSFER_UID:?}:${TRANSFER_GID:?}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: [/tmp]
+    environment:
+      - ABEROWL_TRANSFER_CONFIG=/etc/aberowl-transfer/config.json
+      - ABEROWL_TRANSFER_TOKEN_FILE=/run/secrets/aberowl_transfer_token
+    volumes:
+      # The one writable view of the ontologies: the same host directory the
+      # workers mount read-only at /data. Nothing else of the host is mounted.
+      - ${ONTOLOGIES_PATH:?}:/srv/aberowl/ontologies
+      - ${TRANSFER_STATE_PATH:?}:/var/lib/aberowl-transfer
+      - ${TRANSFER_CONFIG:?}:/etc/aberowl-transfer/config.json:ro
+      - ${TRANSFER_TLS_DIR:?}:/etc/aberowl-transfer/tls:ro
+    secrets:
+      - aberowl_transfer_token
+    command: ["uvicorn", "aberowl_transfer:create_app_from_env", "--factory",
+              "--host", "0.0.0.0", "--port", "8090", "--no-server-header", "--no-access-log",
+              "--ssl-certfile", "/etc/aberowl-transfer/tls/tls.crt",
+              "--ssl-keyfile", "/etc/aberowl-transfer/tls/tls.key"]
+    ports:
+      # Published on a private address only, never on all interfaces.
+      # Use a separate host port; reasoning workers may already occupy 8090.
+      - "${TRANSFER_BIND:?set TRANSFER_BIND to a private address of this host}:${TRANSFER_PORT:-18443}:8090"
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+secrets:
+  aberowl_transfer_token:
+    file: ${TRANSFER_TOKEN_FILE:?}

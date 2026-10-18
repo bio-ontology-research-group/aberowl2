@@ -3166,6 +3166,7 @@ _UPDATE_STATUS_FIELDS = (
     "last_check_error", "last_updated", "active_owl_path", "archived_owl_path",
     "active_es_index", "previous_es_index", "update_imports_policy", "source_declared_imports",
     "imports_changed", "catalogue_dependents", "stale_imports", "update_txn", "update_history",
+    "update_warnings", "transfer_release_pending",
 )
 
 
@@ -3187,6 +3188,7 @@ async def admin_update_status(
 
 class ResolvePayload(BaseModel):
     txn_id: str
+    clear_transfer_cleanup: bool = False
     reconciled: bool = False
     note: str = ""
 
@@ -3207,6 +3209,18 @@ async def admin_resolve_update(
     entry = await _get_registry_entry(ontology_id)
     if not entry:
         raise HTTPException(status_code=404, detail="Ontology not in registry")
+    if payload.clear_transfer_cleanup:
+        pending = entry.get("transfer_release_pending")
+        if update_pipeline.update_in_progress(ontology_id) or entry.get("update_txn"):
+            raise HTTPException(status_code=409, detail="Resolve the update transaction before its cleanup marker")
+        if not pending or pending.get("txn") != payload.txn_id:
+            raise HTTPException(status_code=409, detail="No matching transfer cleanup marker; read update_status again")
+        if not payload.reconciled or not payload.note.strip():
+            raise HTTPException(status_code=422, detail="Confirm reconciled=true and provide a recovery note")
+        if not await update_pipeline.resolve_transfer_cleanup(redis_client, ontology_id, payload.txn_id, payload.note):
+            raise HTTPException(status_code=409, detail="The cleanup marker changed; read update_status again")
+        return {"status": "transfer_cleanup_resolved", "ontology_id": ontology_id,
+                "txn_id": payload.txn_id, "left_in_place": pending}
     txn = entry.get("update_txn")
     if not txn:
         raise HTTPException(status_code=409, detail=f"{ontology_id} has no unresolved transaction")
@@ -3226,7 +3240,7 @@ async def admin_resolve_update(
         raise HTTPException(status_code=409, detail="the transaction record changed; read it again")
     return {"status": "resolved", "ontology_id": ontology_id, "txn_id": payload.txn_id,
             "task_state": task_state, "left_in_place": {
-                k: txn.get(k) for k in ("staging", "index", "export", "worker") if txn.get(k)}}
+                k: txn.get(k) for k in ("staging", "index", "export", "worker", "transfer") if txn.get(k)}}
 
 
 @app.post("/admin/ontology/{ontology_id}/reindex")

@@ -43,6 +43,11 @@ queries through a reasoner.
   and answers DL queries. Each worker registers its ontologies with the central
   server, which then dispatches each query to the correct worker by `ontologyId`.
 
+**Transfer service** (`transfer_service/`, optional): a small host-side service
+for worker hosts that do not share their ontology directory with central. It
+lets the ontology update pipeline stage and promote a release there; workers
+keep their read-only mount.
+
 For more detail see [central_server/README.md](central_server/README.md)
 (central stack, MCP and local testing), [deploy/README.md](deploy/README.md)
 (deployment), and [deploy/SELF_HOSTING.md](deploy/SELF_HOSTING.md)

@@ -1,0 +1,10 @@
+{
+  "data_root": "/srv/aberowl/ontologies",
+  "state_dir": "/var/lib/aberowl-transfer",
+  "ontologies": ["flopo"],
+  "max_bytes": 8589934592,
+  "min_free_bytes": 1073741824,
+  "archive_keep": 3,
+  "worker_data_root": "/data",
+  "lock_timeout_seconds": 30
+}

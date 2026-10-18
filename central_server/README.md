@@ -145,6 +145,7 @@ the deploy procedure for the hosted instances.
 | `CENTRAL_SERVER_URL` | `http://localhost:8000` | Base URL the MCP server subprocess calls when servicing tool requests. In Docker the central-server container reaches itself on `localhost:8000`; override only if you run the MCP server on a different host than the central app. |
 | `CENTRAL_SERVER_PORT` | `8000` | Host port for the central HTTP API |
 | `ADMIN_USER` / `ADMIN_PASSWORD` | `admin` / `changeme` | Credentials protecting `/admin/*` endpoints |
+| `UPDATE_TRANSFER_CONFIG` | empty | Path, inside the container, of a mapping from worker URLs to the transfer services on their hosts. Empty keeps ontology updates in the directory central shares with the workers. An unusable file stops updates; it never falls back. `deploy/docker-compose.central-transfer.yml` sets it and mounts the mapping. See `transfer_service/README.md`. |
 
 **Firewall / reverse-proxy checklist**
 
@@ -154,6 +155,10 @@ For public deployments you must expose (or proxy) two ports:
 - `8766`: ontology MCP server (if you want remote MCP clients to reach it)
 
 If only local/LAN MCP access is needed, bind `8766` to a private interface only.
+
+A transfer service (`transfer_service/`, port `8090` by default) runs on a
+worker host, not here, and is reached only by central over a private address.
+Never route it through the public reverse proxy.
 
 **Verifying the deployment**
 

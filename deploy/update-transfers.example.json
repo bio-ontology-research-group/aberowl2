@@ -1,0 +1,10 @@
+{
+  "transfers": [
+    {
+      "worker_url": "http://aberowl-worker-1:8080",
+      "transfer_url": "https://worker-host-1.internal.example:18443",
+      "token_file": "/run/secrets/aberowl-transfer-worker-host-1",
+      "ca_file": "/run/secrets/aberowl-transfer-ca.pem"
+    }
+  ]
+}

@@ -65,6 +65,10 @@ services:
       # (triggerIndexing / updateOntology). Must equal the workers' ABEROWL_SECRET_KEY.
       - ABEROWL_SECRET_KEY=${ABEROWL_SECRET_KEY}
       - ONTOLOGIES_HOST_PATH=${ONTOLOGIES_PATH:-/data/aberowl/ontologies}
+      # Ontology updates of workers on other hosts go through each host's
+      # transfer service: add deploy/docker-compose.central-transfer.yml,
+      # which sets UPDATE_TRANSFER_CONFIG and mounts the mapping. Without it,
+      # updates use the directory central shares with the workers.
       - ENABLE_MCP=${ENABLE_MCP:-true}
       - ENABLE_MCP_ONTOLOGY=${ENABLE_MCP_ONTOLOGY:-true}
       - MCP_ONTOLOGY_PORT=${MCP_ONTOLOGY_PORT:-8766}

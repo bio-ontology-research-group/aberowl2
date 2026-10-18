@@ -165,8 +165,10 @@ Requirements:
   the central Compose mount) on the same host as the worker. Ontologies stored
   elsewhere, and the self-host stack, which gives central no ontology mount,
   are skipped with `served_file_missing`. Central and workers on different
-  hosts need a verified shared file system for `/data`; mounting the right
-  container path is not enough on its own.
+  hosts need either a verified shared file system for `/data` (mounting the
+  right container path is not enough on its own) or, for a worker host with
+  its own local directory, the transfer service on that host and an entry for
+  the worker in `UPDATE_TRANSFER_CONFIG` (see "Workers on other hosts").
 - Workers run the worker code from this change (`validateOntology.groovy`,
   `updateOntology.groovy`, `triggerIndexing.groovy`, the new
   `finalizeUpdate.groovy`, `src/RequestManager.groovy`, `src/ImportCatalogue.groovy`,
@@ -250,6 +252,64 @@ the same transaction record, the same index retention and the same handling
 of unknown outcomes. It indexes with the standalone indexer's import handling
 (see "Imports").
 
+### Workers on other hosts
+
+When a worker's host keeps its own ontology directory, central's downloads and
+promotions never reach it. Run the transfer service (`transfer_service/`) on
+that host and map the worker to it in a file named by `UPDATE_TRANSFER_CONFIG`
+in central's environment (`deploy/docker-compose.central-transfer.yml` sets it
+and mounts the mapping); `transfer_service/README.md` has the setup,
+configuration, token handling, recovery and rollback steps. For a mapped
+worker, steps 1, 2, 4 and 8 change:
+
+- Step 1 also reads the served file's SHA-256 and MD5 on the worker's host
+  through the service, and skips with `transfer_unreachable`,
+  `transfer_refused` or `served_file_missing` when it cannot. Central's own
+  copy is not read for any decision. A stage the previous update could not
+  remove (`transfer_release_pending`) is removed first, once the worker
+  reports the served path and the host still serves that release; otherwise
+  the run is skipped with `transfer_cleanup_pending`. An unfinished
+  transaction on the host that central no longer tracks is skipped with
+  `transfer_transaction_open`.
+- Step 2 ends the run as unchanged only when the worker's host still serves the
+  file of the last complete update (its MD5 matches the stored one) and
+  central's own copy, if it keeps one, holds it too; otherwise it downloads.
+- Step 4 ends the run as unchanged only when the download is the release of
+  the last complete update and the worker's host serves it. If the host
+  already serves the download but the registry recorded another release, the
+  update runs in full with identical bytes, so search, the registry and
+  dependents catch up. An unchanged run also refreshes central's own copy
+  when it differs; a refresh that fails is reported in `update_warnings` and
+  retried by the next check.
+- Step 4 downloads into central's `ONTOLOGIES_DIR/.update-downloads/<id>/<txn>/`
+  and uploads the release to the service. The service checks that the served
+  file still has the SHA-256 central read (compare and set), verifies the size
+  and SHA-256 of the upload, and only then places it at
+  `/data/<id>/updates/<txn>/<id>.owl` on the worker's host. Validation,
+  indexing and the hot-swap read it there from the read-only mount, as before.
+- Step 8 asks the service to archive the served file as
+  `/data/<id>/archive/<id>_<txn>.owl` and replace it, again only while it
+  holds the SHA-256 central read, then reads the served file's SHA-256 back
+  before telling the worker the served path. Version markers are recorded only
+  after that. The service removes the stage after `finalizeUpdate.groovy`; if
+  it does not confirm, the update still succeeds, with a warning and
+  `transfer_release_pending` for the next check. Central replaces its own copy
+  of the served file, if it has one, with the release. Ontologies whose import
+  catalogue names the file are found in the worker host's `import_catalogues/`.
+
+An outcome the service cannot confirm is a recovery case like any other: the
+transaction record stays, the stage on the worker host is kept, and the
+ontology and its worker are blocked as described under "Recovery". Workers
+not in the mapping keep the shared-directory behaviour, deliberately; a
+`worker_url` that does not match the registry's `url` therefore shows up as a
+validation failure, not as a configuration error. A mapping file that is set
+but unusable stops every update (`transfer_config_invalid`) rather than
+falling back to it.
+
+In both modes, an ontology without a recorded MD5 counts its served file as
+current only if no run has stopped for recovery since its last complete
+update.
+
 ### Failures
 
 `last_check_status` is `updated`, `unchanged`, `skipped`, `failed`,
@@ -291,6 +351,7 @@ The cases:
 | `finalize_failed` | finalize | The served file holds the new release; the worker still records the staging path, which still exists. |
 | `alias_swap_failed` | alias | The worker and the served file hold the new release; search still uses the old index. |
 | `es_unavailable`, `unexpected`, `cancelled` | any | Elasticsearch failed, central hit an error, or the run was cancelled, in the phase shown. |
+| `transfer_unknown`, `transfer_cleanup_unknown`, `promote_unknown` | transfer, promote | Workers on other hosts only: the transfer service could not confirm the stage, its removal, or the replaced served file. See `transfer_service/README.md`, "Recovery". |
 
 To reconcile one, read `GET /admin/ontology/<id>/update_status`. Its
 `update_txn` names the worker, task id, staging path, index and export. Then:
@@ -312,7 +373,10 @@ To reconcile one, read `GET /admin/ontology/<id>/update_status`. Its
 4. Remove what is no longer needed. Delete the staging directory, and the new
    index unless the alias points to it. A leftover export is under the
    worker's temporary directory; `finalizeUpdate.groovy` with action
-   `discardExport` removes it.
+   `discardExport` removes it. For a worker on another host, the staging
+   directory is on that host: use the transfer service's `abort` or `finalize`
+   (`transfer_service/README.md`), which also closes its own record, and
+   remove central's download under `ONTOLOGIES_DIR/.update-downloads/<id>/<txn>/`.
 5. Resolve the record. This deletes nothing, and is refused while the task is
    still `pending`:
 
@@ -338,6 +402,14 @@ markers, so a release that was half applied is applied again in full.
    previous index, and search and queries.
 5. Repeat the trigger: it must report `unchanged`.
 6. Only then select further ontologies, a few at a time.
+
+A beta whose central and worker share one directory does not exercise the
+transfer service. Before relying on it for workers on other hosts, repeat
+these steps with a mapped worker whose host has its own directory: check the
+served file's SHA-256 through the service before and after, that the stage
+appeared on the worker host and was removed after finalize, the archive on the
+worker host, a worker restart (it must load the new release from
+`/data/<id>/<id>.owl`), and that no other file on that host changed.
 
 ### Imports
 
