@@ -24,7 +24,7 @@ from tests.test_update_pipeline import (EXPORT, NEW_INDEX, SERVED, SOURCE, STAGI
                                         po_entry)
 from tests.transfer_helpers import (NEW, OLD, TOKEN, ServiceThread, aberowl_transfer, make_tls_files, real,
                                     service_config, sha, snapshot, worker_host)
-from app.intake import transfer, updater  # noqa: E402  (on sys.path through test_update_pipeline)
+from app.intake import transfer, update_jobs, updater  # noqa: E402  (on sys.path through test_update_pipeline)
 
 pytestmark = pytest.mark.unit
 
@@ -811,6 +811,79 @@ class TestMapping:
         assert transfer.target_for("http://worker-2:8080") is None
         monkeypatch.delenv("UPDATE_TRANSFER_CONFIG")
         assert transfer.target_for(WORKER) is None
+
+
+# ---------------------------------------------------------------------------
+# Ownership lost while a remote step was awaited (update runner fencing)
+# ---------------------------------------------------------------------------
+
+class LosingRedis(FakeRedis):
+    """FakeRedis with the contract of the update runner's fenced client
+    (update_jobs.FencedRedis): once the claim is lost, check_claim and
+    registry writes raise OwnershipLost."""
+
+    lost = False
+
+    async def check_claim(self):
+        if self.lost:
+            raise update_jobs.OwnershipLost("the claim no longer holds the global slot")
+
+    async def hset(self, h, k, v):
+        if self.lost:
+            raise update_jobs.OwnershipLost("registry write refused")
+        return await super().hset(h, k, v)
+
+
+class TestOwnershipLostDuringARemoteStep:
+    """The claim is released while the runner waits on the transfer service
+    or the worker. Whatever that call did is done; nothing after it may run:
+    central's copy, its download and the indices stay as they were, and
+    nothing is recorded."""
+
+    def lose_after(self, redis, es, hosts, call, snap):
+        async def wrapped(*a, **k):
+            result = await call(*a, **k)
+            snap.update(entry=redis.entry("flopo"), es_calls=list(es.calls), aliases=dict(es.aliases),
+                        central=snapshot(hosts.central))
+            redis.lost = True
+            return result
+        return wrapped
+
+    def assert_nothing_after(self, redis, es, hosts, snap):
+        assert redis.entry("flopo") == snap["entry"] and snap["entry"]["update_txn"]["id"] == "txn-1"
+        assert es.calls == snap["es_calls"] and es.aliases == snap["aliases"]
+        assert snapshot(hosts.central) == snap["central"]
+        assert (hosts.central / ".update-downloads" / "flopo" / "txn-1" / "flopo.owl").read_bytes() == NEW
+
+    async def test_after_the_stage_is_released(self, hosts, mapping, worker, es, monkeypatch):
+        redis, snap = LosingRedis({"flopo": flopo_entry()}), {}
+        monkeypatch.setattr(transfer.RemoteTransfer, "release",
+                            self.lose_after(redis, es, hosts, transfer.RemoteTransfer.release, snap))
+        with pytest.raises(update_jobs.OwnershipLost):
+            await run(hosts, redis, es)
+        self.assert_nothing_after(redis, es, hosts, snap)
+        assert (hosts.central / "flopo" / "flopo.owl").read_bytes() == OLD, "central's copy was refreshed"
+        assert es.aliases["flopo"] == V1, "the alias moved"
+        assert on_host(hosts, "flopo/flopo.owl") == NEW  # promoted before the loss
+
+    async def test_after_the_stage_is_aborted(self, hosts, mapping, worker, es, monkeypatch):
+        worker.validation = {"ok": False, "answered": True, "message": "not an ontology"}
+        redis, snap = LosingRedis({"flopo": flopo_entry()}), {}
+        monkeypatch.setattr(transfer.RemoteTransfer, "abort",
+                            self.lose_after(redis, es, hosts, transfer.RemoteTransfer.abort, snap))
+        with pytest.raises(update_jobs.OwnershipLost):
+            await run(hosts, redis, es)
+        self.assert_nothing_after(redis, es, hosts, snap)
+        assert snap["entry"]["update_txn"]["phase"] == "validate"
+
+    async def test_after_the_export_is_discarded(self, hosts, mapping, worker, es, monkeypatch):
+        es.create_ok = False
+        redis, snap = LosingRedis({"flopo": flopo_entry()}), {}
+        monkeypatch.setattr(updater, "discard_export", self.lose_after(redis, es, hosts, worker.discard, snap))
+        with pytest.raises(update_jobs.OwnershipLost):
+            await run(hosts, redis, es)
+        self.assert_nothing_after(redis, es, hosts, snap)
+        assert ("delete", NEW_INDEX) not in es.calls
 
 
 # ---------------------------------------------------------------------------

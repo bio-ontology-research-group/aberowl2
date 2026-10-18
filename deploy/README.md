@@ -411,6 +411,180 @@ appeared on the worker host and was removed after finalize, the archive on the
 worker host, a worker restart (it must load the new release from
 `/data/<id>/<id>.owl`), and that no other file on that host changed.
 
+### Queued update execution
+
+`UPDATE_EXECUTION` decides where updates, reindexes and batch checks run:
+
+- `inline` (the default, set explicitly in `docker-compose.central.yml`): in
+  the public `central-server` process, as before. It is supported only with
+  one API process and no update runner.
+- `queued`: `central-server` only records a job in Redis and answers with its
+  id; the `update-runner` service claims and runs it. Use
+  `deploy/docker-compose.central-queued.yml`, which sets the mode for both
+  services.
+
+Any other value, or an invalid `UPDATE_*` setting listed below, refuses every
+update request with HTTP 503 and stops the runner. Nothing falls back to
+running inline.
+
+In both modes exactly one heavy job runs at a time: one update, one reindex,
+or one batch check, whose ontologies run one after another. The limit covers
+every trigger: `trigger_update`, the webhook, `check_updates`, `reindex` and
+the scheduled check. It covers download, hashing, validation, indexing,
+hot-swap and their recovery. It does not cover interactive queries, such as DL
+queries, which the workers answer as before. Inline mode refuses a second
+heavy job with HTTP 409. Queued mode queues it.
+
+The job that runs holds a global slot in Redis until its outcome is known. A
+known outcome releases the slot: success, unchanged, a skip, or a failure that
+was cleaned up. An unknown outcome keeps the slot, and no further heavy job
+starts anywhere. Unknown outcomes include an `update_txn` left
+`recovery_required`, an error outside the pipeline's own handling, and a
+runner that crashed, was stopped during a job or lost Redis. Nothing expires
+the slot. A batch stops at such an ontology; the ids it did not reach are
+listed under `not_run`. While any registry entry has an `update_txn`, the
+runner claims nothing.
+
+Starting central or the runner never queues work. The runner runs only jobs
+that were deliberately queued: by an operator, a webhook, or the scheduled
+check, which still needs `ENABLE_AUTO_SYNC=true`. In queued mode the scheduled
+check is queued at most once per `UPDATE_CHECK_INTERVAL_SECONDS`, across
+restarts and API processes.
+
+#### Requests and status
+
+In queued mode `trigger_update`, `reindex` and `check_updates` answer HTTP 202
+with `job_id`. A request equal to a job that is still queued or running
+returns that job with `duplicate: true`. `check_updates` fixes its selection
+when it is queued. With `?wait=true` the request waits up to
+`UPDATE_WAIT_SECONDS` (default 25). A job that ended in that time answers
+HTTP 200 with the same body as inline mode, plus `job_id` and `job_state`.
+Otherwise the answer is HTTP 202 with the job's state, which is neither
+success nor failure; the job goes on, and closing the connection does not
+cancel it.
+
+```bash
+curl -u admin http://localhost:8000/admin/update_jobs
+curl -u admin http://localhost:8000/admin/update_jobs/<job_id>
+curl -u admin -X POST http://localhost:8000/admin/update_jobs/<job_id>/cancel
+```
+
+`/admin/update_jobs` shows the mode, the holder of the global slot (`active`
+for a queued job, `inline` for an inline run) with its `claim`, the queue, the
+most recent ended jobs (`UPDATE_JOB_RETAIN`, default 200, are kept) and each
+runner's last heartbeat. `update_status` of an ontology shows `update_job`
+when the slot's holder concerns it. Cancel removes a queued job, or stops a
+running batch before its next ontology; a running update or reindex cannot be
+cancelled. Status and job records hold no registry secrets or tokens.
+
+Settings, all optional: `UPDATE_QUEUE_PREFIX` (default
+`aberowl:update_jobs`; one namespace per deployment), `UPDATE_WAIT_SECONDS`,
+`UPDATE_QUEUE_MAX` (queued jobs accepted, default 100),
+`UPDATE_JOB_RETAIN`, `UPDATE_RUNNER_HEARTBEAT_SECONDS` (default 15),
+`UPDATE_RUNNER_STALE_SECONDS` (default 120, at least three heartbeats) and
+`UPDATE_RUNNER_POLL_SECONDS` (default 5). `REDIS_URL` (default
+`redis://redis`) is used by central and the runner alike. The queued override
+gives both services the same prefix, heartbeat, stale period and download
+limits from the env file. Set them there, never for one service only: a
+different prefix splits the two silently, and `GET /admin/update_jobs` marks
+a runner whose other settings differ with `settings_match: false`. Runner
+entries silent for a day are removed from the list.
+
+In queued mode `PUT .../source`, `/disable` and `/enable` are refused (409)
+while any queued, running or held job covers the ontology; cancel a queued
+job first. The check and the change are one Redis transaction. A batch
+covers every ontology it selected, including those it has not reached. To
+change one of them, cancel the batch, which stops before its next ontology,
+wait until it ends, make the change, then submit the ids listed under its
+`not_run` with `check_updates?ontologies=...`. Every other
+registry write of the API (the status poll, source sync, metadata
+fallbacks, registration and `resolve_update`) is a transaction on the newest
+entry, so it never overwrites what the runner wrote meanwhile.
+`POST /api/update_result`, a worker callback the pipeline no longer uses, is
+refused in queued mode. The reverse is not guarded: the runner's own writes
+read the entry first, so an API change landing a few round trips before one
+of them can be lost. Change a worker's URL, or re-register a worker, only
+while the runner is idle.
+
+#### Start, stop and back up
+
+Switch from inline to queued mode while nothing runs:
+
+1. Read `GET /admin/update_jobs` and every ontology's `update_status`. No
+   inline run may hold the slot, and no `update_txn` may be left; reconcile
+   them first as described under "Recovery".
+2. Back up as in "Back up and upgrade". The Redis volume holds the queue and
+   job history with the registry.
+3. Start both services with the override, as shown in its header. With
+   workers on other hosts, add `docker-compose.central-queued-transfer.yml`
+   and leave out `docker-compose.central-transfer.yml`.
+4. Check that `GET /admin/update_jobs` reports `mode: queued` and a fresh
+   runner heartbeat. Then update one ontology, as in "Beta rollout".
+
+To stop the runner, wait until `GET /admin/update_jobs` shows no running job,
+or cancel a running batch and wait for it to end, then run
+`docker compose ... stop update-runner` with the same files. A stop during a
+job cancels it: the pipeline records its transaction for recovery and the
+job becomes `recovery_required`. Jobs queued meanwhile stay queued in Redis
+and run when a runner starts. To return to inline mode, stop the runner while
+idle, cancel or let finish every queued job, and deploy without the override.
+
+#### Recovering the global slot
+
+When `GET /admin/update_jobs` shows a holder in state `recovery_required`, or
+in state `running` with no fresh heartbeat from its runner:
+
+1. For a holder still `running`, stop its runner (or, for an inline run, the
+   API process that ran it) and wait `UPDATE_RUNNER_STALE_SECONDS`.
+2. Reconcile and resolve each ontology transaction it left, as under
+   "Recovery"; `resolve_update` refuses while a worker task is pending.
+3. Release the slot, with the claim from the status:
+
+   ```bash
+   curl -u admin -X POST -H 'Content-Type: application/json' \
+     -d '{"claim": "<claim>", "reconciled": true, "runner_stopped": true, "note": "what was found and done"}' \
+     http://localhost:8000/admin/update_jobs/<job_id>/recover
+   ```
+
+The release is refused unless the claim matches, while the runner still sends
+heartbeats, and while a transaction the job left is unresolved. A holder still
+`running` is first marked `recovery_required`, and the answer lists the
+transactions to resolve; call it again afterwards. `resolve_update` is
+refused while a job in any process is running on that ontology.
+
+What a released runner can still do. The runner's registry writes apply only
+while its job holds the slot with its claim (checked in the same Redis
+transaction). Before every other step (a worker request, creating or deleting
+an index, moving the alias, replacing or removing a file) and at every phase
+boundary, it checks the claim, and its heartbeat checks it too. It also stops
+its job when Redis has been unreachable for half of
+`UPDATE_RUNNER_STALE_SECONDS`; a Redis that hangs counts too, because the
+runner's Redis commands time out after one heartbeat interval. A check that
+fails or times out stops the job before its next step. A heartbeat that fails
+in any other way stops the runner. Service Redis only while the runner is
+idle: an outage during a job cancels it, its worker task runs on, and the job
+then needs recovery. A runner that finds its claim gone writes
+nothing more and exits with status 3. This does not undo a request already
+sent or a worker task already started. A check and the step after it are
+one round trip apart, and a paused process checks nothing until it resumes.
+That is why the release needs the runner stopped and silent, and the state
+reconciled. Stop the runner container; do not merely pause it.
+
+#### Downloads
+
+Every mode streams a download to disk and removes gzip as it arrives, whether
+the server sent `Content-Encoding: gzip` or the file is a `.gz` (at most two
+layers, recognised by their content). Concatenated gzip members are read in
+turn; other data after the stream, a truncated or corrupt stream, another
+`Content-Encoding`, and a body that does not match its `Content-Length` fail
+the download. `UPDATE_MAX_DOWNLOAD_BYTES` (default 4 GiB) bounds the bytes
+received and `UPDATE_MAX_EXPANDED_BYTES` (default 8 GiB) the file written. The
+file reaches the staging path only when complete; a failed download removes
+only its own partial file. Each limit must be a whole number of bytes from 1
+to 1 TiB; any other value refuses every update (HTTP 503) and stops the
+runner. The queued override passes both limits to both services; in inline
+mode add them to central's environment if you change them.
+
 ### Imports
 
 An import catalogue (`/data/import_catalogues/<id>.json`) and the module files

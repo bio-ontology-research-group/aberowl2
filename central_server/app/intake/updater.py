@@ -48,6 +48,14 @@ served file use what the service reports for the worker's host, never
 central's copy, and the version markers are recorded only after the service
 shows the served file holding the new release. Any outcome the service
 cannot confirm leaves the transaction for recovery, as above.
+
+Ownership. In queued mode the update runner (app/update_runner.py) passes a
+fenced registry client: every registry write, and every _checkpoint before
+a step with effects elsewhere (worker requests, index creation and
+deletion, the alias, file promotion and removal), first checks that its job
+still holds the global update slot, and raises OwnershipLost otherwise. A
+runner whose job an operator released therefore stops before its next step.
+A request already sent, or a worker task already started, is not undone.
 """
 
 import asyncio
@@ -59,6 +67,7 @@ import os
 import re
 import secrets
 import shutil
+import zlib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -79,6 +88,32 @@ POLL_INTERVAL = 10
 VALIDATE_TIMEOUT = 900
 # Previous served files kept in /data/<id>/archive/ after an update.
 ARCHIVE_KEEP = max(1, int(os.getenv("UPDATE_ARCHIVE_KEEP", "3")))
+
+
+def byte_limit(raw: Optional[str], default: int) -> Optional[int]:
+    """A download size limit from the environment: default when unset, a
+    whole number of bytes from 1 to 1 TiB, or None when invalid. An invalid
+    limit refuses every download, and update_jobs.load_settings refuses
+    every update request, rather than using another value."""
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        return None
+    return value if 1 <= value <= 1 << 40 else None
+
+
+# A download is bounded twice: the bytes received (the encoded size) and the
+# bytes written once gzip is removed. Neither is ever held in memory whole.
+MAX_DOWNLOAD_BYTES = byte_limit(os.getenv("UPDATE_MAX_DOWNLOAD_BYTES"), 4 << 30)
+MAX_EXPANDED_BYTES = byte_limit(os.getenv("UPDATE_MAX_EXPANDED_BYTES"), 8 << 30)
+# Bytes handed to the decoding thread at a time, and the most one
+# decompression step may produce.
+DOWNLOAD_CHUNK = 1 << 20
+GZIP_MAGIC = b"\x1f\x8b"
+# A .gz file sent with Content-Encoding: gzip has two layers.
+MAX_GZIP_LAYERS = 2
 
 BIOPORTAL_HOST = "data.bioontology.org"
 # Same rule as the worker's import catalogues: the id becomes a path component.
@@ -289,6 +324,130 @@ async def check_version(
 # Download
 # ---------------------------------------------------------------------------
 
+class DownloadError(Exception):
+    """A download that must not be used: over a limit, short, or corrupt."""
+
+
+class _Gunzip:
+    """Incremental gzip decoding. Each step produces at most DOWNLOAD_CHUNK
+    bytes, so a highly compressed input never expands in memory at once.
+    Several members (concatenated gzip files) are read in turn, as gzip
+    itself does; after the last one only zero padding may follow."""
+
+    def __init__(self):
+        self._d = zlib.decompressobj(16 + zlib.MAX_WBITS)
+        self._padding = False
+
+    def feed(self, data: bytes):
+        while True:
+            if self._padding:
+                if data.strip(b"\0"):
+                    raise DownloadError("data follows the gzip stream")
+                return
+            if self._d.eof:
+                if not data:
+                    return
+                if data[0] == 0:
+                    self._padding = True
+                    continue
+                self._d = zlib.decompressobj(16 + zlib.MAX_WBITS)
+            try:
+                out = self._d.decompress(data, DOWNLOAD_CHUNK)
+            except zlib.error as e:
+                raise DownloadError(f"corrupt gzip data: {e}") from None
+            if out:
+                yield out
+            data = self._d.unused_data if self._d.eof else self._d.unconsumed_tail
+            if not self._d.eof and not data and len(out) < DOWNLOAD_CHUNK:
+                return  # needs more input
+
+    def close(self) -> None:
+        if not self._d.eof and not self._padding:
+            raise DownloadError("truncated gzip stream")
+
+
+class _Decoder:
+    """Removes gzip layers, each recognised by its magic bytes rather than
+    by headers or the URL, up to MAX_GZIP_LAYERS. Anything else passes
+    through unchanged, as the previous download did with a body that was not
+    gzip after all."""
+
+    def __init__(self, depth: int = 0):
+        self._depth = depth
+        self._head = b""
+        self._decided = False
+        self._gz: Optional[_Gunzip] = None
+        self._inner: Optional["_Decoder"] = None
+
+    def feed(self, data: bytes):
+        if not self._decided:
+            self._head += data
+            if len(self._head) < len(GZIP_MAGIC):
+                return
+            data, self._head, self._decided = self._head, b"", True
+            if data.startswith(GZIP_MAGIC) and self._depth < MAX_GZIP_LAYERS:
+                self._gz, self._inner = _Gunzip(), _Decoder(self._depth + 1)
+        if self._gz is None:
+            yield data
+            return
+        for out in self._gz.feed(data):
+            yield from self._inner.feed(out)
+
+    def close(self):
+        if self._head:
+            yield self._head
+            self._head = b""
+        if self._gz is not None:
+            self._gz.close()
+            yield from self._inner.close()
+
+
+class _DownloadFile:
+    """Decodes, hashes and writes a download in the order it arrives, into
+    a partial file this run created (exclusively, so never another's). Its
+    methods run in a worker thread, one at a time."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self._file = open(path, "xb")
+        self._decoder = _Decoder()
+        self.md5 = hashlib.md5()
+        self.size = 0
+
+    def _write(self, out: bytes) -> None:
+        self.size += len(out)
+        if self.size > MAX_EXPANDED_BYTES:
+            raise DownloadError(f"more than {MAX_EXPANDED_BYTES} bytes once decompressed")
+        self._file.write(out)
+        self.md5.update(out)
+
+    def feed(self, data: bytes) -> None:
+        for out in self._decoder.feed(data):
+            self._write(out)
+
+    def finish(self) -> None:
+        for out in self._decoder.close():
+            self._write(out)
+        self._file.flush()
+        os.fsync(self._file.fileno())
+        self._file.close()
+
+    def discard(self) -> None:
+        self._file.close()
+        try:
+            os.unlink(self.path)
+        except FileNotFoundError:
+            pass
+
+
+def _content_length(value: Optional[str]) -> Optional[int]:
+    try:
+        n = int(value) if value is not None else None
+    except ValueError:
+        return None
+    return n if n is not None and n >= 0 else None
+
+
 async def download_ontology(
     source_url: str,
     dest_path: str,
@@ -298,68 +457,74 @@ async def download_ontology(
     """
     Stream-download source_url to dest_path.
 
-    Handles transparent gzip decompression. Returns {"md5": ..., "size": ...}
-    on success, or {"error": ...} on failure.
+    The body is read in chunks and never held whole. Gzip, whether sent as
+    Content-Encoding or as the file itself (.owl.gz), is removed here
+    incrementally; the request accepts only gzip or identity, and the
+    session must be created with auto_decompress=False so the client does
+    not decode it first. Decoding, hashing and writing run in a worker
+    thread. Over MAX_DOWNLOAD_BYTES received or MAX_EXPANDED_BYTES written,
+    a body that does not match its Content-Length, another encoding, and a
+    truncated or corrupt gzip stream are errors. The file appears at
+    dest_path, by rename, only when complete; a failed download removes its
+    own partial file and nothing else.
+
+    Returns {"md5", "size", "received"} on success, or {"error": ...}.
     """
-    import gzip as _gzip
-    import io
-
     logger.info("Downloading %s → %s", source_url, dest_path)
-    Path(dest_path).parent.mkdir(parents=True, exist_ok=True)
-
+    if MAX_DOWNLOAD_BYTES is None or MAX_EXPANDED_BYTES is None:
+        return {"error": "UPDATE_MAX_DOWNLOAD_BYTES or UPDATE_MAX_EXPANDED_BYTES is not a whole number "
+                         "of bytes from 1 to 1 TiB"}
+    dest = Path(dest_path)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    request_headers = {**(headers or {}), "Accept-Encoding": "gzip"}
+    target: Optional[_DownloadFile] = None
     try:
         async with session.get(
             source_url,
             allow_redirects=True,
-            headers=headers or {},
+            headers=request_headers,
             timeout=aiohttp.ClientTimeout(total=3600),
         ) as resp:
             if resp.status != 200:
                 return {"error": f"HTTP {resp.status}"}
+            encoding = (resp.headers.get("Content-Encoding") or "identity").strip().lower()
+            if encoding not in ("identity", "gzip", "x-gzip"):
+                return {"error": f"unsupported Content-Encoding: {encoding}"}
+            declared = _content_length(resp.headers.get("Content-Length"))
+            if declared is not None and declared > MAX_DOWNLOAD_BYTES:
+                return {"error": f"Content-Length {declared} is over the limit of {MAX_DOWNLOAD_BYTES} bytes"}
 
-            content_encoding = resp.headers.get("Content-Encoding", "")
-            content_type = resp.headers.get("Content-Type", "")
-            is_gzipped = (
-                content_encoding == "gzip"
-                or source_url.endswith(".gz")
-                or "gzip" in content_type
-            )
-
-            md5 = hashlib.md5()
-            size = 0
-
-            tmp_path = dest_path + ".tmp"
-            with open(tmp_path, "wb") as fout:
-                if is_gzipped:
-                    buf = io.BytesIO()
-                    async for chunk in resp.content.iter_chunked(65536):
-                        buf.write(chunk)
-                    buf.seek(0)
-                    try:
-                        with _gzip.GzipFile(fileobj=buf) as gz:
-                            data = gz.read()
-                    except Exception:
-                        buf.seek(0)
-                        data = buf.read()
-                    fout.write(data)
-                    md5.update(data)
-                    size = len(data)
-                else:
-                    async for chunk in resp.content.iter_chunked(65536):
-                        fout.write(chunk)
-                        md5.update(chunk)
-                        size += len(chunk)
-
-            os.replace(tmp_path, dest_path)
-            md5_hex = md5.hexdigest()
-            logger.info("Downloaded %s bytes (md5=%s) to %s", size, md5_hex, dest_path)
-            return {"md5": md5_hex, "size": size}
+            target = _DownloadFile(dest.with_name(f".{dest.name}.{secrets.token_hex(4)}.part"))
+            received = 0
+            pending = bytearray()
+            async for chunk in resp.content.iter_chunked(DOWNLOAD_CHUNK):
+                received += len(chunk)
+                if received > MAX_DOWNLOAD_BYTES:
+                    raise DownloadError(f"more than {MAX_DOWNLOAD_BYTES} bytes received")
+                if declared is not None and received > declared:
+                    raise DownloadError(f"more than the {declared} bytes of its Content-Length")
+                pending += chunk
+                if len(pending) >= DOWNLOAD_CHUNK:
+                    data = bytes(pending)
+                    pending.clear()
+                    await asyncio.to_thread(target.feed, data)
+            if pending:
+                await asyncio.to_thread(target.feed, bytes(pending))
+            if declared is not None and received != declared:
+                raise DownloadError(f"truncated: {received} of {declared} bytes")
+            await asyncio.to_thread(target.finish)
+        os.replace(target.path, dest)
+        md5_hex = target.md5.hexdigest()
+        logger.info("Downloaded %s bytes (%s received, md5=%s) to %s", target.size, received, md5_hex, dest_path)
+        return {"md5": md5_hex, "size": target.size, "received": received}
 
     except Exception as e:
+        # A cancellation is not caught here: the transaction keeps its
+        # directory, partial file included, for recovery.
         logger.error("Download error for %s: %s", source_url, e)
-        if os.path.exists(dest_path + ".tmp"):
-            os.remove(dest_path + ".tmp")
-        return {"error": str(e)}
+        if target is not None:
+            await asyncio.to_thread(target.discard)
+        return {"error": str(e) or type(e).__name__}
 
 
 def file_md5(path: str) -> Optional[str]:
@@ -824,8 +989,25 @@ async def _txn_begin(redis_client, ontology_id, record: Dict[str, Any]) -> None:
     await _save_entry(redis_client, ontology_id, entry)
 
 
+async def _checkpoint(redis_client) -> None:
+    """Before a step with effects outside the registry: a worker request, an
+    index created or deleted, the alias moved, a file replaced or removed.
+    The update runner's client (update_jobs.FencedRedis) raises
+    OwnershipLost here once its job no longer holds the global update slot,
+    so a runner whose claim was released stops before the next step. Its
+    registry writes are fenced the same way, atomically. Other clients
+    (inline mode, tests) have no fence."""
+    check = getattr(redis_client, "check_claim", None)
+    if check is not None:
+        await check()
+
+
 async def _txn_set(redis_client, ontology_id, txn: str, **fields) -> None:
-    """Update the transaction record, e.g. its phase or the worker task it waits for."""
+    """Update the transaction record, e.g. its phase or the worker task it
+    waits for. Every phase starts here, so this is also a checkpoint: a
+    record that is gone (resolved meanwhile) writes nothing, and must not let
+    a run whose ownership ended go on."""
+    await _checkpoint(redis_client)
     entry = await _load_entry(redis_client, ontology_id)
     record = entry.get("update_txn")
     if not record or record.get("id") != txn:
@@ -871,10 +1053,9 @@ async def _guarded(redis_client, ontology_id, txn, run):
         return await _recovery(redis_client, ontology_id, txn, "unexpected", f"{type(e).__name__}: {e}")
 
 
-async def resolve_transaction(redis_client, ontology_id: str, txn: str, note: str, task_state: Optional[str]) -> bool:
-    """Remove an unresolved transaction record after an operator reconciled
-    its state. Deletes nothing else."""
-    entry = await _load_entry(redis_client, ontology_id)
+def resolve_entry(entry: Dict[str, Any], txn: str, note: str, task_state: Optional[str]) -> bool:
+    """Remove the transaction record txn from entry (in place) after an
+    operator reconciled its state. False when the record is another one."""
     record = entry.get("update_txn")
     if not record or record.get("id") != txn:
         return False
@@ -885,6 +1066,15 @@ async def resolve_transaction(redis_client, ontology_id: str, txn: str, note: st
     entry["last_check_error"] = None
     _append_history(entry, {"timestamp": now, "status": "resolved_by_operator", "txn": txn,
                             "phase": record.get("phase"), "task_state": task_state, "note": note})
+    return True
+
+
+async def resolve_transaction(redis_client, ontology_id: str, txn: str, note: str, task_state: Optional[str]) -> bool:
+    """Remove an unresolved transaction record after an operator reconciled
+    its state. Deletes nothing else."""
+    entry = await _load_entry(redis_client, ontology_id)
+    if not resolve_entry(entry, txn, note, task_state):
+        return False
     await _save_entry(redis_client, ontology_id, entry)
     return True
 
@@ -995,9 +1185,11 @@ async def _reindex(ontology_id, entry, redis_client, es_mgr, server_url, txn, ne
         await _txn_set(redis_client, ontology_id, txn, phase="index")
         if not await es_mgr.create_class_index(new_index):
             return await fail("es_index_create_failed", f"could not create {new_index}")
+        await _checkpoint(redis_client)
         started = await start_indexing(
             server_url, secret_key, ontology_id, f"/data/{ontology_id}/{ontology_id}.owl", new_index,
             entry.get("name", ontology_id), entry.get("description", ""))
+        await _checkpoint(redis_client)
         if started["state"] == "refused":
             await es_mgr.delete_index(new_index)
             return await fail("reindex_trigger_failed", started["message"])
@@ -1005,6 +1197,8 @@ async def _reindex(ontology_id, entry, redis_client, es_mgr, server_url, txn, ne
             return await _recovery(redis_client, ontology_id, txn, "indexing_unknown", started["message"])
         await _txn_set(redis_client, ontology_id, txn, task_id=started["task_id"], task_kind="index")
         indexing = await poll_task(server_url, started["task_id"])
+        # A poll can last until HOTSWAP_TIMEOUT: check ownership before acting on it.
+        await _checkpoint(redis_client)
         if indexing["status"] in ("success", "failed"):
             await _txn_set(redis_client, ontology_id, txn, phase="index_finished", task_id=None)
 
@@ -1017,14 +1211,17 @@ async def _reindex(ontology_id, entry, redis_client, es_mgr, server_url, txn, ne
 
     count = await es_mgr.count_documents(new_index)
     if count == 0:
+        await _checkpoint(redis_client)
         await es_mgr.delete_index(new_index)
         return await fail("index_empty", f"{new_index} holds no documents")
 
     await _txn_set(redis_client, ontology_id, txn, phase="alias", task_id=None)
     if await _move_alias(es_mgr, ontology_id, new_index, old_index) == "unchanged":
+        await _checkpoint(redis_client)
         await es_mgr.delete_index(new_index)
         return await fail("alias_swap_failed", f"search still uses {old_index}; {new_index} was deleted")
 
+    await _checkpoint(redis_client)
     current = await _load_entry(redis_client, ontology_id)
     await _retire_previous(es_mgr, ontology_id, current, [new_index, old_index])
     current = await _load_entry(redis_client, ontology_id)
@@ -1215,8 +1412,10 @@ async def _update_txn(ontology_id, entry, redis_client, es_mgr, ontologies_dir, 
 
     async def fail(update_status, error, message):
         # Only for failures where nothing in use remains: clean up and end.
+        await _checkpoint(redis_client)
         if remote is not None and remote_stage["sent"]:
             aborted = await remote.abort(txn)
+            await _checkpoint(redis_client)
             if not aborted["ok"]:
                 return await recover("transfer_cleanup_unknown",
                                      f"{error}: {message}; the transfer service did not confirm removing "
@@ -1227,8 +1426,8 @@ async def _update_txn(ontology_id, entry, redis_client, es_mgr, ontologies_dir, 
     async def recover(error, message):
         return await _recovery(redis_client, ontology_id, txn, error, message)
 
-    # Download
-    async with aiohttp.ClientSession() as session:
+    # Download. download_ontology removes gzip itself, with its limits.
+    async with aiohttp.ClientSession(auto_decompress=False) as session:
         dl_result = await download_ontology(source_url, staging_host, session, headers=headers)
     if "error" in dl_result:
         return await fail("download_failed", f"download: {dl_result['error']}", dl_result["error"])
@@ -1256,6 +1455,7 @@ async def _update_txn(ontology_id, entry, redis_client, es_mgr, ontologies_dir, 
     if not force and unchanged and has_index:
         logger.info("%s: MD5 unchanged (%s), no update needed", ontology_id, new_md5)
         warnings: List[str] = []
+        await _checkpoint(redis_client)
         if remote is not None:
             # Central's own copy follows the verified release here too.
             mirror = await asyncio.to_thread(_refresh_central_copy, paths, staging_host, new_md5)
@@ -1305,20 +1505,27 @@ async def _update_txn(ontology_id, entry, redis_client, es_mgr, ontologies_dir, 
         new_index = CentralESManager.transaction_index_name(ontology_id, txn)
         await _txn_set(redis_client, ontology_id, txn, phase="index", index=new_index, export=export_path)
         if not await es_mgr.create_class_index(new_index):
+            await _checkpoint(redis_client)
             await discard_export(server_url, secret_key, ontology_id, txn)
+            await _checkpoint(redis_client)
             await es_mgr.delete_index(new_index)
             return await fail("indexing_failed", "es_index_create_failed", f"could not create {new_index}")
 
+        await _checkpoint(redis_client)
         started = await start_indexing(server_url, secret_key, ontology_id, export_path, new_index,
                                        entry.get("name", ontology_id), entry.get("description", ""))
+        await _checkpoint(redis_client)
         if started["state"] == "refused":
             await discard_export(server_url, secret_key, ontology_id, txn)
+            await _checkpoint(redis_client)
             await es_mgr.delete_index(new_index)
             return await fail("indexing_failed", "indexing_trigger_failed", started["message"])
         if started["state"] != "started":
             return await recover("indexing_unknown", started["message"])
         await _txn_set(redis_client, ontology_id, txn, task_id=started["task_id"], task_kind="index")
         indexing = await poll_task(server_url, started["task_id"])
+        # A poll can last until HOTSWAP_TIMEOUT: check ownership before acting on it.
+        await _checkpoint(redis_client)
         if indexing["status"] == "failed":
             # The indexer exited, and the worker deleted the export.
             await es_mgr.delete_index(new_index)
@@ -1328,6 +1535,7 @@ async def _update_txn(ontology_id, entry, redis_client, es_mgr, ontologies_dir, 
 
         count = await es_mgr.count_documents(new_index)
         if count != class_count:
+            await _checkpoint(redis_client)
             await es_mgr.delete_index(new_index)
             return await fail("indexing_failed", "index_incomplete",
                               f"{new_index} holds {count} documents for {class_count} validated classes")
@@ -1335,6 +1543,7 @@ async def _update_txn(ontology_id, entry, redis_client, es_mgr, ontologies_dir, 
         # Hot-swap
         await _txn_set(redis_client, ontology_id, txn, phase="hotswap", task_id=None)
         started = await start_hotswap(server_url, secret_key, ontology_id, staging_worker, served_worker, reasoner)
+        await _checkpoint(redis_client)
         if started["state"] == "refused":
             await es_mgr.delete_index(new_index)
             return await fail("hotswap_failed", "hotswap_trigger_failed", started["message"])
@@ -1342,6 +1551,7 @@ async def _update_txn(ontology_id, entry, redis_client, es_mgr, ontologies_dir, 
             return await recover("hotswap_unknown", started["message"])
         await _txn_set(redis_client, ontology_id, txn, task_id=started["task_id"], task_kind="hotswap")
         swap = await poll_task(server_url, started["task_id"])
+        await _checkpoint(redis_client)
         if swap["status"] in ("timeout", "lost"):
             return await recover("hotswap_unknown", f"hot-swap {swap['status']}: {swap['message']}")
         if swap["status"] == "failed":
@@ -1359,6 +1569,7 @@ async def _update_txn(ontology_id, entry, redis_client, es_mgr, ontologies_dir, 
                 return await recover("restore_failed", f"{message}; reload of the served file: {restore['message']}")
             await _txn_set(redis_client, ontology_id, txn, task_id=restore["task_id"], task_kind="restore")
             restored = await poll_task(server_url, restore["task_id"])
+            await _checkpoint(redis_client)
             if restored["status"] != "success":
                 return await recover("restore_failed",
                                      f"{message}; reload of the served file {restored['status']}: {restored['message']}")
@@ -1372,8 +1583,9 @@ async def _update_txn(ontology_id, entry, redis_client, es_mgr, ontologies_dir, 
         if remote is None:
             timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
             try:
-                archived = _archive_served(paths, ontology_id, timestamp)
-                _promote(paths)
+                # Whole-file copies: off the event loop.
+                archived = await asyncio.to_thread(_archive_served, paths, ontology_id, timestamp)
+                await asyncio.to_thread(_promote, paths)
             except OSError as e:
                 return await recover("promote_failed",
                                      f"the worker serves the new release from {staging_worker}, "
@@ -1389,6 +1601,7 @@ async def _update_txn(ontology_id, entry, redis_client, es_mgr, ontologies_dir, 
 
         await _txn_set(redis_client, ontology_id, txn, phase="finalize")
         final = await finalize_served_path(server_url, secret_key, ontology_id, staging_worker, served_worker)
+        await _checkpoint(redis_client)
         if not final["ok"]:
             return await recover("finalize_failed",
                                  f"{served_worker} holds the new release, but the worker still records "
@@ -1398,6 +1611,8 @@ async def _update_txn(ontology_id, entry, redis_client, es_mgr, ontologies_dir, 
     warnings = []
     if remote is not None:
         released = await remote.release(txn, new_sha256)
+        # Before central's copy and download are touched.
+        await _checkpoint(redis_client)
         if not released["ok"]:
             # The worker no longer reads the stage, but the service keeps
             # the transaction open, which blocks the next one on the host.
@@ -1418,6 +1633,7 @@ async def _update_txn(ontology_id, entry, redis_client, es_mgr, ontologies_dir, 
                              f"the worker serves the new release, but search still uses {old_index}; "
                              f"{new_index} holds the new release")
 
+    await _checkpoint(redis_client)
     current = await _load_entry(redis_client, ontology_id)
     await _retire_previous(es_mgr, ontology_id, current, [new_index, old_index])
 
@@ -1554,12 +1770,26 @@ async def _release_pending(redis_client, ontology_id: str, remote, remote_served
                 f"{remedy}")
     if current.get("observed") != "promoted":
         return f"transaction {txn} is {current.get('observed')}, not a confirmed promotion. {remedy}"
+    await _checkpoint(redis_client)
     released = await remote.release(txn, sha256)
     if not released["ok"]:
         return f"the stage of transaction {txn} could not be removed: {released['message']}"
     await _set_fields(redis_client, ontology_id, transfer_release_pending=None)
     logger.info("%s: removed the stage kept by transaction %s", ontology_id, txn)
     return None
+
+
+def clear_transfer_cleanup_entry(entry: Dict[str, Any], txn: str, note: str) -> bool:
+    """Clear the cleanup marker of txn from entry (in place), with an audit
+    event. False when there is an update transaction, no matching marker or
+    no note."""
+    pending = entry.get("transfer_release_pending")
+    if entry.get("update_txn") or not pending or pending.get("txn") != txn or not note.strip():
+        return False
+    entry.pop("transfer_release_pending")
+    _append_history(entry, {"timestamp": _now(), "status": "transfer_cleanup_resolved",
+                            "txn": txn, "note": note, "transfer": pending.get("transfer")})
+    return True
 
 
 async def resolve_transfer_cleanup(redis_client, ontology_id: str, txn: str, note: str) -> bool:
@@ -1570,12 +1800,8 @@ async def resolve_transfer_cleanup(redis_client, ontology_id: str, txn: str, not
         return False
     async with lock:
         entry = await _load_entry(redis_client, ontology_id)
-        pending = entry.get("transfer_release_pending")
-        if entry.get("update_txn") or not pending or pending.get("txn") != txn or not note.strip():
+        if not clear_transfer_cleanup_entry(entry, txn, note):
             return False
-        entry.pop("transfer_release_pending")
-        _append_history(entry, {"timestamp": _now(), "status": "transfer_cleanup_resolved",
-                                "txn": txn, "note": note, "transfer": pending.get("transfer")})
         await _save_entry(redis_client, ontology_id, entry)
         return True
 

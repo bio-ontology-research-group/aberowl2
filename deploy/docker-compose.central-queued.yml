@@ -1,0 +1,88 @@
+# Override for deploy/docker-compose.central.yml: ontology updates, reindexes
+# and batch checks run in the update-runner service instead of the public
+# central-server process. central-server only queues jobs in Redis and reads
+# their status; the runner claims them one at a time. See deploy/README.md,
+# "Queued update execution".
+#
+#   docker compose -p deploy -f deploy/docker-compose.central.yml \
+#     -f deploy/docker-compose.central-queued.yml --env-file deploy/.env \
+#     up -d --build --no-deps central-server update-runner
+#
+# Apply it to both services together, always: an API process left on
+# UPDATE_EXECUTION=inline refuses to run anything while the runner sends
+# heartbeats, and the runner does not claim while an inline run holds the
+# global slot, but mixing them is not a supported deployment.
+#
+# For workers on other hosts add deploy/docker-compose.central-queued-transfer.yml
+# too. It gives the runner the transfer mapping and tokens; central-server no
+# longer needs them, so leave out docker-compose.central-transfer.yml.
+#
+# The runner uses the central image, publishes no port and mounts only the
+# ontology tree (read-write: downloads, staging, promotion and the copy
+# central offers for download all live there). central-server keeps the tree
+# read-only. The runner must stay on this host while central serves that
+# copy: moving it elsewhere would leave central's copy behind.
+
+# Settings the API and the runner must share, defined once and given to
+# both. A different queue prefix would split them silently (the API queues
+# where no runner looks); the stale and heartbeat periods decide when
+# recovery may take a runner for stopped; the download limits decide what a
+# job may fetch. Set any of them in the env file, never per service.
+x-update-settings: &update-settings
+  UPDATE_EXECUTION: queued
+  REDIS_URL: redis://redis
+  UPDATE_QUEUE_PREFIX: ${UPDATE_QUEUE_PREFIX:-aberowl:update_jobs}
+  UPDATE_RUNNER_HEARTBEAT_SECONDS: ${UPDATE_RUNNER_HEARTBEAT_SECONDS:-15}
+  UPDATE_RUNNER_STALE_SECONDS: ${UPDATE_RUNNER_STALE_SECONDS:-120}
+  UPDATE_MAX_DOWNLOAD_BYTES: ${UPDATE_MAX_DOWNLOAD_BYTES:-4294967296}
+  UPDATE_MAX_EXPANDED_BYTES: ${UPDATE_MAX_EXPANDED_BYTES:-8589934592}
+
+services:
+  central-server:
+    environment:
+      <<: *update-settings
+      UPDATE_WAIT_SECONDS: ${UPDATE_WAIT_SECONDS:-25}
+      UPDATE_QUEUE_MAX: ${UPDATE_QUEUE_MAX:-100}
+      UPDATE_JOB_RETAIN: ${UPDATE_JOB_RETAIN:-200}
+    volumes:
+      # Replaces the base read-write mount: in queued mode the public
+      # process never writes the ontology tree.
+      - ${ONTOLOGIES_PATH:-/data/aberowl/ontologies}:/data/ontologies:ro
+
+  update-runner:
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
+    build:
+      context: ..
+      dockerfile: central_server/Dockerfile
+    restart: unless-stopped
+    # Time to record a cancelled job as recovery_required on stop. Stop the
+    # runner while it is idle (GET /admin/update_jobs shows no running job).
+    stop_grace_period: 60s
+    environment:
+      <<: *update-settings
+      UPDATE_JOB_RETAIN: ${UPDATE_JOB_RETAIN:-200}
+      UPDATE_RUNNER_POLL_SECONDS: ${UPDATE_RUNNER_POLL_SECONDS:-5}
+      CENTRAL_ES_URL: http://elasticsearch:9200
+      ONTOLOGIES_DIR: /data/ontologies
+      # Authenticates the runner's calls to the workers' mutating servlets.
+      ABEROWL_SECRET_KEY: ${ABEROWL_SECRET_KEY}
+    volumes:
+      - ${ONTOLOGIES_PATH:-/data/aberowl/ontologies}:/data/ontologies
+    depends_on:
+      - redis
+      - elasticsearch
+    networks:
+      # Redis and Elasticsearch, and the workers it validates, indexes and
+      # hot-swaps through.
+      - aberowl-internal
+      - aberowl-net
+    command: python -m app.update_runner
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512m

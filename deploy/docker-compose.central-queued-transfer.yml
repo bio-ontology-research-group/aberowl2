@@ -1,0 +1,20 @@
+# Override for deploy/docker-compose.central.yml with
+# deploy/docker-compose.central-queued.yml: the update runner reaches workers
+# on other hosts through their transfer services. The same mapping as
+# deploy/docker-compose.central-transfer.yml, given to the runner, which is
+# the only process that uses it in queued mode:
+#
+#   docker compose -p deploy -f deploy/docker-compose.central.yml \
+#     -f deploy/docker-compose.central-queued.yml \
+#     -f deploy/docker-compose.central-queued-transfer.yml --env-file deploy/.env \
+#     up -d --build --no-deps central-server update-runner
+#
+# UPDATE_TRANSFER_DIR is the directory described in
+# deploy/docker-compose.central-transfer.yml, mounted read-only.
+
+services:
+  update-runner:
+    environment:
+      UPDATE_TRANSFER_CONFIG: /run/aberowl-transfer/transfers.json
+    volumes:
+      - ${UPDATE_TRANSFER_DIR:?set UPDATE_TRANSFER_DIR to the directory holding transfers.json}:/run/aberowl-transfer:ro
