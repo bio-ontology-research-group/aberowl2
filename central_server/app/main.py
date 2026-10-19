@@ -33,6 +33,7 @@ from app.intake.obofoundry import fetch_obofoundry_ontologies
 from app.intake.bioportal import fetch_bioportal_ontologies, fetch_bioportal_metadata
 from app.intake import updater as update_pipeline
 from app.intake import update_jobs
+from app.intake.source_sync import merge_source, valid_source_url
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -70,12 +71,16 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "changeme")
 # Scheduling intervals
 SOURCE_SYNC_INTERVAL = int(os.getenv("SOURCE_SYNC_INTERVAL_SECONDS", "86400"))
 UPDATE_CHECK_INTERVAL = int(os.getenv("UPDATE_CHECK_INTERVAL_SECONDS", "86400"))
-# Automatic source-sync + update-check (which DOWNLOAD every ontology to check
-# for upstream changes) are OFF by default so a central restart never triggers a
-# corpus-wide download. Set ENABLE_AUTO_SYNC=true to run them on the daily
-# schedule; otherwise trigger them on demand via /admin/sync_sources and
-# /admin/check_updates.
+# Automatic ontology update checks DOWNLOAD products and are off by default.
+# Source discovery can be enabled separately without downloading products.
+# Both operations can also be triggered through their admin endpoints.
 ENABLE_AUTO_SYNC = os.getenv("ENABLE_AUTO_SYNC", "false").lower() in ("1", "true", "yes")
+# Discovery only reads catalogues; it never invokes the ontology update pipeline.
+ENABLE_SOURCE_SYNC = os.getenv("ENABLE_SOURCE_SYNC", str(ENABLE_AUTO_SYNC)).lower() in ("1", "true", "yes")
+SOURCE_SYNC_EXCLUDE = {o.strip().lower() for o in os.getenv("SOURCE_SYNC_EXCLUDE_ONTOLOGIES", "").split(",") if o.strip()}
+SOURCE_SYNC_LOCK = "aberowl:source_sync:lock"
+SOURCE_SYNC_REPORT = "aberowl:source_sync:report"
+SOURCE_SYNC_TIMEOUT = 900
 # Bounds every update check that is not given its own list (the scheduled one
 # and POST /admin/check_updates without `ontologies`): comma-separated
 # ontology ids. Empty means every registered ontology with a source_url.
@@ -196,25 +201,23 @@ async def _upsert_registry_from_source(
     Returns True when the entry was written, False when it was skipped.
     The fields are merged into the newest entry (_merge_entry).
     """
-    def merge(existing: Dict[str, Any]) -> None:
-        # Only overwrite source fields if they come from the canonical source
-        if overwrite_source or "source" not in existing:
-            existing.update(fields)
-        else:
-            # Preserve existing source if it is higher priority (manual > obofoundry > bioportal)
-            priority = {"manual": 3, "obofoundry": 2, "bioportal": 1}
-            existing_p = priority.get(existing.get("source", ""), 0)
-            new_p = priority.get(fields.get("source", ""), 0)
-            if new_p >= existing_p:
-                for k, v in fields.items():
-                    if k not in ("server_url", "secret_key", "update_status", "update_error",
-                                 "last_checked", "last_updated", "update_history",
-                                 "active_owl_path", "active_es_index", "source_etag",
-                                 "source_last_modified", "source_md5"):
-                        existing[k] = v
-        existing.setdefault("ontology_id", ontology_id)
+    def merge(existing):
+        if ontology_id.lower() in SOURCE_SYNC_EXCLUDE:
+            return False
+        return merge_source(existing, fields, ontology_id, overwrite_source)
 
-    _, written = await _merge_entry(ontology_id, merge, create=create_missing)
+    if UPDATE_SETTINGS.mode != "inline":
+        try:
+            _, written = await _update_queue().mutate_entry(
+                ontology_id, merge, create=create_missing, guard="jobs")
+        except update_jobs.QueueError as exc:
+            if exc.status == 409:
+                return False
+            raise
+    else:
+        if update_pipeline.update_in_progress(ontology_id):
+            return False
+        _, written = await _merge_entry(ontology_id, merge, create=create_missing)
     return written
 
 
@@ -222,51 +225,90 @@ async def _upsert_registry_from_source(
 # Source sync task  (runs daily; populates ontology_registry from OBO / BP / manual)
 # ---------------------------------------------------------------------------
 
-async def _sync_sources_once() -> None:
-    """Fetch OBOFoundry, BioPortal, and manual lists, upsert into Redis registry."""
-    logger.info("Starting source sync…")
+async def _claim_source_sync():
+    run_id = uuid.uuid4().hex
+    claimed = await redis_client.set(SOURCE_SYNC_LOCK, run_id, nx=True, ex=SOURCE_SYNC_TIMEOUT + 60)
+    return run_id if claimed else None
 
-    # 1. OBOFoundry
-    obo_list = await fetch_obofoundry_ontologies()
-    obo_ids: Set[str] = set()
-    obo_enriched = 0
-    for entry in obo_list:
-        oid = entry["ontology_id"]
-        obo_ids.add(oid)
-        if await _upsert_registry_from_source(oid, entry):
-            obo_enriched += 1
-    logger.info(
-        "Source sync: %d/%d OBOFoundry ontologies enriched (rest not hosted)",
-        obo_enriched, len(obo_list),
-    )
 
-    # 2. BioPortal (skip OBO IDs)
-    bp_list = await fetch_bioportal_ontologies(exclude_ids=obo_ids)
-    bp_enriched = 0
-    for entry in bp_list:
-        oid = entry["ontology_id"]
-        if await _upsert_registry_from_source(oid, entry):
-            bp_enriched += 1
-    logger.info(
-        "Source sync: %d/%d BioPortal ontologies enriched (rest not hosted)",
-        bp_enriched, len(bp_list),
-    )
+async def _sync_sources_once(dry_run=False, run_id=None):
+    """Discover hosted sources, with a bounded lease and an admin-only outcome."""
+    run_id = run_id or await _claim_source_sync()
+    if not run_id:
+        return {"status": "busy"}
+    report = {"run_id": run_id, "status": "running", "dry_run": dry_run,
+              "started_at": datetime.now(timezone.utc).isoformat(), "providers": {}, "changed": []}
+    await redis_client.set(SOURCE_SYNC_REPORT, json.dumps(report))
 
-    # 3. Manual (always wins)
-    manual_list = await _load_manual_ontologies()
-    for entry in manual_list:
-        oid = entry.get("ontology_id", "").lower()
-        if not oid:
-            continue
-        entry["source"] = "manual"
-        # The manual list is operator-curated, so it may introduce an ontology
-        # the registry does not have yet.
-        await _upsert_registry_from_source(
-            oid, entry, overwrite_source=True, create_missing=True
-        )
-    logger.info("Source sync: %d manual ontologies upserted", len(manual_list))
+    async def discover():
+        raw = await redis_client.hgetall(REGISTRY_KEY)
+        rows = {(k.decode() if isinstance(k, bytes) else k): json.loads(v) for k, v in raw.items()}
+        hosted = {k: v for k, v in rows.items() if v.get("url")}
+        by_lower = {}
+        for key in hosted:
+            by_lower.setdefault(key.lower(), []).append(key)
+        report["ambiguous_ids"] = sorted(k for k, v in by_lower.items() if len(v) > 1)
+        report["excluded"] = sorted(k for k in hosted if k.lower() in SOURCE_SYNC_EXCLUDE)
+        eligible = {k: v[0] for k, v in by_lower.items() if len(v) == 1 and k not in SOURCE_SYNC_EXCLUDE}
+        report["hosted"] = len(hosted)
+        report["configured_before"] = sum(bool(v.get("source_url")) for v in hosted.values())
+        projected = {k: dict(v) for k, v in rows.items()}
 
-    logger.info("Source sync complete.")
+        async def apply(entry, manual=False):
+            oid = str(entry.get("ontology_id", "")).lower().strip()
+            if not oid or oid in SOURCE_SYNC_EXCLUDE or oid in report["ambiguous_ids"]:
+                return
+            key = eligible.get(oid)
+            if not key and not manual:
+                return
+            key = key or oid
+            preview = projected.setdefault(key, {})
+            if not merge_source(preview, entry, key, manual):
+                return
+            if dry_run or await _upsert_registry_from_source(key, entry, overwrite_source=manual, create_missing=manual):
+                report["changed"].append(key)
+
+        obo_report = report["providers"]["obofoundry"] = {}
+        obo = await fetch_obofoundry_ontologies(report=obo_report)
+        obo_ids = set()
+        for entry in obo:
+            obo_ids.add(entry["ontology_id"])
+            await apply(entry)
+        bp_report = report["providers"]["bioportal"] = {}
+        bp_ids = {k for k in eligible if k not in obo_ids
+                  and projected[eligible[k]].get("source") != "manual"}
+        if bp_ids:
+            bp = await fetch_bioportal_ontologies(exclude_ids=obo_ids, include_ids=bp_ids, report=bp_report)
+            for entry in bp:
+                await apply(entry)
+        else:
+            bp_report["state"] = "not_needed"
+        for entry in await _load_manual_ontologies():
+            await apply({**entry, "source": "manual"}, manual=True)
+        final = projected if dry_run else {
+            (k.decode() if isinstance(k, bytes) else k): json.loads(v)
+            for k, v in (await redis_client.hgetall(REGISTRY_KEY)).items()}
+        report["missing_sources"] = sorted(k for k in hosted if not final.get(k, {}).get("source_url"))
+        report["configured_after"] = sum(bool(final.get(k, {}).get("source_url")) for k in hosted)
+        report["changed"] = sorted(set(report["changed"]))
+        provider_ok = all(p.get("state") in ("ok", "not_needed") for p in report["providers"].values())
+        report["status"] = "completed" if provider_ok and not report["missing_sources"] and not report["ambiguous_ids"] else "partial"
+
+    try:
+        await asyncio.wait_for(discover(), timeout=SOURCE_SYNC_TIMEOUT)
+    except asyncio.CancelledError:
+        report["status"] = "interrupted"
+        raise
+    except Exception as exc:
+        report.update(status="failed", error=type(exc).__name__)
+        logger.error("Source discovery failed (%s)", type(exc).__name__)
+    finally:
+        report["finished_at"] = datetime.now(timezone.utc).isoformat()
+        await redis_client.set(SOURCE_SYNC_REPORT, json.dumps(report))
+        await redis_client.eval(
+            "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+            1, SOURCE_SYNC_LOCK, run_id)
+    return report
 
 
 async def daily_source_sync_task() -> None:
@@ -966,18 +1008,11 @@ async def lifespan(app: FastAPI):
     # Start the periodic background task
     asyncio.create_task(periodic_metadata_fetch_task())
 
-    # Start intake scheduler tasks — ONLY when explicitly enabled, so a restart
-    # never kicks off a corpus-wide download. Otherwise these run on demand via
-    # the /admin/sync_sources and /admin/check_updates endpoints.
-    if ENABLE_AUTO_SYNC:
-        logger.info("ENABLE_AUTO_SYNC=true: starting daily source-sync + update-check tasks")
+    if ENABLE_SOURCE_SYNC:
         asyncio.create_task(daily_source_sync_task())
+    if ENABLE_AUTO_SYNC:
         asyncio.create_task(daily_update_check_task())
-    else:
-        logger.info(
-            "ENABLE_AUTO_SYNC is off: automatic source-sync/update-check disabled. "
-            "Use POST /admin/sync_sources and /admin/check_updates to run them on demand."
-        )
+    logger.info("Automatic source discovery=%s, ontology update checks=%s", ENABLE_SOURCE_SYNC, ENABLE_AUTO_SYNC)
 
     # Start MCP servers if enabled
     await start_mcp_servers()
@@ -1065,6 +1100,8 @@ async def register_server(payload: RegistrationRequest):
     ontology_name = payload.ontology
     server_url = str(payload.url)
     secret_key = payload.secret_key
+    if payload.source_url and not valid_source_url(payload.source_url):
+        raise HTTPException(status_code=422, detail="source_url must be an HTTP(S) URL without embedded credentials or fragments")
 
     # Decided on the newest entry and written in one step (_merge_entry), so a
     # registration never overwrites what the update runner wrote meanwhile.
@@ -1110,6 +1147,10 @@ async def register_server(payload: RegistrationRequest):
                 "secret_key": outcome["key"],
             })
             outcome["message"] = f"Server for {ontology_name} registered."
+
+        if payload.source_url and not server_data.get("source_url"):
+            server_data["source_url"] = payload.source_url
+            server_data["source"] = "manual"
 
     server_data, _ = await _merge_entry(ontology_name, register, create=True)
     logger.info("%s (%s)", outcome["message"], server_url)
@@ -3489,15 +3530,29 @@ async def admin_reindex(
 
 @app.post("/admin/sync_sources")
 async def admin_sync_sources(
+    dry_run: bool = False,
     credentials: HTTPBasicCredentials = Depends(_require_admin),
 ):
-    """On-demand source sync (refresh the ontology source list/metadata).
+    """Refresh source metadata only; dry_run reports changes without applying them."""
+    run_id = await _claim_source_sync()
+    if not run_id:
+        raise HTTPException(status_code=409, detail="Source discovery is already running")
+    asyncio.create_task(_sync_sources_once(dry_run=dry_run, run_id=run_id))
+    return {"status": "source_sync_triggered", "run_id": run_id, "dry_run": dry_run}
 
-    This is what `daily_source_sync_task` runs automatically only when
-    ENABLE_AUTO_SYNC=true; expose it here so it can be triggered deliberately.
-    """
-    asyncio.create_task(_sync_sources_once())
-    return {"status": "source_sync_triggered"}
+
+@app.get("/admin/source_sync_status")
+async def admin_source_sync_status(credentials: HTTPBasicCredentials = Depends(_require_admin)):
+    raw = await redis_client.get(SOURCE_SYNC_REPORT)
+    if not raw:
+        return {"status": "never_run"}
+    report = json.loads(raw)
+    lock = await redis_client.get(SOURCE_SYNC_LOCK)
+    if isinstance(lock, bytes):
+        lock = lock.decode()
+    if report.get("status") == "running" and lock != report.get("run_id"):
+        report["status"] = "interrupted"
+    return report
 
 
 @app.post("/admin/refresh_status")

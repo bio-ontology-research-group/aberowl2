@@ -475,3 +475,35 @@ Contributions are welcome! Please ensure:
 ## License
 
 This project is part of the AberOWL framework. See the main repository for license information.
+
+### Source discovery and coverage
+
+Workers may supply `source_url` during registration. It fills a missing source;
+re-registration preserves the configured source. Source discovery enriches hosted
+registry entries from OBO Foundry and BioPortal, preserving worker credentials,
+served versions, indices and update transactions. Manual sources take precedence.
+BioPortal requires `BIOPORTAL_API_KEY` in both the API and update runner environments.
+
+`ENABLE_SOURCE_SYNC=true` enables daily catalogue discovery independently of
+ontology downloads. `ENABLE_AUTO_SYNC` continues to control automatic ontology
+update checks. If `ENABLE_SOURCE_SYNC` is unset, it inherits `ENABLE_AUTO_SYNC` for
+compatibility; both default to false. Keep `ENABLE_AUTO_SYNC=false` while testing
+source discovery. `SOURCE_SYNC_EXCLUDE_ONTOLOGIES` accepts comma-separated IDs to
+leave untouched during discovery, including entries in the manual list.
+
+With admin authentication, use `POST /admin/sync_sources?dry_run=true` to preview
+source metadata changes. Poll `GET /admin/source_sync_status` for the run ID,
+provider outcomes, changed IDs, missing-source IDs and coverage counts. A preview
+writes only its report, never registry metadata. Omit `dry_run` to apply metadata.
+Neither operation downloads ontology products, changes served files, reclassifies
+ontologies, nor enqueues update jobs. Only one discovery run can execute at a time;
+runs have a 15-minute timeout. Missing BioPortal credentials and provider failures
+produce a partial report rather than a misleading successful result. Discovery
+reports catalogue candidates; a URL is not proof that its ontology product will
+be downloadable or compatible. Explicit update checks validate those products.
+
+Regression tests:
+
+```bash
+pytest tests/test_source_discovery.py tests/test_source_sync_guard.py tests/test_bioportal_credentials.py
+```

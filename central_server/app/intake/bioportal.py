@@ -9,6 +9,7 @@ import asyncio
 import logging
 import os
 from typing import Any, Dict, List, Optional, Set
+from urllib.parse import urlsplit, quote
 
 import aiohttp
 
@@ -29,6 +30,9 @@ async def _get_json(
     if not BIOPORTAL_API_KEY:
         logger.warning("BioPortal access skipped: BIOPORTAL_API_KEY is not configured")
         return None
+    if not _api_url(url):
+        logger.warning("BioPortal rejected an invalid API navigation URL")
+        return None
     base_params = {}
     if params:
         base_params.update(params)
@@ -38,7 +42,7 @@ async def _get_json(
             params=base_params,
             headers={"Authorization": f"apikey token={BIOPORTAL_API_KEY}"},
             timeout=aiohttp.ClientTimeout(total=60),
-            allow_redirects=True,
+            allow_redirects=False,
         ) as resp:
             if resp.status == 200:
                 return await resp.json(content_type=None)
@@ -54,45 +58,73 @@ async def _get_json(
         return None
 
 
-async def _fetch_all_ontologies(session: aiohttp.ClientSession) -> List[Dict]:
-    """Fetch the paginated list of all BioPortal ontologies."""
+def _api_url(value):
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = urlsplit(value)
+        if (parsed.scheme in ("http", "https") and parsed.hostname == "data.bioontology.org"
+                and parsed.port in (None, 80, 443) and not parsed.username
+                and not parsed.password and not parsed.query and not parsed.fragment):
+            return "https://data.bioontology.org" + parsed.path
+    except ValueError:
+        pass
+    return None
+
+
+def _download_link(data):
+    if not isinstance(data, dict):
+        return None
+    links = data.get("links") or {}
+    return _api_url(links.get("download")) or _api_url(data.get("download"))
+
+
+async def _fetch_all_ontologies(session: aiohttp.ClientSession, report=None) -> List[Dict]:
+    """Accept the ontology array and paged collection responses."""
     all_onts = []
     url = f"{BIOPORTAL_API_URL}/ontologies"
-    params = {"include": "name,acronym,description,links", "pagesize": 100, "page": 1}
-
+    params = {"include": "name,acronym,description", "display_links": "true"}
+    seen = set()
     while url:
+        marker = (url, tuple(sorted(params.items())))
+        if marker in seen:
+            if report is not None:
+                report["state"] = "pagination_cycle"
+            return []
+        seen.add(marker)
         data = await _get_json(session, url, params)
-        if not data:
+        if isinstance(data, list):
+            all_onts.extend(o for o in data if isinstance(o, dict))
             break
-        collection = data.get("collection", [])
-        all_onts.extend(collection)
-        # Follow nextPage link if present
-        links = data.get("links", {})
-        next_page = links.get("nextPage")
-        if next_page and next_page != url:
-            url = next_page
-            params = {}  # URL already contains params
-        else:
+        if not isinstance(data, dict) or not isinstance(data.get("collection"), list):
+            if report is not None:
+                report["state"] = "unavailable_or_invalid_response"
+            return []
+        all_onts.extend(o for o in data["collection"] if isinstance(o, dict))
+        next_page = (data.get("links") or {}).get("nextPage")
+        if not next_page:
             break
-
+        # Validate the origin before an authenticated request; preserve paging params.
+        parsed = urlsplit(next_page) if isinstance(next_page, str) else None
+        if not parsed or not _api_url(next_page.split("?", 1)[0]):
+            if report is not None:
+                report["state"] = "invalid_navigation_link"
+            return []
+        from urllib.parse import parse_qsl
+        url = _api_url(next_page.split("?", 1)[0])
+        params = dict(parse_qsl(parsed.query))
+    if report is not None:
+        report.update(state="ok", discovered=len(all_onts))
     return all_onts
 
 
 async def _fetch_download_url(
     session: aiohttp.ClientSession, acronym: str, semaphore: asyncio.Semaphore
 ) -> Optional[str]:
-    """Fetch the download URL for the latest submission of an ontology."""
     async with semaphore:
-        url = f"{BIOPORTAL_API_URL}/ontologies/{acronym}/latest_submission"
-        data = await _get_json(
-            session, url, {"include": "submissionStatus,download,version,released"}
-        )
-        if not data:
-            return None
-        download = data.get("download")
-        if isinstance(download, str) and download.startswith("http"):
-            return download
-        return None
+        url = f"{BIOPORTAL_API_URL}/ontologies/{quote(acronym, safe='')}/latest_submission"
+        data = await _get_json(session, url, {"include": "version,released", "display_links": "true"})
+        return _download_link(data)
 
 
 async def fetch_bioportal_metadata() -> List[Dict[str, Any]]:
@@ -124,7 +156,7 @@ async def fetch_bioportal_metadata() -> List[Dict[str, Any]]:
     return records
 
 
-async def fetch_bioportal_ontologies(exclude_ids: Set[str]) -> List[Dict[str, Any]]:
+async def fetch_bioportal_ontologies(exclude_ids: Set[str], *, include_ids=None, report=None) -> List[Dict[str, Any]]:
     """
     Fetch ontology metadata from BioPortal.
 
@@ -136,10 +168,16 @@ async def fetch_bioportal_ontologies(exclude_ids: Set[str]) -> List[Dict[str, An
         List of ontology dicts with standardised fields.
     """
     logger.info("Fetching BioPortal ontology list (excluding %d OBO IDs)", len(exclude_ids))
+    if not BIOPORTAL_API_KEY:
+        if report is not None:
+            report.update(state="missing_credentials", credential_configured=False)
+        return []
+    if report is not None:
+        report["credential_configured"] = True
     semaphore = asyncio.Semaphore(_CONCURRENCY_LIMIT)
 
     async with aiohttp.ClientSession() as session:
-        raw_list = await _fetch_all_ontologies(session)
+        raw_list = await _fetch_all_ontologies(session, report)
         if not raw_list:
             logger.warning("BioPortal returned an empty ontology list")
             return []
@@ -149,15 +187,17 @@ async def fetch_bioportal_ontologies(exclude_ids: Set[str]) -> List[Dict[str, An
         # Filter out already-known OBO ontologies
         candidates = [
             o for o in raw_list
-            if o.get("acronym", "").lower() not in exclude_ids
+            if isinstance(o.get("acronym"), str) and o["acronym"]
+            and o["acronym"].lower() not in exclude_ids
+            and (include_ids is None or o["acronym"].lower() in include_ids)
         ]
         logger.info("BioPortal: %d candidates after OBO dedup", len(candidates))
 
         # Fetch download URLs concurrently with rate limiting
-        tasks = [
-            _fetch_download_url(session, o["acronym"], semaphore)
-            for o in candidates
-        ]
+        async def resolve(o):
+            return _download_link(o) or await _fetch_download_url(session, o["acronym"], semaphore)
+
+        tasks = [resolve(o) for o in candidates]
         download_urls = await asyncio.gather(*tasks, return_exceptions=True)
 
         ontologies = []
