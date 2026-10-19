@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useParams, Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { getOntology, getClass, dlQuery, browseRoots } from '../api/client'
 import type { OntologyDetail, ClassResult } from '../api/types'
 import TreeNode from '../components/TreeNode'
 import OWLExpression from '../components/OWLExpression'
 import StateMessage from '../components/StateMessage'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
+import { legacyOntologySearch } from '../utils/legacyOntologyLink'
 
 type Tab = 'browse' | 'query' | 'info'
 const TABS: Tab[] = ['browse', 'query', 'info']
@@ -40,6 +41,7 @@ async function ancestorPath(iri: string, ontologyId: string): Promise<Set<string
 export default function OntologyPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const [params, setParams] = useSearchParams()
   const [ont, setOnt] = useState<OntologyDetail | null>(null)
   const [err, setErr] = useState('')
@@ -71,6 +73,12 @@ export default function OntologyPage() {
   const [queryError, setQueryError] = useState('')
 
   useDocumentTitle(ont?.title || ont?.ontology?.toUpperCase() || id?.toUpperCase())
+
+  useEffect(() => {
+    const search = legacyOntologySearch(location.search, location.hash)
+    if (search === null) return
+    navigate({ pathname: location.pathname, search, hash: '' }, { replace: true })
+  }, [location.pathname, location.search, location.hash, navigate])
 
   useEffect(() => {
     if (!id) return
