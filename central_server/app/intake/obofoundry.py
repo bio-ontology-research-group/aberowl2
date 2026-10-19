@@ -13,16 +13,18 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
-OBOFOUNDRY_YAML_URL = "http://purl.obolibrary.org/meta/ontologies.yml"
+OBOFOUNDRY_YAML_URL = "https://purl.obolibrary.org/meta/ontologies.yml"
 
 
-async def fetch_obofoundry_ontologies() -> List[Dict[str, Any]]:
+async def fetch_obofoundry_ontologies(*, report=None) -> List[Dict[str, Any]]:
     """
     Fetch and parse the OBOFoundry ontologies.yml metadata file.
 
     Returns a list of dicts with standardised fields. Obsolete entries and
     entries without an ontology_purl are skipped.
     """
+    if report is not None:
+        report["state"] = "unavailable_or_invalid_response"
     logger.info("Fetching OBOFoundry metadata from %s", OBOFOUNDRY_YAML_URL)
     try:
         async with aiohttp.ClientSession() as session:
@@ -47,14 +49,19 @@ async def fetch_obofoundry_ontologies() -> List[Dict[str, Any]]:
         logger.error("Failed to parse OBOFoundry YAML: %s", e)
         return []
 
+    if not isinstance(data, dict) or not isinstance(data.get("ontologies"), list):
+        return []
     ontologies = []
     for entry in data.get("ontologies", []):
-        if entry.get("is_obsolete", False):
+        if not isinstance(entry, dict) or entry.get("is_obsolete", False):
             continue
 
         purl = entry.get("ontology_purl")
         if not purl:
             continue
+
+        if purl.startswith("http://purl.obolibrary.org/"):
+            purl = "https://" + purl[len("http://"):]
 
         ont_id = entry.get("id", "").lower().strip()
         if not ont_id:
@@ -78,5 +85,7 @@ async def fetch_obofoundry_ontologies() -> List[Dict[str, Any]]:
             }
         )
 
+    if report is not None:
+        report.update(state="ok", discovered=len(ontologies))
     logger.info("Fetched %d active OBOFoundry ontologies", len(ontologies))
     return ontologies

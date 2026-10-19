@@ -364,9 +364,12 @@ class TestApiWritersKeepRunnerWrites:
         assert e["class_count"] == 120 and e["status"] == "online" and e["reasoner_status"] == "classified"
 
     async def test_source_sync(self, racing):
-        assert await racing._upsert_registry_from_source("flopo", {"source": "manual", "title": "FLOPO"},
-                                                         overwrite_source=True)
-        assert (await self.assert_kept(racing))["title"] == "FLOPO"
+        # A runner starting during discovery wins: do not change its source.
+        assert not await racing._upsert_registry_from_source(
+            "flopo", {"source": "manual", "source_url": "https://example.org/new.owl"},
+            overwrite_source=True)
+        e = await self.assert_kept(racing)
+        assert e.get("source_url") != "https://example.org/new.owl"
 
     async def test_metadata_fallbacks(self, racing, monkeypatch):
         monkeypatch.setattr(racing, "_apply_registry_fallbacks", lambda e: e.update(title="Fallback title"))
