@@ -53,6 +53,13 @@ For more detail see [central_server/README.md](central_server/README.md)
 (deployment), and [deploy/SELF_HOSTING.md](deploy/SELF_HOSTING.md)
 (a private instance).
 
+## Frontend checks
+
+The ontology browser accepts both current `?tab=browse&class=...` links and
+classic `#!class-IRI` links, converting the latter to the current URL format.
+To check link conversion, run `npm run test:links` in `central_server/frontend`
+with Node.js 24 or later. Run `npm run build` there to check and build the frontend.
+
 ## Dependencies
 
 - Linux
