@@ -896,10 +896,8 @@ public class RequestManager {
         ].withDefault { key -> [] }
 
         def hasLabel = false
-        def hasAnnot = false
 
         EntitySearcher.getAnnotationAssertionAxioms(c, o).each { axiom ->
-            hasAnnot = true
             def annot = axiom.getAnnotation()
             def aProp = axiom.getProperty()
             if (annot.isDeprecatedIRIAnnotation()) {
@@ -951,9 +949,6 @@ public class RequestManager {
             info["label"] = sfp.getShortForm(c)
         }
 
-        if (!hasAnnot) {
-            info["deprecated"] = true
-        }
 
         if (axioms) {
             def manSyntaxRenderer = new AberOWLSyntaxRendererImpl()

@@ -134,6 +134,7 @@ class ImportCatalogueHarness {
         writeFixtures()
 
         def tests = [
+            "unannotated classes remain browsable"            : this.&unannotatedClassesRemainBrowsable,
             "default policy suppresses imports"              : this.&defaultSuppressesImports,
             "default policy, ontology without imports"       : this.&defaultWithoutImports,
             "catalogue resolves the closure"                 : this.&catalogueResolvesClosure,
@@ -743,6 +744,40 @@ ${body}
         check(!suppressed.isImportsLoaded("pheno") && browse.source == "declared"
                 && classIris(browse.result) == [FAUNA, FLORA],
             "declared roots apply with imports suppressed too: ${classIris(browse.result)}")
+    }
+
+    void unannotatedClassesRemainBrowsable() {
+        String body = """Declaration(Class(:BareRoot))
+Declaration(Class(:BareLeaf))
+SubClassOf(:BareLeaf :BareRoot)
+${label("LabelledLeaf", "labelled leaf")}
+SubClassOf(:LabelledLeaf :BareRoot)
+Declaration(Class(:DeprecatedRoot))
+AnnotationAssertion(owl:deprecated :DeprecatedRoot "true"^^xsd:boolean)
+"""
+        writeFixture("bare", data.resolve("bare/bare.owl"),
+            ofnHeader(NS + "bare.owl", [], [], body))
+        def m = load(newManager(), "bare", "bare")
+        def browse = m.getBrowseRoots("bare")
+        check(browse.source == "owl:Thing" && classIris(browse.result) == [NS + "BareRoot"],
+            "unannotated root is visible; explicit deprecated root stays hidden: ${browse}")
+        def bareRoot = browse.result.find { it["class"] == NS + "BareRoot" }
+        check(bareRoot?.label == "BareRoot" && bareRoot?.deprecated == false,
+            "an IRI-derived label does not imply deprecation: ${browse.result}")
+        def leaves = m.runQuery("bare", "<${NS}BareRoot>", "subclass", true, true, false, null)
+        check(classIris(leaves) as Set == [NS + "BareLeaf", NS + "LabelledLeaf"] as Set,
+            "unannotated and labelled children are both visible: ${leaves}")
+        def bare = m.runQuery("bare", "<${NS}BareLeaf>", "equivalent", true, true, true, null)
+        check(bare.size() == 1 && bare[0].label == "BareLeaf" && !bare[0].deprecated,
+            "unannotated class details preserve the fallback label: ${bare}")
+        check(m.runQuery("bare", "<${NS}DeprecatedRoot>", "equivalent", true, true, false, null).isEmpty(),
+            "explicitly deprecated classes remain filtered")
+
+        writeFixture("baredeclared", data.resolve("baredeclared/baredeclared.owl"),
+            ofnHeader(NS + "baredeclared.owl", [], ["Annotation(<${ROOT_TERM}> <${NS}BareRoot>)"], body))
+        def declared = load(newManager(), "baredeclared", "baredeclared").getBrowseRoots("baredeclared")
+        check(declared.source == "declared" && classIris(declared.result) == [NS + "BareRoot"],
+            "an unannotated declared root remains usable: ${declared}")
     }
 
     void browseRootsLifecycle() {
