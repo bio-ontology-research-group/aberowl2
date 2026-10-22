@@ -60,6 +60,16 @@ classic `#!class-IRI` links, converting the latter to the current URL format.
 To check link conversion, run `npm run test:links` in `central_server/frontend`
 with Node.js 24 or later. Run `npm run build` there to check and build the frontend.
 
+Hierarchy browsing keeps classes without annotations visible, using their IRI
+short form when no label is present. Explicitly deprecated classes remain hidden.
+The offline Groovy harness covers unannotated roots, children and class details,
+as well as declared roots and import loading:
+
+```bash
+JAVA_OPTS="-Dgrape.config=tests/aberowlapi/grapeConfig-offline.xml" \
+  groovy -cp aberowlapi tests/aberowlapi/import_catalogue_harness.groovy
+```
+
 ## Dependencies
 
 - Linux
