@@ -247,10 +247,11 @@ time.
     `last_check_status`, `update_history` and import changes, and the
     transaction record is removed.
 
-A reindex (`POST .../reindex`) runs steps 6 and 9 on the served file, with
-the same transaction record, the same index retention and the same handling
-of unknown outcomes. It indexes with the standalone indexer's import handling
-(see "Imports").
+A reindex (`POST .../reindex`) validates the served file with its configured
+import policy and indexes the merged validation export, without downloading
+or hot-swapping the ontology. It uses the same transaction record, index
+retention and handling of unknown outcomes. The new index must contain exactly
+the validated number of classes before its alias is promoted.
 
 ### Workers on other hosts
 
@@ -610,11 +611,12 @@ differ.
   and nothing is fetched. For an ontology without a catalogue that declares
   imports, this means its imported classes are no longer indexed under it
   after an update, where the standalone indexer used to fetch them.
-- A reindex, and indexing outside the update pipeline, still run the
-  standalone indexer (`IndexElastic.groovy`) on the served file with OWLAPI's
-  default import handling. That may fetch import IRIs over the network, and
-  its search content can differ from what an update indexes. Changing that is
-  deferred.
+- Reindexing uses the same validation export and import policy as updates.
+  It does not fetch import IRIs or index an incomplete closure. Running the
+  standalone indexer directly on an arbitrary file still uses OWLAPI's default
+  import handling; use the managed reindex endpoint for the worker's policy.
+- Indexer output is drained with bounded memory. A stream failure stops and
+  waits for the child before reporting task failure or deleting its export.
 
 ## Registry maintenance
 

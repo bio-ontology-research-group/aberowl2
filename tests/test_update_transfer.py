@@ -277,7 +277,8 @@ class TestRemoteUpdate:
     async def test_reindex_needs_no_transfer(self, hosts, mapping, worker, es):
         redis = FakeRedis({"flopo": flopo_entry()})
         result = await updater.execute_reindex("flopo", redis.entry("flopo"), redis, es, str(hosts.central), "")
-        assert result["success"] and ("index", SERVED, NEW_INDEX) in worker.events
+        assert result["success"] and ("index", "/tmp/exports/txn-1/flopo.owl", NEW_INDEX) in worker.events
+        assert ("validate", SERVED, "flopo", SERVED, "txn-1") in worker.events
         assert not (hosts.state / "journal" / "flopo").exists()
 
 

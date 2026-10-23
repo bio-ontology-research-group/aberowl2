@@ -24,6 +24,7 @@
 import groovy.json.*
 import src.util.Util
 import src.UpdateFiles
+import src.IndexerProcess
 import java.util.concurrent.ConcurrentHashMap
 
 def params = Util.extractParams(request)
@@ -113,18 +114,13 @@ Thread.start {
         pb.redirectErrorStream(true)   // merge stderr into stdout
         def proc = pb.start()
 
-        // Write JSON metadata to stdin of IndexElastic.groovy
-        proc.outputStream.withWriter('UTF-8') { it.write(jsonInput) }
-        proc.outputStream.close()
+        def result = IndexerProcess.collect(proc, jsonInput)
 
-        def output = proc.inputStream.text
-        proc.waitFor()
-
-        if (proc.exitValue() == 0) {
+        if (result.exitCode == 0) {
             finalStatus = 'success'
             message = "Indexing completed for ${ontologyId} into ${classIndexName}"
         } else {
-            message = "Indexer exited ${proc.exitValue()}: ${output?.takeRight(500)}"
+            message = "Indexer exited ${result.exitCode}: ${result.outputTail?.takeRight(500)}"
         }
     } catch (Throwable e) {
         message = e.getMessage() ?: e.getClass().getName()

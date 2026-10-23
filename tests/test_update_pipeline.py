@@ -852,15 +852,87 @@ class TestReindex:
 
     async def test_reindex_keeps_the_previous_index(self, corpus, worker, es):
         worker.docs = 40
+        worker.validation["classCount"] = 40
         redis = FakeRedis({"flopo": flopo_entry()})
         result = await reindex(corpus, redis, es)
         assert result["success"] and result["documents"] == 40
-        assert ("index", SERVED, NEW_INDEX) in worker.events
+        assert ("index", EXPORT, NEW_INDEX) in worker.events
         assert es.aliases["flopo"] == NEW_INDEX and V1 in es.indices
         e = redis.entry("flopo")
         assert e["active_es_index"] == NEW_INDEX and e["previous_es_index"] == V1
         assert e["update_status"] == "ok"
         assert_clean_end(redis)
+
+    async def test_reindex_uses_the_pinned_import_export(self, corpus, worker, es):
+        worker.validation.update(importsPolicy="catalogue", importsDeclared=1,
+                                 importsResolved=1, importsUnresolved=0)
+        redis = FakeRedis({"flopo": flopo_entry()})
+        result = await reindex(corpus, redis, es)
+        assert result["success"]
+        assert ("validate", SERVED, "flopo", SERVED, "txn-1") in worker.events
+        assert ("index", EXPORT, NEW_INDEX) in worker.events
+        assert "download" not in worker.kinds() and "hotswap" not in worker.kinds()
+
+    async def test_reindex_invalid_imports_leave_live_index_untouched(self, corpus, worker, es):
+        worker.validation = {"ok": False, "answered": True, "message": "missing pinned import"}
+        redis = FakeRedis({"flopo": flopo_entry()})
+        result = await reindex(corpus, redis, es)
+        assert result["error"] == "reindex_validation_failed"
+        assert es.aliases["flopo"] == V1 and NEW_INDEX not in es.indices
+        assert "index" not in worker.kinds()
+        assert_clean_end(redis)
+
+    async def test_reindex_unknown_validation_keeps_recovery_guard(self, corpus, worker, es):
+        worker.validation = {"ok": False, "answered": False, "message": "no response"}
+        redis = FakeRedis({"flopo": flopo_entry()})
+        result = await reindex(corpus, redis, es)
+        assert result["recovery_required"]
+        assert_recovery(redis, "validation_unknown")
+        assert NEW_INDEX not in es.indices and "index" not in worker.kinds()
+
+    async def test_reindex_refused_task_discards_owned_export(self, corpus, worker, es):
+        worker.index_start = "refused"
+        redis = FakeRedis({"flopo": flopo_entry()})
+        result = await reindex(corpus, redis, es)
+        assert result["error"] == "reindex_trigger_failed"
+        assert ("discard", "txn-1") in worker.events
+        assert es.aliases["flopo"] == V1 and NEW_INDEX not in es.indices
+
+    async def test_reindex_incomplete_index_is_not_promoted(self, corpus, worker, es):
+        worker.docs = worker.validation["classCount"] - 1
+        redis = FakeRedis({"flopo": flopo_entry()})
+        result = await reindex(corpus, redis, es)
+        assert result["error"] == "index_count_mismatch"
+        assert es.aliases["flopo"] == V1 and NEW_INDEX not in es.indices
+        assert_clean_end(redis)
+
+    async def test_reindex_without_a_worker_export_does_not_index(self, corpus, worker, es):
+        worker.export = False
+        redis = FakeRedis({"flopo": flopo_entry()})
+        result = await reindex(corpus, redis, es)
+        assert result["error"] == "worker_outdated"
+        assert ("discard", "txn-1") in worker.events
+        assert "index" not in worker.kinds() and es.aliases["flopo"] == V1
+        assert served(corpus) == OLD
+        assert_clean_end(redis)
+
+    async def test_reindex_create_failure_discards_unused_export(self, corpus, worker, es):
+        es.create_ok = False
+        redis = FakeRedis({"flopo": flopo_entry()})
+        result = await reindex(corpus, redis, es)
+        assert result["error"] == "es_index_create_failed"
+        assert ("discard", "txn-1") in worker.events
+        assert "index" not in worker.kinds() and es.aliases["flopo"] == V1
+        assert_clean_end(redis)
+
+    async def test_reindex_unknown_start_retains_its_export_and_guard(self, corpus, worker, es):
+        worker.index_start = "unknown"
+        redis = FakeRedis({"flopo": flopo_entry()})
+        result = await reindex(corpus, redis, es)
+        assert result["recovery_required"]
+        txn = assert_recovery(redis, "indexing_unknown")
+        assert txn["export"] == EXPORT and NEW_INDEX in es.indices
+        assert "discard" not in worker.kinds() and es.aliases["flopo"] == V1
 
     async def test_reindex_with_a_failed_alias_move_is_a_failure(self, corpus, worker, es):
         """It used to record the new index as active, with status ok."""
