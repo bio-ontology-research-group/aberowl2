@@ -70,6 +70,21 @@ JAVA_OPTS="-Dgrape.config=tests/aberowlapi/grapeConfig-offline.xml" \
   groovy -cp aberowlapi tests/aberowlapi/import_catalogue_harness.groovy
 ```
 
+Indexer subprocess diagnostics are drained with bounded memory, retaining only a
+short tail. A reader or writer failure terminates and waits for the child before
+the task ends or a validation export is removed. Check this with a child that
+writes more output than the test JVM heap:
+
+```bash
+JAVA_OPTS="-Xmx64m -Dgroovy.grape.enable=false" \
+  groovy -cp aberowlapi tests/aberowlapi/indexer_process_harness.groovy
+```
+
+Reindexing validates the served source with the same pinned-import policy as an
+update and indexes its merged export. It preserves the source and running
+reasoner, and promotes the new index only when its count matches validation.
+Run the pipeline regression tests with `pytest tests/test_update_pipeline.py -q`.
+
 ## Dependencies
 
 - Linux

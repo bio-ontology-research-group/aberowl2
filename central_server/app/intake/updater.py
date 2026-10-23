@@ -1141,11 +1141,10 @@ async def execute_reindex(
     es_url: str,
 ) -> Dict[str, Any]:
     """Re-index an ontology into ES from the OWL the worker ALREADY serves —
-    no download, no validate, no hot-swap. Central creates the (correctly
-    mapped) index, the worker indexes its served file into it, then the
-    alias is moved and the previous index kept for rollback. The indexer
-    reads the served file with OWLAPI's default import handling (unchanged;
-    see deploy/README.md)."""
+    no download or hot-swap. Validate and export the current source using
+    the worker's import policy, then index that complete, import-free
+    export. Move the alias only after its document count matches the
+    validated class count; retain the previous index for rollback."""
     lock = _lock_for(ontology_id)
     if lock.locked():
         return _outcome("skipped", "update_in_progress", "another update or reindex of this ontology is running")
@@ -1182,15 +1181,34 @@ async def _reindex(ontology_id, entry, redis_client, es_mgr, server_url, txn, ne
         blocked = await worker_recovery_blocker(redis_client, server_url, txn)
         if blocked:
             return await fail("worker_recovery_required", blocked)
-        await _txn_set(redis_client, ontology_id, txn, phase="index")
+        await _txn_set(redis_client, ontology_id, txn, phase="validate")
+        served_path = f"/data/{ontology_id}/{ontology_id}.owl"
+        validation = await validate_staged(
+            server_url, served_path, ontology_id, secret_key,
+            served_path, export_id=txn)
+        await _checkpoint(redis_client)
+        if not validation["ok"]:
+            if not validation["answered"]:
+                return await _recovery(redis_client, ontology_id, txn,
+                                       "validation_unknown", validation["message"])
+            return await fail("reindex_validation_failed", validation["message"])
+        export_path = validation.get("exportPath")
+        class_count = validation.get("classCount")
+        if not export_path or not isinstance(class_count, int):
+            await discard_export(server_url, secret_key, ontology_id, txn)
+            return await fail("worker_outdated", "the worker returned no validated class export")
+        await _txn_set(redis_client, ontology_id, txn, phase="index", export=export_path)
         if not await es_mgr.create_class_index(new_index):
+            await _checkpoint(redis_client)
+            await discard_export(server_url, secret_key, ontology_id, txn)
             return await fail("es_index_create_failed", f"could not create {new_index}")
         await _checkpoint(redis_client)
         started = await start_indexing(
-            server_url, secret_key, ontology_id, f"/data/{ontology_id}/{ontology_id}.owl", new_index,
+            server_url, secret_key, ontology_id, export_path, new_index,
             entry.get("name", ontology_id), entry.get("description", ""))
         await _checkpoint(redis_client)
         if started["state"] == "refused":
+            await discard_export(server_url, secret_key, ontology_id, txn)
             await es_mgr.delete_index(new_index)
             return await fail("reindex_trigger_failed", started["message"])
         if started["state"] != "started":
@@ -1214,6 +1232,12 @@ async def _reindex(ontology_id, entry, redis_client, es_mgr, server_url, txn, ne
         await _checkpoint(redis_client)
         await es_mgr.delete_index(new_index)
         return await fail("index_empty", f"{new_index} holds no documents")
+
+    if count != class_count:
+        await _checkpoint(redis_client)
+        await es_mgr.delete_index(new_index)
+        return await fail("index_count_mismatch",
+                          f"index has {count} documents; validation reported {class_count} classes")
 
     await _txn_set(redis_client, ontology_id, txn, phase="alias", task_id=None)
     if await _move_alias(es_mgr, ontology_id, new_index, old_index) == "unchanged":
