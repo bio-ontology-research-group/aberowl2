@@ -20,6 +20,8 @@ services:
       - CONTAINER_ID=${CONTAINER_ID:-}
       # Ontology path: file, directory, or JSON config
       - ONTOLOGY_PATH=${ONTOLOGY_PATH:-}
+      # Optional JVM options appended only for the indexing subprocess
+      - INDEXER_JAVA_OPTS=${INDEXER_JAVA_OPTS:-}
     volumes:
       # Mount shared ontologies directory (multi-ontology mode)
       # or a specific ontology's directory (single-ontology mode)

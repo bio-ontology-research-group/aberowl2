@@ -80,6 +80,19 @@ JAVA_OPTS="-Xmx64m -Dgroovy.grape.enable=false" \
   groovy -cp aberowlapi tests/aberowlapi/indexer_process_harness.groovy
 ```
 
+Workers can set `INDEXER_JAVA_OPTS` to append options to the indexing subprocess's
+inherited `JAVA_OPTS`, for example `-Xmx2g -Xms256m -XX:+ExitOnOutOfMemoryError`.
+Later heap flags take precedence, while shared settings such as `-Dgrape.root`
+are preserved. An unset, empty or whitespace-only value leaves the child
+environment unchanged. This setting does not alter the serving JVM.
+
+Size the container for the serving JVM, any concurrent indexing JVMs and their
+native memory; giving each the whole budget can exhaust it during indexing. When lowering
+`-Xmx`, also lower `-Xms` if its inherited value would exceed the new maximum.
+Options use the Groovy launcher's existing whitespace-separated `JAVA_OPTS`
+format; quoted values containing spaces are not supported. Set this only through
+trusted worker configuration, and verify the combined workload before deployment.
+
 Reindexing validates the served source with the same pinned-import policy as an
 update and indexes its merged export. It preserves the source and running
 reasoner, and promotes the new index only when its count matches validation.
