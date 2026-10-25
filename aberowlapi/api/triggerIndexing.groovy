@@ -111,6 +111,12 @@ Thread.start {
         ]
 
         def pb = new ProcessBuilder(cmd)
+        // Preserve shared settings; later JVM options override earlier heap flags.
+        def indexerOptions = IndexerProcess.javaOptions(
+            pb.environment().get("JAVA_OPTS"), pb.environment().get("INDEXER_JAVA_OPTS"))
+        if (indexerOptions != null) {
+            pb.environment().put("JAVA_OPTS", indexerOptions)
+        }
         pb.redirectErrorStream(true)   // merge stderr into stdout
         def proc = pb.start()
 

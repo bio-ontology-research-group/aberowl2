@@ -6,6 +6,12 @@ import java.util.concurrent.TimeUnit
 class IndexerProcess {
     static final int TAIL_CHARS = 4096
 
+    /** Null leaves the inherited environment untouched when no override is set. */
+    static String javaOptions(String inherited, String extra) {
+        String options = extra?.trim()
+        return options ? ((inherited ?: "") + " " + options).trim() : null
+    }
+
     static Map collect(Process process, String metadata) {
         try {
             process.outputStream.withWriter('UTF-8') { writer ->
