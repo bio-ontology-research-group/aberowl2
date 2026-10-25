@@ -108,6 +108,7 @@ class Settings:
     poll_seconds: float
     max_download_bytes: Optional[int] = None
     max_expanded_bytes: Optional[int] = None
+    index_timeout_seconds: Optional[int] = 1800
 
     def shared(self) -> Dict[str, Any]:
         """The settings an API process and a runner must agree on. A runner
@@ -115,7 +116,8 @@ class Settings:
         difference. (A different UPDATE_QUEUE_PREFIX cannot be flagged: the
         two would not see each other at all.)"""
         return {"stale_seconds": self.stale_seconds, "heartbeat_seconds": self.heartbeat_seconds,
-                "max_download_bytes": self.max_download_bytes, "max_expanded_bytes": self.max_expanded_bytes}
+                "max_download_bytes": self.max_download_bytes, "max_expanded_bytes": self.max_expanded_bytes,
+                "index_timeout_seconds": self.index_timeout_seconds}
 
 
 def load_settings(env: Optional[Mapping[str, str]] = None) -> Settings:
@@ -150,6 +152,9 @@ def load_settings(env: Optional[Mapping[str, str]] = None) -> Settings:
     queue_max = int(number("UPDATE_QUEUE_MAX", 100, 1, 10000))
     retain = int(number("UPDATE_JOB_RETAIN", 200, 1, 10000))
     poll_seconds = number("UPDATE_RUNNER_POLL_SECONDS", 5, 0.1, 600)
+    index_timeout = updater.index_timeout(env.get("UPDATE_INDEX_TIMEOUT_SECONDS"))
+    if index_timeout is None:
+        errors.append("UPDATE_INDEX_TIMEOUT_SECONDS must be a whole number from 30 to 86400")
     limits = {}
     for name, default in (("UPDATE_MAX_DOWNLOAD_BYTES", 4 << 30), ("UPDATE_MAX_EXPANDED_BYTES", 8 << 30)):
         limits[name] = updater.byte_limit(env.get(name), default)
@@ -168,6 +173,7 @@ def load_settings(env: Optional[Mapping[str, str]] = None) -> Settings:
         poll_seconds=poll_seconds,
         max_download_bytes=limits["UPDATE_MAX_DOWNLOAD_BYTES"],
         max_expanded_bytes=limits["UPDATE_MAX_EXPANDED_BYTES"],
+        index_timeout_seconds=index_timeout,
     )
 
 

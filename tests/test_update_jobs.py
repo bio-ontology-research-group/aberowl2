@@ -63,6 +63,17 @@ class TestSettings:
         assert s.mode == "invalid" and name in s.error
         assert updater.byte_limit(value, 10) is None
 
+    @pytest.mark.parametrize("value", ["0", "29", "86401", "-1", "nan", "inf", "1800.5", "later"])
+    def test_index_timeout_refuses_invalid_values(self, value):
+        s = update_jobs.load_settings({"UPDATE_INDEX_TIMEOUT_SECONDS": value})
+        assert s.mode == "invalid" and "UPDATE_INDEX_TIMEOUT_SECONDS" in s.error
+
+    @pytest.mark.parametrize("value,expected", [(None,1800),(" ",1800),("30",30),("10800",10800),("86400",86400)])
+    def test_index_timeout_is_shared_between_api_and_runner(self, value, expected):
+        env = {} if value is None else {"UPDATE_INDEX_TIMEOUT_SECONDS": value}
+        s = update_jobs.load_settings(env)
+        assert s.error is None and s.shared()["index_timeout_seconds"] == expected
+
     def test_download_limits(self):
         s = update_jobs.load_settings({"UPDATE_MAX_DOWNLOAD_BYTES": "1000"})
         assert s.error is None and s.max_download_bytes == 1000 and s.max_expanded_bytes == 8 << 30
