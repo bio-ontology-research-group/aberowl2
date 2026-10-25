@@ -571,6 +571,16 @@ one round trip apart, and a paused process checks nothing until it resumes.
 That is why the release needs the runner stopped and silent, and the state
 reconciled. Stop the runner container; do not merely pause it.
 
+#### Indexing wait
+
+`UPDATE_INDEX_TIMEOUT_SECONDS` sets the wait for each worker indexing task
+(default 1800 seconds; whole numbers from 30 to 86400). Set it on both the API
+and runner; their reported settings must match. The queued override passes it
+to both services. Invalid values refuse updates and prevent runner startup.
+Hot swaps retain their separate 1800-second wait. A wait expiring leaves the
+transaction for recovery; it does not cancel the worker task or permit a retry.
+Choose the indexing wait from the ontology size and measured indexing rate.
+
 #### Downloads
 
 Every mode streams a download to disk and removes gzip as it arrives, whether

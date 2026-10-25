@@ -1530,3 +1530,44 @@ class TestUncertainSharedWorker:
         result = await run(corpus, redis, es, oid="po")
         assert result["success"], result
         assert redis.entry("flopo")["update_txn"] == pending
+
+
+@pytest.mark.unit
+class TestIndexingWait:
+    async def test_long_index_can_finish_beyond_the_hotswap_window(self, session, monkeypatch):
+        async def skip_sleep(seconds):
+            pass
+        monkeypatch.setattr(updater, "POLL_INTERVAL", 900)
+        monkeypatch.setattr(updater.asyncio, "sleep", skip_sleep)
+        pending = _Resp(200, {"status": "running"})
+        done = _Resp(200, {"status": "success"})
+        short = session(pending, pending, pending, done)
+        assert (await updater.poll_task(WORKER,"swap-test"))["status"] == "timeout"
+        assert len(short.requests) == 2
+        long = session(pending, pending, pending, done)
+        result = await updater.poll_task(WORKER,"index-test",10800)
+        assert result["status"] == "success" and len(long.requests) == 4
+
+    @pytest.mark.parametrize("kind", ["update", "reindex"])
+    async def test_index_wait_is_independent_of_hotswap(self, kind, corpus, worker, es, monkeypatch):
+        redis = FakeRedis({"flopo": flopo_entry()})
+        calls = []
+        async def poll(server, task, timeout_secs=None):
+            calls.append((task, timeout_secs))
+            return await worker.poll_task(server, task, timeout_secs)
+        monkeypatch.setattr(updater, "INDEX_TIMEOUT", 10800)
+        monkeypatch.setattr(updater, "poll_task", poll)
+        result = await (run(corpus, redis, es, force=True) if kind == "update" else reindex(corpus, redis, es))
+        assert result["status"] == "updated"
+        assert any(task.startswith("idx") and timeout == 10800 for task,timeout in calls)
+        assert all(timeout is None for task,timeout in calls if task.startswith("swap"))
+        assert updater.HOTSWAP_TIMEOUT == 1800
+
+    @pytest.mark.parametrize("kind", ["update", "reindex"])
+    async def test_invalid_wait_refuses_before_worker_or_registry_changes(self, kind, corpus, worker, es, monkeypatch):
+        redis = FakeRedis({"flopo": flopo_entry()})
+        before = json.loads(json.dumps(redis._data))
+        monkeypatch.setattr(updater, "INDEX_TIMEOUT", None)
+        result = await (run(corpus, redis, es, force=True) if kind == "update" else reindex(corpus, redis, es))
+        assert result["error"] == "invalid_index_timeout"
+        assert worker.events == [] and redis._data == before

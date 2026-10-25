@@ -86,6 +86,20 @@ POLL_INTERVAL = 10
 # Validation parses the staged file and, for an ontology with an import
 # catalogue, its whole local closure; large ontologies need minutes.
 VALIDATE_TIMEOUT = 900
+
+
+def index_timeout(raw: Optional[str]) -> Optional[int]:
+    """A bounded indexing wait, independent of the hot-swap wait."""
+    if raw is None or not raw.strip():
+        return 1800
+    try:
+        seconds = int(raw)
+    except (ValueError, TypeError):
+        return None
+    return seconds if 30 <= seconds <= 86400 else None
+
+
+INDEX_TIMEOUT = index_timeout(os.getenv("UPDATE_INDEX_TIMEOUT_SECONDS"))
 # Previous served files kept in /data/<id>/archive/ after an update.
 ARCHIVE_KEEP = max(1, int(os.getenv("UPDATE_ARCHIVE_KEEP", "3")))
 
@@ -1145,6 +1159,9 @@ async def execute_reindex(
     the worker's import policy, then index that complete, import-free
     export. Move the alias only after its document count matches the
     validated class count; retain the previous index for rollback."""
+    if INDEX_TIMEOUT is None:
+        return _outcome("skipped", "invalid_index_timeout",
+                        "UPDATE_INDEX_TIMEOUT_SECONDS must be a whole number from 30 to 86400")
     lock = _lock_for(ontology_id)
     if lock.locked():
         return _outcome("skipped", "update_in_progress", "another update or reindex of this ontology is running")
@@ -1214,8 +1231,8 @@ async def _reindex(ontology_id, entry, redis_client, es_mgr, server_url, txn, ne
         if started["state"] != "started":
             return await _recovery(redis_client, ontology_id, txn, "indexing_unknown", started["message"])
         await _txn_set(redis_client, ontology_id, txn, task_id=started["task_id"], task_kind="index")
-        indexing = await poll_task(server_url, started["task_id"])
-        # A poll can last until HOTSWAP_TIMEOUT: check ownership before acting on it.
+        indexing = await poll_task(server_url, started["task_id"], INDEX_TIMEOUT)
+        # Index polling can last until INDEX_TIMEOUT: check ownership before acting on it.
         await _checkpoint(redis_client)
         if indexing["status"] in ("success", "failed"):
             await _txn_set(redis_client, ontology_id, txn, phase="index_finished", task_id=None)
@@ -1290,6 +1307,9 @@ async def execute_update_pipeline(
     "recovery_required", ...}; see _outcome. Every outcome, including a skip,
     is recorded on the registry entry.
     """
+    if INDEX_TIMEOUT is None:
+        return _outcome("skipped", "invalid_index_timeout",
+                        "UPDATE_INDEX_TIMEOUT_SECONDS must be a whole number from 30 to 86400")
     lock = _lock_for(ontology_id)
     if lock.locked():
         return _outcome("skipped", "update_in_progress", "another update or reindex of this ontology is running")
@@ -1547,8 +1567,8 @@ async def _update_txn(ontology_id, entry, redis_client, es_mgr, ontologies_dir, 
         if started["state"] != "started":
             return await recover("indexing_unknown", started["message"])
         await _txn_set(redis_client, ontology_id, txn, task_id=started["task_id"], task_kind="index")
-        indexing = await poll_task(server_url, started["task_id"])
-        # A poll can last until HOTSWAP_TIMEOUT: check ownership before acting on it.
+        indexing = await poll_task(server_url, started["task_id"], INDEX_TIMEOUT)
+        # Index polling can last until INDEX_TIMEOUT: check ownership before acting on it.
         await _checkpoint(redis_client)
         if indexing["status"] == "failed":
             # The indexer exited, and the worker deleted the export.
