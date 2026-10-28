@@ -635,6 +635,9 @@ def _download_url(ontology_id: str, available: Optional[Set[str]] = None) -> Opt
     return f"media/ontologies/{oid.upper()}/1/{oid}.owl"
 
 
+# HEAD as well as GET: a client checking an ontology's size or type before
+# pulling it should not have to download it. Some are ~2 GB.
+@router.head("/media/ontologies/{acronym}/{submission}/{filename}")
 @router.get("/media/ontologies/{acronym}/{submission}/{filename}")
 async def v1_download_ontology(acronym: str, submission: str, filename: str):
     oid = acronym.lower()
@@ -668,6 +671,7 @@ async def v1_download_ontology(acronym: str, submission: str, filename: str):
     )
 
 
+@router.head("/media/{rest:path}")
 @router.get("/media/{rest:path}")
 async def v1_media_not_found(rest: str):
     """Anything under /media/ that is not a servable file.
