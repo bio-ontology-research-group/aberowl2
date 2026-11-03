@@ -67,9 +67,12 @@ import os
 import re
 import secrets
 import shutil
+import stat
+import struct
+import zipfile
 import zlib
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit
 
@@ -119,7 +122,7 @@ def byte_limit(raw: Optional[str], default: int) -> Optional[int]:
 
 
 # A download is bounded twice: the bytes received (the encoded size) and the
-# bytes written once gzip is removed. Neither is ever held in memory whole.
+# bytes written once gzip or ZIP is removed. Neither is ever held in memory whole.
 MAX_DOWNLOAD_BYTES = byte_limit(os.getenv("UPDATE_MAX_DOWNLOAD_BYTES"), 4 << 30)
 MAX_EXPANDED_BYTES = byte_limit(os.getenv("UPDATE_MAX_EXPANDED_BYTES"), 8 << 30)
 # Bytes handed to the decoding thread at a time, and the most one
@@ -416,6 +419,107 @@ class _Decoder:
             yield from self._inner.close()
 
 
+ZIP_MAGIC = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
+_ZIP_END = struct.Struct("<4s4H2LH")
+# A single member's filename, extra fields and comment fit within this bound.
+# Check it before ZipFile loads the central directory into memory.
+_MAX_ZIP_DIRECTORY_BYTES = 256 << 10
+
+
+def _check_zip_directory(path: Path) -> tuple[int, int]:
+    with path.open("rb") as source:
+        source.seek(0, os.SEEK_END)
+        size = source.tell()
+        source.seek(max(0, size - (65535 + _ZIP_END.size)))
+        tail = source.read()
+    end = tail.rfind(b"PK\x05\x06")
+    # An archive comment can itself contain the signature. Find an end record
+    # whose declared comment ends at EOF before interpreting its other fields.
+    while end >= 0:
+        if end + _ZIP_END.size <= len(tail):
+            record = _ZIP_END.unpack_from(tail, end)
+            if end + _ZIP_END.size + record[-1] == len(tail):
+                break
+        end = tail.rfind(b"PK\x05\x06", 0, end)
+    if end < 0:
+        raise DownloadError("invalid or truncated ZIP end record")
+    _, disk, directory_disk, disk_entries, entries, directory_size, offset, comment = record
+    if disk or directory_disk or disk_entries != 1 or entries != 1:
+        raise DownloadError("ZIP must contain exactly one file on one disk")
+    if directory_size > _MAX_ZIP_DIRECTORY_BYTES or offset == 0xffffffff:
+        raise DownloadError("ZIP central directory exceeds the supported bounds")
+    if offset + directory_size != size - (len(tail) - end):
+        raise DownloadError("invalid ZIP central directory bounds")
+    return size - (len(tail) - end), comment
+
+
+def _unpack_zip(path: Path):
+    """Unpack one regular member into a private sibling, never its named path.
+
+    The ZIP spool and the unpacked payload are independently bounded by
+    MAX_EXPANDED_BYTES. Only a complete, CRC-checked payload replaces the spool.
+    Return its hash and length, so update comparisons use ontology bytes rather
+    than packaging timestamps or compression choices.
+    """
+    end, comment = _check_zip_directory(path)
+    if comment:
+        # Python's ZIP reader can mistake a signature inside the comment for
+        # the end record. Drop only this non-payload metadata in our own spool.
+        with path.open("r+b") as spool:
+            spool.seek(end + 20)
+            spool.write(b"\0\0")
+            spool.truncate(end + _ZIP_END.size)
+    unpacked = path.with_name(path.name + ".unpacked")
+    created = False
+    try:
+        with zipfile.ZipFile(path) as archive:
+            members = archive.infolist()
+            if len(members) != 1:
+                raise DownloadError("ZIP must contain exactly one file")
+            member = members[0]
+            if member.header_offset != 0:
+                raise DownloadError("ZIP must start with its only file")
+            name = member.filename
+            mode = stat.S_IFMT(member.external_attr >> 16)
+            if (not name or member.orig_filename != name or "\\" in name or ":" in name
+                    or PurePosixPath(name).is_absolute()
+                    or any(part in ("", ".", "..") for part in name.split("/"))
+                    or member.is_dir() or member.external_attr & 0x10
+                    or mode not in (0, stat.S_IFREG)):
+                raise DownloadError("ZIP member must be a regular file with a safe relative name")
+            if member.flag_bits & 1:
+                raise DownloadError("encrypted ZIP members are unsupported")
+            if member.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
+                raise DownloadError("unsupported ZIP compression method")
+            if member.file_size > MAX_EXPANDED_BYTES:
+                raise DownloadError(f"more than {MAX_EXPANDED_BYTES} bytes once decompressed from ZIP")
+            md5, size = hashlib.md5(), 0
+            with archive.open(member) as source, unpacked.open("xb") as target:
+                created = True
+                while True:
+                    block = source.read(DOWNLOAD_CHUNK)
+                    if not block:
+                        break
+                    if not size and (block.startswith(ZIP_MAGIC) or block.startswith(GZIP_MAGIC)):
+                        raise DownloadError("nested archives inside ZIP are unsupported")
+                    size += len(block)
+                    if size > MAX_EXPANDED_BYTES:
+                        raise DownloadError(f"more than {MAX_EXPANDED_BYTES} bytes once decompressed from ZIP")
+                    target.write(block)
+                    md5.update(block)
+                if size != member.file_size:
+                    raise DownloadError("truncated ZIP member")
+                target.flush()
+                os.fsync(target.fileno())
+        os.replace(unpacked, path)
+        return md5, size
+    except (zipfile.BadZipFile, RuntimeError, NotImplementedError) as exc:
+        raise DownloadError(f"invalid ZIP archive: {exc}") from None
+    finally:
+        if created:
+            unpacked.unlink(missing_ok=True)
+
+
 class _DownloadFile:
     """Decodes, hashes and writes a download in the order it arrives, into
     a partial file this run created (exclusively, so never another's). Its
@@ -445,6 +549,10 @@ class _DownloadFile:
         self._file.flush()
         os.fsync(self._file.fileno())
         self._file.close()
+        with self.path.open("rb") as source:
+            is_zip = source.read(4).startswith(ZIP_MAGIC)
+        if is_zip:
+            self.md5, self.size = _unpack_zip(self.path)
 
     def discard(self) -> None:
         self._file.close()
@@ -473,7 +581,9 @@ async def download_ontology(
 
     The body is read in chunks and never held whole. Gzip, whether sent as
     Content-Encoding or as the file itself (.owl.gz), is removed here
-    incrementally; the request accepts only gzip or identity, and the
+    incrementally. A ZIP containing exactly one regular file is unpacked
+    from a bounded disk spool, with its paths ignored and CRC checked. The
+    request accepts only gzip or identity, and the
     session must be created with auto_decompress=False so the client does
     not decode it first. Decoding, hashing and writing run in a worker
     thread. Over MAX_DOWNLOAD_BYTES received or MAX_EXPANDED_BYTES written,

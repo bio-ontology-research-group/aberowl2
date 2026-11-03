@@ -9,6 +9,10 @@ memory stays bounded.
 import asyncio
 import gzip
 import hashlib
+import io
+import stat
+import struct
+import zipfile
 import sys
 import tracemalloc
 import zlib
@@ -326,3 +330,170 @@ class TestBounds:
             tracemalloc.stop()
         assert result["size"] == size and dest.stat().st_size == size
         assert peak < 16 << 20, f"peak traced memory {peak} bytes for a {size} byte download"
+
+
+# ---------------------------------------------------------------------------
+# Single-file ZIP packages (with existing gzip and transaction handling)
+# ---------------------------------------------------------------------------
+
+def ontology_zip(payload=OWL, name="dcm.owl", compression=zipfile.ZIP_DEFLATED,
+                 extra=None, mode=None, timestamp=(2026, 1, 1, 0, 0, 0)):
+    stream = io.BytesIO()
+    with zipfile.ZipFile(stream, "w", compression=compression) as archive:
+        member = zipfile.ZipInfo(name, date_time=timestamp)
+        member.compress_type = compression
+        if mode is not None:
+            member.create_system = 3
+            member.external_attr = mode << 16
+        archive.writestr(member, payload)
+        if extra is not None:
+            archive.writestr("second.owl", extra)
+    return stream.getvalue()
+
+
+class TestZipDownloads:
+    @pytest.mark.parametrize("compression", [zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED])
+    @pytest.mark.parametrize("wrap_gzip", [False, True])
+    async def test_package_is_staged_as_ontology_and_hashed_after_unpacking(self, tmp_path, compression, wrap_gzip):
+        body = ontology_zip(compression=compression)
+        if wrap_gzip:
+            body = gzip.compress(body)
+        result, dest, _ = await download(tmp_path, _Resp(body, chunk=7))
+        assert result == {"md5": hashlib.md5(OWL).hexdigest(), "size": len(OWL), "received": len(body)}
+        assert dest.read_bytes() == OWL and leftovers(dest) == [dest.name]
+
+    async def test_packaging_metadata_does_not_change_the_source_hash(self, tmp_path):
+        first = ontology_zip(timestamp=(2025, 1, 1, 0, 0, 0))
+        second = ontology_zip(timestamp=(2026, 1, 1, 0, 0, 0))
+        assert first != second
+        a, dest, _ = await download(tmp_path, _Resp(first))
+        b, _, _ = await download(tmp_path, _Resp(second))
+        assert a["md5"] == b["md5"] == hashlib.md5(OWL).hexdigest()
+        assert dest.read_bytes() == OWL
+
+    async def test_relative_member_path_does_not_create_directories(self, tmp_path):
+        result, dest, _ = await download(tmp_path, _Resp(ontology_zip(name="release/dcm.owl")))
+        assert "error" not in result and dest.read_bytes() == OWL
+        assert not (dest.parent / "release").exists()
+
+    @pytest.mark.parametrize("body,fragment", [
+        (ontology_zip(extra=b"second ontology"), "exactly one"),
+        (ontology_zip(name="../escape.owl"), "safe relative"),
+        (ontology_zip(name="/absolute.owl"), "safe relative"),
+        (ontology_zip(name="C:/drive.owl"), "safe relative"),
+        (ontology_zip(name="dir\\escape.owl"), "safe relative"),
+        (ontology_zip(name="directory/", mode=stat.S_IFDIR | 0o755), "regular file"),
+        (ontology_zip(payload=b"target", mode=stat.S_IFLNK | 0o777), "regular file"),
+        (ontology_zip(payload=gzip.compress(OWL)), "nested"),
+        (ontology_zip(payload=ontology_zip()), "nested"),
+        (ontology_zip(compression=zipfile.ZIP_BZIP2), "compression method"),
+        (ontology_zip()[:-10], "ZIP"),
+        (ontology_zip() + ontology_zip(), "central directory bounds"),
+    ])
+    async def test_invalid_archive_preserves_served_file_and_removes_only_its_partials(self, tmp_path, body, fragment):
+        dest = tmp_path / "flopo" / "updates" / "txn-1" / "flopo.owl"
+        dest.parent.mkdir(parents=True)
+        dest.write_bytes(b"served source")
+        other = dest.parent / ".another-update.part"
+        other.write_bytes(b"another transaction")
+        result, _, _ = await download(tmp_path, _Resp(body))
+        assert fragment in result["error"]
+        assert dest.read_bytes() == b"served source" and other.read_bytes() == b"another transaction"
+        assert leftovers(dest) == sorted([dest.name, other.name])
+        assert not (dest.parent.parent / "escape.owl").exists()
+
+    async def test_bad_member_crc(self, tmp_path):
+        body = bytearray(ontology_zip(compression=zipfile.ZIP_STORED))
+        offset = body.find(OWL)
+        assert offset >= 0
+        body[offset] ^= 1
+        result, dest, _ = await download(tmp_path, _Resp(bytes(body)))
+        assert "ZIP" in result["error"] and leftovers(dest) == []
+
+    async def test_encrypted_flag_is_refused(self, tmp_path):
+        body = bytearray(ontology_zip())
+        central = body.index(b"PK\x01\x02")
+        body[6] |= 1
+        body[central + 8] |= 1
+        result, dest, _ = await download(tmp_path, _Resp(bytes(body)))
+        assert "encrypted" in result["error"] and leftovers(dest) == []
+
+    async def test_expanded_payload_is_bounded_even_if_package_fits(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(updater, "MAX_EXPANDED_BYTES", 4096)
+        body = ontology_zip(payload=b"x" * (1 << 20))
+        assert len(body) < 4096
+        result, dest, _ = await download(tmp_path, _Resp(body))
+        assert "decompressed from ZIP" in result["error"] and leftovers(dest) == []
+
+    async def test_metadata_bound_is_checked_before_zipfile_allocates_directory(self, tmp_path, monkeypatch):
+        body = bytearray(ontology_zip())
+        end = body.rindex(b"PK\x05\x06")
+        struct.pack_into("<L", body, end + 12, 1 << 28)
+        def forbidden(*args, **kwargs):
+            pytest.fail("unbounded directory passed to ZipFile")
+        monkeypatch.setattr(updater.zipfile, "ZipFile", forbidden)
+        result, dest, _ = await download(tmp_path, _Resp(bytes(body)))
+        assert "central directory exceeds" in result["error"] and leftovers(dest) == []
+
+    async def test_empty_archive_is_refused(self, tmp_path):
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, "w"):
+            pass
+        result, dest, _ = await download(tmp_path, _Resp(stream.getvalue()))
+        assert "exactly one" in result["error"] and leftovers(dest) == []
+
+    async def test_real_client_can_decode_gzip_wrapped_zip(self, tmp_path):
+        body = gzip.compress(ontology_zip())
+        async with RawServer({"/o": raw_response(body, {"Content-Encoding": "gzip"})}) as server:
+            result, dest = await TestRealClient().real(tmp_path, server, "/o")
+        assert result["md5"] == hashlib.md5(OWL).hexdigest()
+        assert result["received"] == len(body) and dest.read_bytes() == OWL
+
+    async def test_pipeline_stages_plain_ontology_and_skips_repackaged_unchanged_source(self, tmp_path, monkeypatch):
+        from tests.test_update_pipeline import NEW, OLD, FakeES, FakeRedis, FakeWorker, flopo_entry
+        es = FakeES()
+        worker = FakeWorker(es)
+        for name, fn in (("worker_served_path", worker.worker_served_path), ("check_version", worker.check_version),
+                         ("validate_staged", worker.validate), ("discard_export", worker.discard),
+                         ("start_indexing", worker.start_indexing), ("start_hotswap", worker.start_hotswap),
+                         ("poll_task", worker.poll_task), ("finalize_served_path", worker.finalize)):
+            monkeypatch.setattr(updater, name, fn)
+        monkeypatch.setattr(updater, "_locks", {})
+        monkeypatch.setattr(updater, "_worker_locks", {})
+        monkeypatch.delenv("UPDATE_TRANSFER_CONFIG", raising=False)
+        (tmp_path / "flopo").mkdir()
+        (tmp_path / "flopo/flopo.owl").write_bytes(OLD)
+        async with RawServer({"/o": raw_response(ontology_zip(NEW))}) as server:
+            redis = FakeRedis({"flopo": flopo_entry(source_url=server.url("/o"))})
+            result = await updater.execute_update_pipeline("flopo", redis.entry("flopo"), redis, es, str(tmp_path), "")
+            assert result["status"] == "updated", result
+            assert (tmp_path / "flopo/flopo.owl").read_bytes() == NEW
+            assert redis.entry("flopo")["source_md5"] == hashlib.md5(NEW).hexdigest()
+        async with RawServer({"/o": raw_response(ontology_zip(NEW, timestamp=(2025, 1, 1, 0, 0, 0)))}) as server:
+            row = redis.entry("flopo")
+            row["source_url"] = server.url("/o")
+            await redis.hset("registered_servers", "flopo", __import__("json").dumps(row))
+            again = await updater.execute_update_pipeline("flopo", row, redis, es, str(tmp_path), "")
+        assert again["status"] == "unchanged", again
+
+
+async def test_large_zip_payload_is_unpacked_with_bounded_memory(tmp_path):
+    # Keep input construction outside tracing: only the download/unpack is measured.
+    size = 32 << 20
+    body = ontology_zip(payload=b"x" * size)
+    tracemalloc.start()
+    try:
+        result, dest, _ = await download(tmp_path, _Resp(body))
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert result["size"] == dest.stat().st_size == size
+    assert peak < 16 << 20, f"ZIP unpacking allocated {peak} bytes for {size} output bytes"
+
+
+async def test_zip_comment_may_contain_an_end_record_signature(tmp_path):
+    stream = io.BytesIO(ontology_zip())
+    with zipfile.ZipFile(stream, "a") as archive:
+        archive.comment = b"release note PK\x05\x06 plus remaining comment text"
+    result, dest, _ = await download(tmp_path, _Resp(stream.getvalue()))
+    assert "error" not in result and dest.read_bytes() == OWL

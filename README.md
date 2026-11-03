@@ -246,3 +246,9 @@ a separate repository. These evaluation commands run independently of it.
 The release documents [dependencies](release/DEPENDENCIES.md),
 [provenance](release/PROVENANCE.md), [third-party notices](release/THIRD_PARTY_NOTICES.md),
 and [credential handling and checksums](release/SECURITY.md).
+
+Ontology update downloads support plain files, gzip and single-file ZIP packages.
+Archive decoding is bounded and the updater compares unpacked ontology bytes.
+See [download limits and supported packages](deploy/README.md#downloads) for
+configuration and failure handling. Verify with
+`pytest tests/test_update_download.py tests/test_update_pipeline.py -q`.
