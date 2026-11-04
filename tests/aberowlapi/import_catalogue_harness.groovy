@@ -138,6 +138,8 @@ class ImportCatalogueHarness {
             "default policy suppresses imports"              : this.&defaultSuppressesImports,
             "default policy, ontology without imports"       : this.&defaultWithoutImports,
             "catalogue resolves the closure"                 : this.&catalogueResolvesClosure,
+            "RDF restrictions use imported declarations"     : this.&importedRdfDeclarations,
+            "headerless RDF vocabulary stays resolved"        : this.&headerlessVocabulary,
             "transitive import by version IRI, cycle, alias" : this.&transitiveVersionCycleAlias,
             "import URL differs from the ontology IRI"       : this.&documentUrlAlias,
             "strict: missing direct import fails"            : this.&missingDirectImportFails,
@@ -411,6 +413,72 @@ ${body}
         check(m.getImportsDeclaredCount("plain") == 0, "no imports declared")
         check(m.getImportsResolvedCount("plain") == 0, "nothing resolved")
         check(NS + "P_0001" in superclasses(m, "plain", NS + "P_0002"), "the ontology still classifies")
+    }
+
+    void headerlessVocabulary() {
+        String vocabulary = NS + "vocabulary"
+        writeFixture("vocabulary", data.resolve("vocabulary/schema.owl"), """<rdf:RDF
+ xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+ xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#">
+ <rdf:Property rdf:about="${NS}externalAnnotation"><rdfs:label>External annotation</rdfs:label></rdf:Property>
+</rdf:RDF>""")
+        writeFixture("vocabularyRoot", data.resolve("vocabulary/root.owl"), """@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+<${NS}vocabulary-root> a owl:Ontology; owl:imports <${vocabulary}>; rdfs:label "Root vocabulary header" .
+<${NS}VocabularyClass> a owl:Class .
+""")
+        writeCatalogue("vocabulary", [(vocabulary): files.vocabulary])
+        def m = load(newManager(), "vocabulary", "vocabularyRoot")
+        check(m.isImportsLoaded("vocabulary") && m.getImportsDeclaredCount("vocabulary") == 1
+            && m.getImportsResolvedCount("vocabulary") == 1,
+            "headerless vocabulary is a complete one-document import")
+        check(NS + "VocabularyClass" in signature(m, "vocabulary"), "root class survives a headerless import")
+        def header = m.getOntology("vocabulary").getAnnotations().collect { it.getValue().getLiteral() } as Set
+        check(header == (["Root vocabulary header"] as Set), "headerless imports preserve the root header: ${header}")
+        checkNoConnection()
+    }
+
+    void importedRdfDeclarations() {
+        String module = NS + "typed-module.owl"
+        String root = NS + "typed-root.owl"
+        writeFixture("typedModule", data.resolve("typed/module.owl"), ofn(module, null, [], "Imported header",
+            "Declaration(Class(:Subject))\nDeclaration(Class(:Filler))\nDeclaration(ObjectProperty(:relation))\nDeclaration(ObjectProperty(:cardObject))\nDeclaration(DataProperty(:cardData))\n"))
+        writeFixture("typedRoot", data.resolve("typed/root.owl"), """<rdf:RDF
+ xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+ xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+ xmlns:owl="http://www.w3.org/2002/07/owl#">
+ <owl:Ontology rdf:about="${root}"><owl:imports rdf:resource="${module}"/></owl:Ontology>
+ <rdf:Description rdf:about="${NS}Subject"><rdfs:subClassOf><owl:Restriction>
+ <owl:onProperty rdf:resource="${NS}relation"/>
+ <owl:allValuesFrom rdf:resource="${NS}Filler"/>
+ </owl:Restriction></rdfs:subClassOf>
+ <rdfs:subClassOf><owl:Restriction><owl:onProperty rdf:resource="${NS}cardObject"/>
+ <owl:cardinality rdf:datatype="http://www.w3.org/2001/XMLSchema#nonNegativeInteger">1</owl:cardinality>
+ </owl:Restriction></rdfs:subClassOf>
+ <rdfs:subClassOf><owl:Restriction><owl:onProperty rdf:resource="${NS}cardData"/>
+ <owl:cardinality rdf:datatype="http://www.w3.org/2001/XMLSchema#nonNegativeInteger">1</owl:cardinality>
+ </owl:Restriction></rdfs:subClassOf></rdf:Description>
+</rdf:RDF>""")
+        writeCatalogue("typed", [(module): files.typedModule])
+        def m = load(newManager(), "typed", "typedRoot")
+        def o = m.getOntology("typed")
+        check(!signature(m, "typed").any { it.startsWith("http://org.semanticweb.owlapi/error#") },
+            "catalogued RDF restriction produces no parser error class")
+        def df = m.getoManager("typed").getOWLDataFactory()
+        def subject = df.getOWLClass(IRI_CLASS.create(NS + "Subject"))
+        def filler = df.getOWLClass(IRI_CLASS.create(NS + "Filler"))
+        def property = df.getOWLObjectProperty(IRI_CLASS.create(NS + "relation"))
+        check(o.containsAxiom(df.getOWLSubClassOfAxiom(subject, df.getOWLObjectAllValuesFrom(property, filler))),
+            "the original universal restriction is retained as an object restriction")
+        check(o.containsAxiom(df.getOWLSubClassOfAxiom(subject,
+                df.getOWLObjectExactCardinality(1, df.getOWLObjectProperty(IRI_CLASS.create(NS + "cardObject"))))),
+            "object cardinality uses the imported object-property declaration")
+        check(o.containsAxiom(df.getOWLSubClassOfAxiom(subject,
+                df.getOWLDataExactCardinality(1, df.getOWLDataProperty(IRI_CLASS.create(NS + "cardData"))))),
+            "data cardinality uses the imported data-property declaration")
+        check(m.isImportsLoaded("typed") && m.getImportsResolvedCount("typed") == 1,
+            "typed import is complete and merged once")
+        checkNoConnection()
     }
 
     void catalogueResolvesClosure() {
