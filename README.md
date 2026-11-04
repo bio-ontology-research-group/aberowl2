@@ -70,6 +70,16 @@ JAVA_OPTS="-Dgrape.config=tests/aberowlapi/grapeConfig-offline.xml" \
   groovy -cp aberowlapi tests/aberowlapi/import_catalogue_harness.groovy
 ```
 
+Class details exclude the selected class from its disjoint-expression list while
+retaining other classes and anonymous expressions, including their negation.
+The offline rendering checks
+also cover classes that share a label and explicit disjointness with owl:Thing:
+
+```bash
+JAVA_OPTS="-Dgrape.config=tests/aberowlapi/grapeConfig-offline.xml" \
+  groovy -cp aberowlapi tests/aberowlapi/disjoint_display_harness.groovy
+```
+
 Indexer subprocess diagnostics are drained with bounded memory, retaining only a
 short tail. A reader or writer failure terminates and waits for the child before
 the task ends or a validation export is removed. Check this with a child that

@@ -182,7 +182,7 @@ public class AberOWLSyntaxRenderer extends AbstractRenderer implements OWLObject
 
     @Override
     public void visit(@Nonnull OWLObjectComplementOf ce) {
-      write("<span id='man-not'>" + NOT + "</span>" + ce.isAnonymous() ? " " : "");
+      write("<span id='man-not'>" + NOT + "</span>" + (ce.isAnonymous() ? " " : ""));
         if (ce.isAnonymous()) {
             write("<span>(</span>");
         }

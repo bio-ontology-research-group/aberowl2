@@ -960,7 +960,8 @@ public class RequestManager {
             EntitySearcher.getEquivalentClasses(c, o).each { cExpr ->
                 info["Equivalent"] << cleanRenderedAxiom(manSyntaxRenderer.render(cExpr))
             }
-            EntitySearcher.getDisjointClasses(c, o).each { cExpr ->
+            // OWLAPI includes the queried class in n-ary disjoint axiom members.
+            EntitySearcher.getDisjointClasses(c, o).findAll { it != c }.each { cExpr ->
                 info["Disjoint"] << cleanRenderedAxiom(manSyntaxRenderer.render(cExpr))
             }
         }
