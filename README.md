@@ -70,6 +70,13 @@ JAVA_OPTS="-Dgrape.config=tests/aberowlapi/grapeConfig-offline.xml" \
   groovy -cp aberowlapi tests/aberowlapi/import_catalogue_harness.groovy
 ```
 
+Catalogued ontologies validate their complete local import closure before
+reparsing with those imports available during RDF parsing. This preserves
+restrictions whose property types are declared in imported documents. Unlisted
+imports cannot trigger network fetching; document identities and source hashes
+are checked before the merged model is accepted. Ontologies without a catalogue
+retain import suppression.
+
 Class details exclude the selected class from its disjoint-expression list while
 retaining other classes and anonymous expressions, including their negation.
 The offline rendering checks
