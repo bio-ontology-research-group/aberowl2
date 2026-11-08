@@ -7,6 +7,7 @@ import OWLExpression from '../components/OWLExpression'
 import StateMessage from '../components/StateMessage'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { legacyOntologySearch } from '../utils/legacyOntologyLink'
+import { ontologyDisplayTitle, ontologyDescriptionText } from '../utils/ontologyMetadata'
 
 type Tab = 'browse' | 'query' | 'info'
 const TABS: Tab[] = ['browse', 'query', 'info']
@@ -72,7 +73,7 @@ export default function OntologyPage() {
   const [queryLoading, setQueryLoading] = useState(false)
   const [queryError, setQueryError] = useState('')
 
-  useDocumentTitle(ont?.title || ont?.ontology?.toUpperCase() || id?.toUpperCase())
+  useDocumentTitle(ontologyDisplayTitle(ont, id))
 
   useEffect(() => {
     const search = legacyOntologySearch(location.search, location.hash)
@@ -183,7 +184,8 @@ export default function OntologyPage() {
     </div>
   )
 
-  const title = ont.title || ont.ontology?.toUpperCase() || id?.toUpperCase()
+  const title = ontologyDisplayTitle(ont, id)
+  const description = ontologyDescriptionText(ont.description)
   const selLabel = selectedClass
     ? (asList(selectedClass.label)[0] || selectedIri?.split(/[#/]/).pop() || '')
     : ''
@@ -199,7 +201,7 @@ export default function OntologyPage() {
           <StatusBadge status={ont.status} />
         </div>
         <h1 className="text-xl font-bold text-gray-900 mt-1">{title}</h1>
-        {ont.description && <p className="text-sm text-gray-500 mt-1 max-w-3xl">{ont.description}</p>}
+        {description && <p className="text-sm text-gray-500 mt-1 max-w-3xl">{description}</p>}
       </div>
 
       {/* Stats row */}
@@ -401,8 +403,8 @@ function MetadataPanel({ ont, id }: { ont: OntologyDetail; id?: string }) {
 
   const fields: Array<[string, unknown]> = [
     ['Ontology ID', ont.ontology || id],
-    ['Title', ont.title],
-    ['Description', ont.description],
+    ['Title', ontologyDisplayTitle(ont, id)],
+    ['Description', ontologyDescriptionText(ont.description)],
     ['Version', ont.version_info],
     ['Version IRI', ont.version_iri],
     ['License', ont.license],
