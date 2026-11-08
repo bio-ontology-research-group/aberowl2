@@ -5,6 +5,7 @@ export interface OntologySummary {
 }
 
 export interface OntologyDetail {
+  name?: string
   ontology: string
   title: string
   description: string

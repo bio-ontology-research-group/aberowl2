@@ -16,6 +16,8 @@ queries through a reasoner.
   across the whole corpus, via Elasticsearch (boosted `dis_max`).
 - **Ontology browsing (web UI)**: a React single-page app to browse the class
   hierarchy and class metadata, with deep-linkable URLs per ontology / class / query.
+  Ontology pages prefer the catalogue name over module titles and display HTML
+  descriptions as plain text while preserving source annotations.
 - **SPARQL rewriting**: `/api/sparql` rewrites SPARQL that embeds OWL DL frames
   (e.g. `VALUES ?x { OWL subeq go-plus { 'cell death' } }`) into plain SPARQL with the
   concrete IRIs spliced in. The caller can execute it at a SPARQL endpoint, or
@@ -269,3 +271,7 @@ Archive decoding is bounded and the updater compares unpacked ontology bytes.
 See [download limits and supported packages](deploy/README.md#downloads) for
 configuration and failure handling. Verify with
 `pytest tests/test_update_download.py tests/test_update_pipeline.py -q`.
+
+Frontend metadata checks: from `central_server/frontend`, run
+`npm run build`, `npm run test:links`, and
+`python tests/ontologyMetadata.browser.py` (requires Playwright with Chromium).
