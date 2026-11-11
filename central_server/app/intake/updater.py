@@ -424,6 +424,7 @@ _ZIP_END = struct.Struct("<4s4H2LH")
 # A single member's filename, extra fields and comment fit within this bound.
 # Check it before ZipFile loads the central directory into memory.
 _MAX_ZIP_DIRECTORY_BYTES = 256 << 10
+_MAX_ZIP_COMPANION_BYTES = 1 << 20
 
 
 def _check_zip_directory(path: Path) -> tuple[int, int]:
@@ -444,8 +445,8 @@ def _check_zip_directory(path: Path) -> tuple[int, int]:
     if end < 0:
         raise DownloadError("invalid or truncated ZIP end record")
     _, disk, directory_disk, disk_entries, entries, directory_size, offset, comment = record
-    if disk or directory_disk or disk_entries != 1 or entries != 1:
-        raise DownloadError("ZIP must contain exactly one file on one disk")
+    if disk or directory_disk or disk_entries != entries or not 1 <= entries <= 3:
+        raise DownloadError("ZIP must contain exactly one ontology and at most two matching project files on one disk")
     if directory_size > _MAX_ZIP_DIRECTORY_BYTES or offset == 0xffffffff:
         raise DownloadError("ZIP central directory exceeds the supported bounds")
     if offset + directory_size != size - (len(tail) - end):
@@ -454,7 +455,9 @@ def _check_zip_directory(path: Path) -> tuple[int, int]:
 
 
 def _unpack_zip(path: Path):
-    """Unpack one regular member into a private sibling, never its named path.
+    """Unpack one ontology into a private sibling, never its named path.
+
+    Matching bounded Protege project companions are CRC-checked and discarded.
 
     The ZIP spool and the unpacked payload are independently bounded by
     MAX_EXPANDED_BYTES. Only a complete, CRC-checked payload replaces the spool.
@@ -474,23 +477,54 @@ def _unpack_zip(path: Path):
     try:
         with zipfile.ZipFile(path) as archive:
             members = archive.infolist()
-            if len(members) != 1:
-                raise DownloadError("ZIP must contain exactly one file")
-            member = members[0]
-            if member.header_offset != 0:
-                raise DownloadError("ZIP must start with its only file")
-            name = member.filename
-            mode = stat.S_IFMT(member.external_attr >> 16)
-            if (not name or member.orig_filename != name or "\\" in name or ":" in name
-                    or PurePosixPath(name).is_absolute()
-                    or any(part in ("", ".", "..") for part in name.split("/"))
-                    or member.is_dir() or member.external_attr & 0x10
-                    or mode not in (0, stat.S_IFREG)):
-                raise DownloadError("ZIP member must be a regular file with a safe relative name")
-            if member.flag_bits & 1:
-                raise DownloadError("encrypted ZIP members are unsupported")
-            if member.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
-                raise DownloadError("unsupported ZIP compression method")
+            if not 1 <= len(members) <= 3:
+                raise DownloadError("ZIP must contain exactly one ontology and at most two matching project files")
+            if len({member.filename for member in members}) != len(members):
+                raise DownloadError("ZIP members must have unique filenames")
+            if min(member.header_offset for member in members) != 0:
+                raise DownloadError("ZIP must start with its first file")
+            for item in members:
+                name = item.filename
+                mode = stat.S_IFMT(item.external_attr >> 16)
+                if (not name or item.orig_filename != name or "\\" in name or ":" in name
+                        or PurePosixPath(name).is_absolute()
+                        or any(part in ("", ".", "..") for part in name.split("/"))
+                        or item.is_dir() or item.external_attr & 0x10
+                        or mode not in (0, stat.S_IFREG)):
+                    raise DownloadError("ZIP member must be a regular file with a safe relative name")
+                if item.flag_bits & 1:
+                    raise DownloadError("encrypted ZIP members are unsupported")
+                if item.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
+                    raise DownloadError("unsupported ZIP compression method")
+            if len(members) == 1:
+                member = members[0]
+            else:
+                # Legacy Protege projects package one OWL document alongside
+                # same-stem .pprj/.repository files. Never guess between roots
+                # or execute/unpack companion files at their named paths.
+                roots = [item for item in members if PurePosixPath(item.filename).suffix.lower() == ".owl"]
+                if len(roots) != 1:
+                    raise DownloadError("ZIP must contain exactly one ontology with matching project files")
+                member = roots[0]
+                stem = str(PurePosixPath(member.filename).with_suffix(""))
+                companions = [item for item in members if item is not member]
+                if any(item.filename not in (stem + ".pprj", stem + ".repository") for item in companions):
+                    raise DownloadError("ZIP may contain only matching Protege project companions")
+                companion_limit = min(_MAX_ZIP_COMPANION_BYTES, MAX_EXPANDED_BYTES)
+                for item in companions:
+                    if item.file_size > companion_limit:
+                        raise DownloadError("ZIP project companion exceeds its byte limit")
+                    size = 0
+                    with archive.open(item) as source:
+                        while True:
+                            block = source.read(DOWNLOAD_CHUNK)
+                            if not block:
+                                break
+                            size += len(block)
+                            if size > companion_limit:
+                                raise DownloadError("ZIP project companion exceeds its byte limit")
+                        if size != item.file_size:
+                            raise DownloadError("truncated ZIP project companion")
             if member.file_size > MAX_EXPANDED_BYTES:
                 raise DownloadError(f"more than {MAX_EXPANDED_BYTES} bytes once decompressed from ZIP")
             md5, size = hashlib.md5(), 0

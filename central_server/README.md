@@ -507,3 +507,17 @@ Regression tests:
 ```bash
 pytest tests/test_source_discovery.py tests/test_source_sync_guard.py tests/test_bioportal_credentials.py
 ```
+
+
+### Legacy ontology project archives
+
+The updater accepts single-file ZIP sources and legacy Protégé packages containing
+one `.owl` file with up to two same-stem `.pprj` / `.repository` companions. Only
+the ontology bytes are staged and fingerprinted; project files are checked and
+discarded, so repackaging metadata does not count as a new ontology version.
+
+Archive members must have safe relative names and be regular, unencrypted files
+using supported ZIP compression. Multiple ontology files, unrelated companions,
+links, corrupt entries and oversized payloads are rejected. Companions are limited
+to 1 MiB each and also respect any stricter configured expansion limit. Entry
+names are never used as extraction paths.
