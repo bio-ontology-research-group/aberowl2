@@ -234,20 +234,25 @@ public class RequestManager {
         } else {
             // servedPath: ontIRI is a staged copy of that file (an update).
             ImportClosure closure = catalogue.resolveClosure(lManager, originalOntology, ontIRI, servedPath, loaderConfig)
-            // Discovery validates the entire catalogue before allowing imports
-            // into the parser. RDF restrictions need imported property types
-            // during parsing; merging them afterwards leaves error classes.
-            def plan = new ValidatedImportPlan(catalogue, lManager, originalOntology, closure, servedPath)
-            // Release discovery models before constructing the serving model.
-            closure = null
-            originalOntology = null
-            lManager.ontologies.toList().each { lManager.removeOntology(it) }
-            lManager = null
-            Map reparsed = plan.load(loaderConfig)
-            lManager = reparsed.manager
-            originalOntology = reparsed.root
-            closure = reparsed.closure
             resolvedIris = closure.resolvedIris
+            // Explicit compatibility mode retains the validated legacy parse
+            // before merging imports. It never weakens closure/path validation.
+            if (catalogue.parseWithImports) {
+                // Discovery validates the entire catalogue before allowing imports
+                // into the parser. RDF restrictions need imported property types
+                // during parsing; merging them afterwards leaves error classes.
+                def plan = new ValidatedImportPlan(catalogue, lManager, originalOntology, closure, servedPath)
+                // Release discovery models before constructing the serving model.
+                closure = null
+                originalOntology = null
+                lManager.ontologies.toList().each { lManager.removeOntology(it) }
+                lManager = null
+                Map reparsed = plan.load(loaderConfig)
+                lManager = reparsed.manager
+                originalOntology = reparsed.root
+                closure = reparsed.closure
+                resolvedIris = closure.resolvedIris
+            }
             provider = { -> closure.ontologies } as OWLOntologySetProvider
         }
         Set<OWLOntology> sources = new LinkedHashSet<>(provider.getOntologies())

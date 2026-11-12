@@ -139,6 +139,7 @@ class ImportCatalogueHarness {
             "default policy, ontology without imports"       : this.&defaultWithoutImports,
             "catalogue resolves the closure"                 : this.&catalogueResolvesClosure,
             "RDF restrictions use imported declarations"     : this.&importedRdfDeclarations,
+            "explicit catalogue parser policy"               : this.&explicitParserPolicy,
             "headerless RDF vocabulary stays resolved"        : this.&headerlessVocabulary,
             "transitive import by version IRI, cycle, alias" : this.&transitiveVersionCycleAlias,
             "import URL differs from the ontology IRI"       : this.&documentUrlAlias,
@@ -1099,4 +1100,39 @@ AnnotationAssertion(owl:deprecated :DeprecatedRoot "true"^^xsd:boolean)
         check(UF.taskReading(tasks, '/y') == 'b' && UF.taskReading(tasks, '/x') == null,
             "only a pending task holds its file")
     }
+    void explicitParserPolicy() {
+        importedRdfDeclarations()
+        String module = NS + "typed-module.owl"
+        def IC = loader.loadClass("src.ImportCatalogue")
+        check(IC.forOntology("typed", data.toString()).parseWithImports,
+            "omitted parse_with_imports defaults to the current import-aware parser")
+        [false, true].each { enabled ->
+            writeRawCatalogue("typed", JsonOutput.toJson([imports: [(module): files.typedModule], parse_with_imports: enabled]))
+            check(IC.forOntology("typed", data.toString()).parseWithImports == enabled,
+                "the explicit boolean parser policy is retained")
+            def m = newManager()
+            m.loadOntology("typed", files.typedRoot, "elk")
+            def df = m.df
+            def subject = owlClass(m, NS + "Subject")
+            def typedCardinality = df.getOWLSubClassOfAxiom(subject,
+                df.getOWLDataExactCardinality(1, df.getOWLDataProperty(IRI_CLASS.create(NS + "cardData"))))
+            check(m.getOntology("typed").containsAxiom(typedCardinality) == enabled,
+                "the data cardinality uses imported typing only when the parser policy enables it")
+            check(m.isImportsLoaded("typed") && m.getImportsResolvedCount("typed") == 1,
+                "both parser modes retain the complete validated import closure")
+            m.disposeOntology("typed")
+        }
+        ["false", 0, null, [false], [value: false]].each { invalid ->
+            writeRawCatalogue("typed", JsonOutput.toJson([imports: [(module): files.typedModule], parse_with_imports: invalid]))
+            boolean refused = false
+            try { IC.forOntology("typed", data.toString()) } catch (Exception expected) { refused = true }
+            check(refused, "a non-boolean parser policy is refused: ${invalid}")
+        }
+        writeRawCatalogue("typed", JsonOutput.toJson([imports: [:], parse_with_imports: false]))
+        boolean missingRefused = false
+        try { newManager().loadOntology("typed", files.typedRoot, "elk") } catch (Exception expected) { missingRefused = true }
+        check(missingRefused, "legacy parser policy never suppresses an unresolved import")
+        checkNoConnection()
+    }
+
 }

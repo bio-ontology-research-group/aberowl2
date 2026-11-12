@@ -58,11 +58,13 @@ class ImportCatalogue {
     final Path file
     // import IRI -> real path of a readable regular file under the data root
     final Map<String, Path> entries
+    final boolean parseWithImports
 
-    private ImportCatalogue(String ontologyId, Path file, Map<String, Path> entries) {
+    private ImportCatalogue(String ontologyId, Path file, Map<String, Path> entries, boolean parseWithImports) {
         this.ontologyId = ontologyId
         this.file = file
         this.entries = Collections.unmodifiableMap(entries)
+        this.parseWithImports = parseWithImports
     }
 
     /**
@@ -109,9 +111,12 @@ class ImportCatalogue {
         if (!(json instanceof Map)) {
             throw new ImportResolutionException("${where}: must be a JSON object with an \"imports\" object")
         }
-        def unknown = json.keySet() - ["imports", "comment"]
+        def unknown = json.keySet() - ["imports", "comment", "parse_with_imports"]
         if (unknown) {
-            throw new ImportResolutionException("${where}: unknown keys ${unknown.sort()}; allowed are \"imports\" and \"comment\"")
+            throw new ImportResolutionException("${where}: unknown keys ${unknown.sort()}; allowed are \"imports\", \"comment\" and \"parse_with_imports\"")
+        }
+        if (json.containsKey("parse_with_imports") && !(json.parse_with_imports instanceof Boolean)) {
+            throw new ImportResolutionException("${where}: parse_with_imports must be a boolean")
         }
         if (json.comment != null && !(json.comment instanceof String)) {
             throw new ImportResolutionException("${where}: \"comment\" must be a string")
@@ -146,7 +151,8 @@ class ImportCatalogue {
         if (problems) {
             throw new ImportResolutionException("${where} is invalid: ${problems.join('; ')}")
         }
-        return new ImportCatalogue(ontId, realFile, entries)
+        return new ImportCatalogue(ontId, realFile, entries,
+            json.containsKey("parse_with_imports") ? json.parse_with_imports : true)
     }
 
     /**
