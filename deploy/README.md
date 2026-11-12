@@ -596,16 +596,29 @@ to 1 TiB; any other value refuses every update (HTTP 503) and stops the
 runner. The queued override passes both limits to both services; in inline
 mode add them to central's environment if you change them.
 
-A ZIP body (also when wrapped in gzip) is unpacked from disk when it contains
-exactly one regular file. Stored and deflated members are supported. Member
-paths are never used for extraction; unsafe paths, links, directories, encrypted
-members, multiple files, nested archives and corrupt data fail the download.
-The ZIP spool and the unpacked member must each fit the expanded-byte limit;
-allow disk space for both during unpacking. The central directory is limited to
-256 KiB and must describe one member on one disk; ZIP64 directory offsets are
-not supported. The staged file and its MD5 describe the unpacked ontology, so
-repackaging an unchanged ontology does not trigger a reload. Run download and
-update regression tests with `pytest tests/test_update_download.py tests/test_update_pipeline.py -q`.
+A ZIP body (also when wrapped in gzip) may contain one regular ontology file,
+or one OWL file with at most two matching Protege project companions
+(`.pprj` and `.repository`). Companions are bounded, CRC-checked and discarded.
+
+A multi-document RDF/XML import bundle is accepted only when every file declares
+one named ontology, all imports resolve within the archive, and exactly one root
+reaches every member. Selection uses ontology and import identities, not entry
+order or filenames. The reader preserves the root's exact bytes and does not
+merge documents, fetch remote imports, or overwrite pinned catalogue files.
+Operators must still qualify and install local import catalogues separately.
+
+Import bundles are limited to 32 regular files and 16 MiB expanded in total, or
+the operator's smaller expanded-byte limit. Every member is CRC-checked. XML
+nesting and simple namespace entity declarations are bounded; external and nested
+entities are rejected. Ambiguous, disconnected or incomplete bundles fail.
+
+All ZIP modes reject unsafe paths, directories, symlinks, encryption, unsupported
+compression, nested archives and corrupt payloads. The ZIP spool and selected
+root must each fit the expanded-byte limit. The central directory is bounded to
+256 KiB, at most 32 entries and one disk; ZIP64 directory offsets are unsupported.
+The stored MD5 is for the exact root document, so repackaging unchanged root bytes
+does not trigger a reload. Run download and update regression tests with
+`pytest tests/test_update_download.py tests/test_update_project_zip.py tests/test_update_import_zip.py tests/test_update_pipeline.py -q`.
 
 ### Imports
 
