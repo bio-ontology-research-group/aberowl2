@@ -117,6 +117,19 @@ update and indexes its merged export. It preserves the source and running
 reasoner, and promotes the new index only when its count matches validation.
 Run the pipeline regression tests with `pytest tests/test_update_pipeline.py -q`.
 
+### Catalogue parser compatibility
+
+An import catalogue may set `"parse_with_imports": false` to retain legacy
+root parsing before merging its complete local import closure. Omit the option
+or set it to `true` for the default import-aware parse. Only JSON booleans are
+accepted.
+
+Use legacy parsing only for a reviewed compatibility case where import-aware
+property typing would change an existing hosted ontology. It does not suppress
+imports or permit missing, invalid or unsafe catalogue files. Load, validation
+and reload all use the selected mode. Qualify mode changes and existing indices
+before deployment, and do not change a catalogue during an active update.
+
 ## Dependencies
 
 - Linux

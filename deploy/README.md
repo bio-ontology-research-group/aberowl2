@@ -628,6 +628,18 @@ the hot-swap read them as they are on disk. They are read twice in a run, at
 validation and at the hot-swap. Changing them in between makes the two reads
 differ.
 
+An import catalogue may set `"parse_with_imports": false` to retain legacy
+root parsing before merging its complete local import closure. Omit the option
+or set it to `true` for the default import-aware parse. Only JSON booleans are
+accepted.
+
+Use legacy parsing only for a reviewed compatibility case where import-aware
+property typing would change an existing hosted ontology. It does not suppress
+imports or permit missing, invalid or unsafe catalogue files. Load, validation
+and reload all use the selected mode. Qualify mode changes and existing indices
+before deployment, and do not change a catalogue during an active update.
+
+
 - If a new release imports something its catalogue does not list, validation
   fails, the error names the import IRI, and the served copy stays. Add the
   module file and catalogue entry, then trigger again.
