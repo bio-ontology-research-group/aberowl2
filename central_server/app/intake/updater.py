@@ -427,6 +427,135 @@ _MAX_ZIP_DIRECTORY_BYTES = 256 << 10
 _MAX_ZIP_COMPANION_BYTES = 1 << 20
 
 
+_MAX_ZIP_MEMBERS = 32
+_MAX_IMPORT_BUNDLE_BYTES = 16 << 20
+
+
+def _zip_import_root(archive, members):
+    """Choose a root only from a complete, uniquely rooted RDF/XML import graph.
+
+    Parse in bounded chunks without building trees, retrieving XML entities or
+    materializing imports. Every member is CRC-checked; only the root is later
+    copied. Pinned import catalogue files remain operator-managed.
+    """
+    from xml.parsers import expat
+    from urllib.parse import urljoin
+
+    rdf = "http://www.w3.org/1999/02/22-rdf-syntax-ns#}"
+    owl = "http://www.w3.org/2002/07/owl#}"
+    xml_base = "http://www.w3.org/XML/1998/namespace}base"
+    limit = min(_MAX_IMPORT_BUNDLE_BYTES, MAX_EXPANDED_BYTES)
+    if sum(item.file_size for item in members) > limit:
+        raise DownloadError("ZIP import bundle exceeds its expanded byte limit")
+    documents = []
+    total = 0
+    for item in members:
+        parser = expat.ParserCreate(namespace_separator="}")
+        stack, bases, identities, imports = [], [], [], set()
+        state = {"entities": 0, "ontology": None, "versions": []}
+
+        def iri(value, base):
+            resolved = urljoin(base, value)
+            if len(resolved) > 8192 or urlsplit(resolved).scheme not in ("http", "https", "urn"):
+                raise DownloadError("ZIP bundle requires absolute ontology and import identities")
+            return resolved
+
+        def start(name, attrs):
+            base = bases[-1] if bases else ""
+            if xml_base in attrs:
+                base = urljoin(base, attrs[xml_base])
+            stack.append(name)
+            bases.append(base)
+            if len(stack) > 128:
+                raise DownloadError("ZIP bundle XML nesting exceeds its limit")
+            if len(stack) == 1 and name != rdf + "RDF":
+                raise DownloadError("ZIP must contain exactly one root in an RDF/XML import bundle")
+            if name == owl + "Ontology":
+                if len(stack) != 2 or rdf + "about" not in attrs or state["ontology"] is not None:
+                    raise DownloadError("ZIP bundle members require exactly one named ontology header")
+                state["ontology"] = iri(attrs[rdf + "about"], base)
+                identities.append(state["ontology"])
+            if name in (owl + "imports", owl + "versionIRI"):
+                if len(stack) != 3 or stack[-2] != owl + "Ontology" or rdf + "resource" not in attrs:
+                    raise DownloadError("Unsupported ZIP bundle import or version declaration")
+                value = iri(attrs[rdf + "resource"], base)
+                if name == owl + "imports":
+                    imports.add(value)
+                else:
+                    state["versions"].append(value)
+                    if len(state["versions"]) > 1:
+                        raise DownloadError("ZIP bundle has ambiguous ontology versions")
+                    identities.append(value)
+
+        def end(name):
+            stack.pop()
+            bases.pop()
+
+        def entity(name, parameter, value, base, system, public, notation):
+            state["entities"] += 1
+            if (parameter or system or public or notation or value is None
+                    or len(value) > 4096 or "&" in value or state["entities"] > 128):
+                raise DownloadError("External or nested XML entities in ZIP bundles are unsupported")
+
+        def doctype(name, system, public, internal):
+            if system or public:
+                raise DownloadError("External XML declarations in ZIP bundles are unsupported")
+
+        def external(*args):
+            raise DownloadError("External XML entities in ZIP bundles are unsupported")
+
+        parser.StartElementHandler = start
+        parser.EndElementHandler = end
+        parser.EntityDeclHandler = entity
+        parser.StartDoctypeDeclHandler = doctype
+        parser.ExternalEntityRefHandler = external
+        parser.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
+        size = 0
+        try:
+            with archive.open(item) as source:
+                while True:
+                    block = source.read(DOWNLOAD_CHUNK)
+                    if not block:
+                        break
+                    size += len(block)
+                    total += len(block)
+                    if total > limit:
+                        raise DownloadError("ZIP import bundle exceeds its expanded byte limit")
+                    parser.Parse(block, False)
+                parser.Parse(b"", True)
+        except expat.ExpatError:
+            raise DownloadError("ZIP must contain exactly one root in a valid RDF/XML import bundle") from None
+        if size != item.file_size or state["ontology"] is None:
+            raise DownloadError("ZIP bundle has a truncated or unnamed ontology member")
+        documents.append({"member": item, "identities": set(identities), "imports": imports})
+
+    owners = {}
+    for index, document in enumerate(documents):
+        for identity in document["identities"]:
+            if identity in owners and owners[identity] != index:
+                raise DownloadError("ZIP bundle has duplicate ontology identities")
+            owners[identity] = index
+    edges = []
+    for document in documents:
+        if not document["imports"] <= owners.keys():
+            raise DownloadError("ZIP bundle imports are not completely contained in the archive")
+        edges.append({owners[identity] for identity in document["imports"]})
+    imported = set().union(*edges)
+    roots = set(range(len(documents))) - imported
+    if len(roots) != 1:
+        raise DownloadError("ZIP must contain exactly one root covering the complete import bundle")
+    root = next(iter(roots))
+    visited, pending = set(), [root]
+    while pending:
+        current = pending.pop()
+        if current not in visited:
+            visited.add(current)
+            pending.extend(edges[current])
+    if len(visited) != len(documents):
+        raise DownloadError("ZIP bundle has disconnected ontology members")
+    return documents[root]["member"]
+
+
 def _check_zip_directory(path: Path) -> tuple[int, int]:
     with path.open("rb") as source:
         source.seek(0, os.SEEK_END)
@@ -445,7 +574,7 @@ def _check_zip_directory(path: Path) -> tuple[int, int]:
     if end < 0:
         raise DownloadError("invalid or truncated ZIP end record")
     _, disk, directory_disk, disk_entries, entries, directory_size, offset, comment = record
-    if disk or directory_disk or disk_entries != entries or not 1 <= entries <= 3:
+    if disk or directory_disk or disk_entries != entries or not 1 <= entries <= _MAX_ZIP_MEMBERS:
         raise DownloadError("ZIP must contain exactly one ontology and at most two matching project files on one disk")
     if directory_size > _MAX_ZIP_DIRECTORY_BYTES or offset == 0xffffffff:
         raise DownloadError("ZIP central directory exceeds the supported bounds")
@@ -477,7 +606,7 @@ def _unpack_zip(path: Path):
     try:
         with zipfile.ZipFile(path) as archive:
             members = archive.infolist()
-            if not 1 <= len(members) <= 3:
+            if not 1 <= len(members) <= _MAX_ZIP_MEMBERS:
                 raise DownloadError("ZIP must contain exactly one ontology and at most two matching project files")
             if len({member.filename for member in members}) != len(members):
                 raise DownloadError("ZIP members must have unique filenames")
@@ -498,7 +627,11 @@ def _unpack_zip(path: Path):
                     raise DownloadError("unsupported ZIP compression method")
             if len(members) == 1:
                 member = members[0]
+            elif all(PurePosixPath(item.filename).suffix.lower() in (".owl", ".rdf", ".xml") for item in members):
+                member = _zip_import_root(archive, members)
             else:
+                if len(members) > 3:
+                    raise DownloadError("ZIP must contain exactly one ontology and at most two matching project files")
                 # Legacy Protege projects package one OWL document alongside
                 # same-stem .pprj/.repository files. Never guess between roots
                 # or execute/unpack companion files at their named paths.
