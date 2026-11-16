@@ -657,6 +657,13 @@ before deployment, and do not change a catalogue during an active update.
   and nothing is fetched. For an ontology without a catalogue that declares
   imports, this means its imported classes are no longer indexed under it
   after an update, where the standalone indexer used to fetch them.
+- Validation exports normally use Functional Syntax. Legacy empty enumerations
+  use checked RDF/XML with automatic type declarations disabled. The worker
+  reparses this fallback offline and requires preserved logical axioms, classes,
+  ontology identity, header and remaining axioms before publishing the export.
+  Only equivalent untagged plain-string/xsd:string annotation values are
+  normalized for comparison. Fallback exports above 16 MiB are rejected before
+  reparsing to bound the additional allocation. Source files are unchanged.
 - Reindexing uses the same validation export and import policy as updates.
   It does not fetch import IRIs or index an incomplete closure. Running the
   standalone indexer directly on an arbitrary file still uses OWLAPI's default

@@ -155,6 +155,7 @@ class ImportCatalogueHarness {
             "failed reload keeps the serving copy"           : this.&failedReloadKeepsServingCopy,
             "validating a staged update loads like a load"   : this.&validateStagedLikeALoad,
             "staged root: entries naming the served file"    : this.&stagedRootServedIdentity,
+            "legacy empty enumeration export"                : this.&legacyEnumerationExport,
             "validation export: merged, no imports"          : this.&validationExport,
             "finalize: served path replaces the staged one"  : this.&finalizeServedPath,
             "update servlets: paths and the task guard"      : this.&updateFilesHelpers,
@@ -1019,6 +1020,7 @@ AnnotationAssertion(owl:deprecated :DeprecatedRoot "true"^^xsd:boolean)
         check(target.startsWith(exports), "the export goes under the export root: ${target}")
         def summary = newManager().validateOntologyFile("rootont", files.r, null, target)
         check(summary.exportPath == target.toString() && Files.isRegularFile(target), "the export is written: ${summary}")
+        check(target.text.contains("Ontology("), "ordinary export remains Functional Syntax")
         check(!target.text.contains("Import("), "the export declares no imports")
 
         def plain = loader.loadClass("org.semanticweb.owlapi.apibinding.OWLManager").createOWLOntologyManager()
@@ -1050,6 +1052,47 @@ AnnotationAssertion(owl:deprecated :DeprecatedRoot "true"^^xsd:boolean)
 
         check(UF.deleteExport(target) && UF.deleteExport(suppressed), "exports are deleted")
         check(!Files.exists(target.getParent()), "the transaction directory goes with its export")
+    }
+
+    void legacyEnumerationExport() {
+        // This syntax loads in OWLAPI, whose Functional Syntax writer emits
+        // ObjectOneOf() that its own parser cannot subsequently read.
+        Path source = data.resolve("legacy/legacy.owl")
+        writeFixture("legacy", source, """<?xml version="1.0"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+ xmlns:owl="http://www.w3.org/2002/07/owl#" xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#">
+ <owl:Ontology rdf:about="${NS}legacy"><rdfs:label>Legacy header</rdfs:label></owl:Ontology>
+ <owl:Class rdf:about="${NS}Empty">
+  <rdfs:label xml:lang="en">Empty enumeration</rdfs:label>
+  <rdfs:comment rdf:datatype="http://www.w3.org/2001/XMLSchema#string">Keep this text</rdfs:comment>
+  <rdfs:subClassOf><owl:Class><owl:oneOf rdf:resource="http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"/></owl:Class></rdfs:subClassOf>
+ </owl:Class>
+</rdf:RDF>""")
+        def plain = loader.loadClass("org.semanticweb.owlapi.apibinding.OWLManager").createOWLOntologyManager()
+        def original = plain.loadOntologyFromOntologyDocument(source.toFile())
+        def emptyType = loader.loadClass("org.semanticweb.owlapi.model.OWLObjectOneOf")
+        check(original.getAxioms().any { a -> a.getNestedClassExpressions().any {
+            emptyType.isInstance(it) && it.getIndividuals().isEmpty()
+        } }, "fixture contains an actual empty enumeration")
+        def UF = loader.loadClass("src.UpdateFiles")
+        Path target = UF.exportFile("legacy", "empty-enumeration")
+        def result = newManager().validateOntologyFile("legacy", source.toString(), null, target)
+        def exported = plain.loadOntologyFromOntologyDocument(target.toFile())
+        check(target.text.contains("<rdf:RDF"), "legacy export uses RDF/XML")
+        check(exported.getLogicalAxioms() == original.getLogicalAxioms(), "empty enumeration logical axioms survive")
+        check(exported.getClassesInSignature() == original.getClassesInSignature(), "legacy class signature survives")
+        check(exported.getAnnotations() == original.getAnnotations(), "legacy header survives")
+        check(exported.getImportsDeclarations().isEmpty(), "legacy export has no imports")
+        check(exported.getAxioms().any { it.toString().contains('"Empty enumeration"@en') }, "language tag survives")
+        check(exported.getAxioms().any { it.toString().contains('Keep this text') }, "annotation text survives")
+        String before = target.text
+        try {
+            newManager().validateOntologyFile("legacy", source.toString(), null, target)
+            failures << "${current}: existing legacy export was replaced"
+        } catch (Exception expected) { passed++ }
+        check(target.text == before, "existing legacy export is unchanged")
+        check(!Files.exists(target.resolveSibling(target.fileName.toString() + ".part")), "legacy partial file removed")
+        check(UF.deleteExport(target), "legacy export deleted")
     }
 
     // B7. After a hot-swap from a staged file and its promotion, the worker

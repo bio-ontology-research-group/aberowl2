@@ -307,7 +307,8 @@ public class RequestManager {
      *
      * With exportTo, the merged ontology (the one a hot-swap would classify,
      * imports merged in, no owl:imports left) is also written there in OWL
-     * functional syntax, for indexing. An existing file is never replaced.
+     * functional syntax, for indexing, with a checked RDF/XML fallback for legacy
+     * empty enumerations. An existing file is never replaced.
      */
     Map validateOntologyFile(String ontId, String path, String servedPath = null,
                              java.nio.file.Path exportTo = null) {
@@ -336,13 +337,68 @@ public class RequestManager {
         java.nio.file.Files.createDirectories(target.getParent())
         java.nio.file.Path part = target.resolveSibling(target.getFileName().toString() + ".part")
         try {
-            part.toFile().withOutputStream { out ->
-                m.saveOntology(merged, new org.semanticweb.owlapi.formats.FunctionalSyntaxDocumentFormat(), out)
+            // OWLAPI accepts empty enumerations from RDF/XML, but cannot read
+            // its own Functional Syntax rendering of ObjectOneOf().
+            boolean legacyEmptyEnumeration = merged.getAxioms().any { axiom ->
+                axiom.getNestedClassExpressions().any { expression ->
+                    expression instanceof OWLObjectOneOf && expression.getIndividuals().isEmpty()
+                }
             }
+            def format = new org.semanticweb.owlapi.formats.FunctionalSyntaxDocumentFormat()
+            if (legacyEmptyEnumeration) {
+                format = new org.semanticweb.owlapi.formats.RDFXMLDocumentFormat()
+                format.setAddMissingTypes(false)
+            }
+            part.toFile().withOutputStream { out -> m.saveOntology(merged, format, out) }
+            if (legacyEmptyEnumeration) verifyLegacyExport(merged, part)
             // No REPLACE_EXISTING: an existing export is never overwritten.
             java.nio.file.Files.move(part, target)
         } finally {
             java.nio.file.Files.deleteIfExists(part)
+        }
+    }
+
+    // RDF 1.1 represents an untagged plain string as xsd:string. Normalize
+    // only annotation values for comparison; never modify the serving model.
+    private static Set canonicalExportAxioms(OWLOntology ontology) {
+        def factory = ontology.getOWLOntologyManager().getOWLDataFactory()
+        ontology.getAxioms().collect { axiom ->
+            if (axiom instanceof OWLAnnotationAssertionAxiom && axiom.getValue() instanceof OWLLiteral) {
+                OWLLiteral value = axiom.getValue() as OWLLiteral
+                if (!value.hasLang() && value.getDatatype().getIRI().toString() in [
+                        "http://www.w3.org/2001/XMLSchema#string",
+                        "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"]) {
+                    return factory.getOWLAnnotationAssertionAxiom(axiom.getProperty(), axiom.getSubject(),
+                        factory.getOWLLiteral(value.getLiteral(), factory.getOWLDatatype(
+                            IRI.create("http://www.w3.org/2001/XMLSchema#string"))), axiom.getAnnotations())
+                }
+            }
+            axiom
+        } as Set
+    }
+
+    private static void verifyLegacyExport(OWLOntology original, java.nio.file.Path file) {
+        // Bound the additional parser allocation for this exceptional path.
+        if (java.nio.file.Files.size(file) > 16L * 1024 * 1024) {
+            throw new IOException("Legacy validation export exceeds the checked 16 MiB limit")
+        }
+        def reader = OWLManager.createOWLOntologyManager()
+        reader.getIRIMappers().clear()
+        reader.getIRIMappers().add(new LocalImportIRIMapper())
+        try {
+            def config = new OWLOntologyLoaderConfiguration()
+                .setMissingImportHandlingStrategy(MissingImportHandlingStrategy.SILENT)
+            def parsed = reader.loadOntologyFromOntologyDocument(new FileDocumentSource(file.toFile()), config)
+            if (!parsed.getImportsDeclarations().isEmpty()
+                    || parsed.getOntologyID() != original.getOntologyID()
+                    || parsed.getClassesInSignature() != original.getClassesInSignature()
+                    || parsed.getAnnotations() != original.getAnnotations()
+                    || parsed.getLogicalAxioms() != original.getLogicalAxioms()
+                    || canonicalExportAxioms(parsed) != canonicalExportAxioms(original)) {
+                throw new IOException("Legacy validation export did not preserve the ontology")
+            }
+        } finally {
+            reader.getOntologies().collect().each { reader.removeOntology(it) }
         }
     }
 
