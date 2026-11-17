@@ -117,6 +117,8 @@ Thread.start {
         if (indexerOptions != null) {
             pb.environment().put("JAVA_OPTS", indexerOptions)
         }
+        // Only worker-owned, validated exports may bypass parser punning repair.
+        pb.environment().put('ABEROWL_INDEX_VALIDATED_EXPORT', export != null ? 'true' : 'false')
         pb.redirectErrorStream(true)   // merge stderr into stdout
         def proc = pb.start()
 
