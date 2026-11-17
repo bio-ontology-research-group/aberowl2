@@ -259,8 +259,15 @@ void indexOntology(String fileName, def data) {
         }
         
         OWLOntologyManager manager = OWLManager.createOWLOntologyManager()
-        OWLOntology ont = manager.loadOntologyFromOntologyDocument(ontologyFile)
+        OWLOntology ont
+        if (System.getenv('ABEROWL_INDEX_VALIDATED_EXPORT') == 'true') {
+            def exportLoader = this.class.classLoader.loadClass('src.ValidationExportLoader')
+            ont = exportLoader.load(manager, ontologyFile, true)
+        } else {
+            ont = manager.loadOntologyFromOntologyDocument(ontologyFile)
+        }
         println "Successfully loaded ontology: ${ont.getOntologyID()}"
+        println "Index input: validatedExport=${System.getenv('ABEROWL_INDEX_VALIDATED_EXPORT') == 'true'}, logicalAxioms=${ont.logicalAxiomCount}"
     OWLDataFactory fac = manager.getOWLDataFactory()
     ConsoleProgressMonitor progressMonitor = new ConsoleProgressMonitor()
     OWLReasonerConfiguration config = new SimpleConfiguration(progressMonitor)

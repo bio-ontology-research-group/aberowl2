@@ -140,6 +140,7 @@ class ImportCatalogueHarness {
             "catalogue resolves the closure"                 : this.&catalogueResolvesClosure,
             "RDF restrictions use imported declarations"     : this.&importedRdfDeclarations,
             "anonymous root metadata retains its resources"  : this.&anonymousHeaderResources,
+            "validated exports retain explicit property roles": this.&validatedExportPropertyRoles,
             "explicit catalogue parser policy"               : this.&explicitParserPolicy,
             "headerless RDF vocabulary stays resolved"        : this.&headerlessVocabulary,
             "transitive import by version IRI, cycle, alias" : this.&transitiveVersionCycleAlias,
@@ -1237,6 +1238,41 @@ ex:Descriptor a owl:Class .
             verify(reader.loadOntologyFromOntologyDocument(target.toFile()), "export policy ${enabled}")
             manager.disposeOntology("metadata")
         }
+        checkNoConnection()
+    }
+
+
+    void validatedExportPropertyRoles() {
+        String module = NS + "typedAnnotationModule"
+        writeFixture("typedAnnotationModule", data.resolve("typed-annotation-module.ofn"),
+            ofn(module, null, [], "Module", "Declaration(Class(:Imported)) Declaration(ObjectProperty(:related)) Declaration(DataProperty(:note))"))
+        writeFixture("typedAnnotationRoot", data.resolve("typed-annotation-root.ttl"), """
+@prefix ex: <${NS}> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+<${NS}typedAnnotationRoot> a owl:Ontology ; owl:imports <${module}> .
+ex:Native a owl:Class .
+ex:item ex:related ex:other ; ex:note "Metadata" .
+""")
+        writeRawCatalogue("explicitRoles", JsonOutput.toJson([
+            imports: [(module): files.typedAnnotationModule], parse_with_imports: false]))
+        def manager = load(newManager(), "explicitRoles", "typedAnnotationRoot")
+        def original = manager.getOntology("explicitRoles")
+        Path target = exports.resolve("explicit-roles.ofn")
+        manager.validateOntologyFile("explicitRoles", files.typedAnnotationRoot, null, target)
+        def owlManager = loader.loadClass("org.semanticweb.owlapi.apibinding.OWLManager")
+        def exportLoader = loader.loadClass("src.ValidationExportLoader")
+        def preservingManager = owlManager.createOWLOntologyManager()
+        def preserving = exportLoader.load(preservingManager, target.toFile(), true)
+        check(preserving.getAxioms() == original.getAxioms(), "trusted export retains every explicit axiom")
+        check(preserving.getLogicalAxioms() == original.getLogicalAxioms(), "trusted export adds no logical property assertions")
+        check(preserving.getClassesInSignature() == original.getClassesInSignature(), "trusted export retains the class signature")
+        def defaultManager = owlManager.createOWLOntologyManager()
+        def ordinary = exportLoader.load(defaultManager, target.toFile(), false)
+        check(ordinary.getLogicalAxiomCount() > original.getLogicalAxiomCount(), "ordinary loading retains the existing punning repair")
+        check(ordinary.getClassesInSignature() == original.getClassesInSignature(), "ordinary loading preserves existing class behavior")
+        preservingManager.removeOntology(preserving)
+        defaultManager.removeOntology(ordinary)
+        manager.disposeOntology("explicitRoles")
         checkNoConnection()
     }
 
