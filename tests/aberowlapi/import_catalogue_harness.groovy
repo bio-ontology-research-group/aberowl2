@@ -139,6 +139,7 @@ class ImportCatalogueHarness {
             "default policy, ontology without imports"       : this.&defaultWithoutImports,
             "catalogue resolves the closure"                 : this.&catalogueResolvesClosure,
             "RDF restrictions use imported declarations"     : this.&importedRdfDeclarations,
+            "anonymous root metadata retains its resources"  : this.&anonymousHeaderResources,
             "explicit catalogue parser policy"               : this.&explicitParserPolicy,
             "headerless RDF vocabulary stays resolved"        : this.&headerlessVocabulary,
             "transitive import by version IRI, cycle, alias" : this.&transitiveVersionCycleAlias,
@@ -1175,6 +1176,67 @@ AnnotationAssertion(owl:deprecated :DeprecatedRoot "true"^^xsd:boolean)
         boolean missingRefused = false
         try { newManager().loadOntology("typed", files.typedRoot, "elk") } catch (Exception expected) { missingRefused = true }
         check(missingRefused, "legacy parser policy never suppresses an unresolved import")
+        checkNoConnection()
+    }
+
+    void anonymousHeaderResources() {
+        String module = NS + "anonymousModule"
+        writeFixture("anonymousModule", data.resolve("anonymous-module.ofn"),
+            ofn(module, null, [], "Module", "Declaration(Class(:Imported)) Declaration(Class(:Profile)) Declaration(DataProperty(:created)) Declaration(ObjectProperty(:license))"))
+        writeFixture("anonymousRoot", data.resolve("anonymous-root.ttl"), """
+@prefix ex: <${NS}> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+<${NS}anonymousRoot> a owl:Ontology, ex:Profile ; owl:imports <${module}> ;
+ rdfs:label "Root header" ; ex:created "2020-04-24"^^xsd:date ; ex:license <${NS}licenseValue> ;
+ ex:resource [ a ex:Descriptor ; ex:artifact <${NS}artifactA> ] ;
+ ex:resource [ a ex:Descriptor ; ex:artifact <${NS}artifactB> ] .
+ex:resource a owl:AnnotationProperty .
+ex:artifact a owl:AnnotationProperty .
+ex:Descriptor a owl:Class .
+""")
+        def verify = { ontology, phase ->
+            def values = ontology.getAnnotations().findAll {
+                it.getProperty().getIRI().toString() == NS + "resource"
+            }.collect { it.getValue() }
+            check(values.size() == 2, "${phase}: both metadata resource links survive")
+            check(ontology.getAnnotations().any {
+                it.getProperty().getIRI().toString() == NS + "created" && it.getValue().getLiteral() == "2020-04-24"
+            }, "${phase}: original literal metadata survives imported property typing")
+            check(ontology.getAnnotations().any {
+                it.getProperty().getIRI().toString() == NS + "license" && it.getValue().toString() == NS + "licenseValue"
+            }, "${phase}: original IRI metadata survives imported property typing")
+            check(ontology.getAnnotations().any {
+                it.getProperty().getIRI().toString() == "http://www.w3.org/2000/01/rdf-schema#label" && it.getValue().getLiteral() == "Root header"
+            }, "${phase}: original label survives")
+
+            def artifacts = [] as Set
+            values.each { value ->
+                check(ontology.getClassAssertionAxioms(value).any {
+                    it.getClassExpression().toString() == "<${NS}Descriptor>"
+                }, "${phase}: metadata link points to its resource's class assertion")
+                def linked = ontology.getAnnotationAssertionAxioms(value).findAll {
+                    it.getProperty().getIRI().toString() == NS + "artifact"
+                }.collect { it.getValue().toString() }
+                check(linked.size() == 1, "${phase}: metadata link reaches exactly one artifact")
+                artifacts.addAll(linked)
+            }
+            check(artifacts == [NS + "artifactA", NS + "artifactB"] as Set,
+                "${phase}: distinct metadata resources retain their own artifacts")
+        }
+        [null, true, false].each { enabled ->
+            clearCatalogues()
+            if (enabled != null) writeRawCatalogue("metadata", JsonOutput.toJson([
+                imports: [(module): files.anonymousModule], parse_with_imports: enabled]))
+            def manager = load(newManager(), "metadata", "anonymousRoot")
+            verify(manager.getOntology("metadata"), "load policy ${enabled}")
+            Path target = exports.resolve("anonymous-${enabled}.ofn")
+            manager.validateOntologyFile("metadata", files.anonymousRoot, null, target)
+            def reader = loader.loadClass("org.semanticweb.owlapi.apibinding.OWLManager").createOWLOntologyManager()
+            verify(reader.loadOntologyFromOntologyDocument(target.toFile()), "export policy ${enabled}")
+            manager.disposeOntology("metadata")
+        }
         checkNoConnection()
     }
 
