@@ -250,6 +250,19 @@ public class RequestManager {
                 Map reparsed = plan.load(loaderConfig)
                 lManager = reparsed.manager
                 originalOntology = reparsed.root
+                // Keep literal/IRI header metadata from discovery: imported
+                // property types may reclassify those triples as assertions.
+                // Anonymous values (also in nested annotations) must instead
+                // use this parsed root's individuals and resource descriptions.
+                Closure<Boolean> hasAnonymousValue
+                hasAnonymousValue = { OWLAnnotation annotation ->
+                    annotation.getValue() instanceof OWLAnonymousIndividual ||
+                        annotation.getAnnotations().any { hasAnonymousValue(it) }
+                }
+                originalAnnotations = originalAnnotations.findAll { !hasAnonymousValue(it) }
+                originalAnnotations.addAll(originalOntology.getAnnotations().findAll {
+                    hasAnonymousValue(it)
+                })
                 closure = reparsed.closure
                 resolvedIris = closure.resolvedIris
             }
